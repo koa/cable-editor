@@ -1,0 +1,15 @@
+// only required if you are using the icons-far or icons-fab feature
+// $fa-font-path: "webfonts";
+@import "../node/node_modules/@fortawesome/fontawesome-free/scss/fontawesome";
+@import "../node/node_modules/@fortawesome/fontawesome-free/scss/brands";
+
+// PatternFly styles
+@import "../node/node_modules/@patternfly/patternfly/patternfly.scss";
+@import "../node/node_modules/@patternfly/patternfly/patternfly-addons.scss";
+
+@font-face {
+  font-family: "Font Awesome 7 Brands";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+}

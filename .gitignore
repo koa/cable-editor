@@ -1,0 +1,6 @@
+/target
+/config.yaml
+/cable-editor-frontend/node/node_modules/
+/cable-editor-frontend/dist/
+/cable-editor-frontend/graphql/anonymous_schema.graphql
+/cable-editor-frontend/graphql/authenticated_schema.graphql
