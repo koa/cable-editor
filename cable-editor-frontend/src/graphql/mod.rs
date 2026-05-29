@@ -18,11 +18,10 @@ pub fn host() -> String {
 }
 
 // Send Graphql-Query to server
-pub async fn query_anonymous<Q, Variables, S>(
+pub async fn query_anonymous<Q, Variables>(
     request: Variables,
 ) -> Result<GraphQlResponse<Q>, FrontendError>
 where
-    S: Component,
     Variables: QueryVariables + cynic::serde::Serialize,
     Q: QueryFragment
         + QueryFragment<VariablesFields = Variables::Fields>
