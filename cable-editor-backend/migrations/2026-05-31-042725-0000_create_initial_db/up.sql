@@ -14,7 +14,8 @@ create table schacht_typ
     id   integer generated always as identity (minvalue 0)
         constraint schacht_typ_pk
             primary key,
-    name varchar(20)
+    name varchar(20),
+    icon xml not null
 );
 
 create table schacht

@@ -1,13 +1,10 @@
 use crate::error::FrontendError;
 use cynic::{GraphQlResponse, QueryBuilder, QueryFragment, QueryVariables, http::ReqwestExt};
 use lazy_static::lazy_static;
-use reqwest::header::{HeaderMap, AUTHORIZATION};
-use yew::{Callback, Component};
-use yew::html::Scope;
-use yew::platform::spawn_local;
-use yew_oauth2::context::OAuth2Context;
-use yew_oauth2::prelude::Authentication;
-use yew_oauth2::prelude::OAuth2Context::Authenticated;
+use reqwest::header::{AUTHORIZATION, HeaderMap};
+use serde::Serialize;
+use yew::{Callback, Component, html::Scope};
+use yew_oauth2::prelude::{Authentication, OAuth2Context};
 
 pub mod anonymous;
 pub mod authenticated;
@@ -25,16 +22,13 @@ pub fn host() -> String {
 }
 
 // Send Graphql-Query to server
-pub async fn query_anonymous<Q, Variables>(
-    request: Variables,
+pub async fn query_anonymous<Q>(
+    request: Q::VariablesFields,
 ) -> Result<GraphQlResponse<Q>, FrontendError>
 where
-    Variables: QueryVariables + cynic::serde::Serialize,
-    Q: QueryFragment
-        + QueryFragment<VariablesFields = Variables::Fields>
-        + serde::de::DeserializeOwned
-        + 'static,
+    Q: QueryFragment + serde::de::DeserializeOwned + 'static,
     Q::SchemaType: cynic::schema::QueryRoot,
+    Q::VariablesFields: QueryVariables<Fields = Q::VariablesFields> + Serialize,
 {
     let client = reqwest::Client::builder()
         .build()
@@ -47,27 +41,28 @@ where
     Ok(response)
 }
 
-pub async fn query<Q, Variables, C>(request: Variables, scope: Scope<C>) -> Result<GraphQlResponse<Q>, FrontendError>
+pub async fn query<Q, C>(
+    request: Q::VariablesFields,
+    scope: Scope<C>,
+) -> Result<GraphQlResponse<Q>, FrontendError>
 where
-    Variables: QueryVariables + cynic::serde::Serialize,
-    Q: QueryFragment
-        + QueryFragment<VariablesFields = Variables::Fields>
-        + serde::de::DeserializeOwned
-        + 'static,
+    Q: QueryFragment + serde::de::DeserializeOwned + 'static,
     Q::SchemaType: cynic::schema::QueryRoot,
-    C: Component
+    Q::VariablesFields: QueryVariables<Fields = Q::VariablesFields> + Serialize,
+    C: Component,
 {
     let credentials = scope
         .context::<OAuth2Context>(Callback::noop())
         .map(|r| r.0);
 
     let mut headers = HeaderMap::new();
-    if let Some(Authenticated(Authentication { access_token, .. })) = credentials.as_ref() {
+    if let Some(OAuth2Context::Authenticated(Authentication { access_token, .. })) =
+        credentials.as_ref()
+    {
         headers.insert(AUTHORIZATION, format!("Bearer {access_token}").parse()?);
     }
-    if let Some((auth_context,handle)) = scope.context::<OAuth2Context>(Callback::noop()){
+    if let Some((auth_context, handle)) = scope.context::<OAuth2Context>(Callback::noop()) {
         auth_context.access_token();
-
     }
     let client = reqwest::Client::builder()
         .default_headers(headers)

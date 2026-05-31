@@ -15,6 +15,7 @@ diesel::table! {
     schacht_typ (id) {
         id -> Integer,
         name -> Text,
+        icon -> Text,
     }
 }
 diesel::joinable!(schacht -> schacht_typ (typ));

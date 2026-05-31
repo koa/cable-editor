@@ -24,6 +24,7 @@ pub struct Schacht {
 pub struct SchachtTyp {
     pub id: i32,
     pub name: String,
+    pub icon: String,
 }
 
 #[Object]
@@ -56,6 +57,9 @@ impl SchachtTyp {
 
     async fn id(&self) -> i32 {
         self.id
+    }
+    async fn icon(&self) -> &str {
+        self.icon.as_str()
     }
     async fn list_schacht(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Schacht>> {
         let mut connection = get_connection(ctx).await?;

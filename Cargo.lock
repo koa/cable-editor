@@ -795,6 +795,7 @@ name = "cable-editor-frontend"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64",
  "cable-editor-backend",
  "console_error_panic_hook",
  "cynic",

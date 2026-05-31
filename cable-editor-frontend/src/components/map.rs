@@ -1,26 +1,25 @@
-use crate::error::FrontendError;
-use crate::graphql::authenticated::ListSchachtQuery;
-use crate::graphql::query;
-use gloo_utils::document;
-use leaflet::{
-    Circle, Control, ControlOptions, LatLng, Map, MapOptions, Marker, MarkerOptions, MouseEvent,
-    MouseEvents, Popup, PopupOptions, TileLayer, TileLayerOptions, TileLayerWms,
-    TileLayerWmsOptions,
+use base64::{engine, Engine};
+use crate::graphql::authenticated::list_schacht_typ::{
+    SchachtTypListEntry, fetch_schacht_type_list,
 };
+use crate::{error::FrontendError, graphql::query};
+use gloo_utils::document;
+use leaflet::{Icon, IconOptions, LatLng, Map, MapOptions, Marker, MarkerOptions, MouseEvent, MouseEvents, Popup, PopupOptions, TileLayerWms, TileLayerWmsOptions};
 use log::info;
-use patternfly_yew::prelude::{Button, Menu, MenuAction, Popover, Spinner};
-use std::ops::Add;
+use patternfly_yew::prelude::{Button, Menu, MenuAction};
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{Element, HtmlElement, Node, window};
-use yew::platform::spawn_local;
-use yew::{Callback, Component, Context, Html, Properties, function_component, html, html_nested};
-use yew::html::Scope;
-use yew_oauth2::prelude::OAuth2Context;
+use yew::{
+    Callback, Component, Context, Html, Properties, function_component, html, html::Scope,
+    html_nested, platform::spawn_local,
+};
 
 pub enum Msg {
     AddMarker(LatLng),
     ClearAllMarkers,
     RemoveMarker(Marker),
+    SetSchachtTypeList(Box<[SchachtTypListEntry]>),
+    SetError(FrontendError),
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -60,6 +59,8 @@ pub struct MapComponent {
     center: Point,
     container: HtmlElement,
     markers: Vec<Marker>,
+    error: Option<FrontendError>,
+    schacht_typ_list: Box<[SchachtTypListEntry]>,
 }
 
 impl Component for MapComponent {
@@ -81,6 +82,8 @@ impl Component for MapComponent {
             container,
             center: props.center,
             markers: vec![],
+            error: None,
+            schacht_typ_list: Box::default(),
         }
     }
 
@@ -90,6 +93,13 @@ impl Component for MapComponent {
                 info!("Clicked on map {lng:?}");
                 let marker_options = MarkerOptions::new();
                 marker_options.set_draggable(true);
+                let icon_options=IconOptions::default();
+                if let Some(entry)=self.schacht_typ_list.first(){
+                    let encoded = engine::general_purpose::STANDARD.encode(entry.icon.as_bytes());
+                    icon_options.set_icon_url(format!("data:image/svg+xml;base64,{encoded}"));
+                    icon_options.set_icon_anchor(leaflet::Point::new(50f64,50f64));
+                }
+                marker_options.set_icon(Icon::new(&icon_options));
                 let marker = Marker::new_with_options(&lng, &marker_options);
                 let map = self.map.clone();
                 let marker_clone = marker.clone();
@@ -155,6 +165,14 @@ impl Component for MapComponent {
                 self.markers.retain(|m| m != &marker);
                 false
             }
+            Msg::SetSchachtTypeList(schacht_typ_list) => {
+                self.schacht_typ_list = schacht_typ_list;
+                true
+            }
+            Msg::SetError(e) => {
+                self.error = Some(e);
+                true
+            }
         }
     }
 
@@ -197,10 +215,16 @@ impl Component for MapComponent {
                 }));
             }
             let scope = ctx.link().clone();
-                spawn_local(async move {
-                    fetch_schacht_list(scope).await;
-                })
-
+            spawn_local(async move {
+                match fetch_schacht_type_list(scope.clone()).await {
+                    Ok(list) => {
+                        scope.send_message(Msg::SetSchachtTypeList(list));
+                    }
+                    Err(e) => {
+                        scope.send_message(Msg::SetError(e));
+                    }
+                }
+            })
         }
     }
 }
@@ -229,11 +253,4 @@ fn marker_component(props: &MarkerPopupProps) -> Html {
 
 fn void_callback<E>(remove_marker_callback: Callback<()>) -> Callback<E> {
     Callback::from(move |_| remove_marker_callback.emit(()))
-}
-async fn fetch_schacht_list(scope: Scope<MapComponent>) -> Result<(), FrontendError> {
-    let schacht_list = query::<ListSchachtQuery, _,_>((), scope).await?;
-    if let Some(list) = schacht_list.data {
-        println!("{:#?}", list);
-    }
-    Ok(())
 }

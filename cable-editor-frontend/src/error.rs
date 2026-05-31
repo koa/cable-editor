@@ -13,5 +13,4 @@ pub enum FrontendError {
     ErrorQueryingAuthenticatedTransfer(CynicReqwestError),
     #[error("Invalid http header: {0}")]
     InvalidHeader(#[from] InvalidHeaderValue),
-
 }

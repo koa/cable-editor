@@ -14,7 +14,7 @@ use actix_web_prometheus::PrometheusMetricsBuilder;
 use actix_web_static_files::ResourceFiles;
 use async_graphql::futures_util::future::join_all;
 use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse};
-use cable_editor_backend::db::{run_sync_migrations, DB};
+use cable_editor_backend::db::{DB, run_sync_migrations};
 use cable_editor_backend::{
     config::CONFIG,
     db::connect,
@@ -123,8 +123,10 @@ async fn main() -> Result<(), BackendError> {
 
     let connection_pool = connect().await?;
 
-
-    info!("Database connection established: {:?}", connection_pool.status());
+    info!(
+        "Database connection established: {:?}",
+        connection_pool.status()
+    );
 
     let bind_addr = CONFIG.server_bind_address();
     let api_port = CONFIG.server_port();

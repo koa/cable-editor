@@ -65,7 +65,7 @@ impl yew::Component for App {
         if first_render {
             let scope = ctx.link().clone();
             spawn_local(async move {
-                let result = query_anonymous::<AuthenticationQuery, _>(()).await;
+                let result = query_anonymous::<AuthenticationQuery>(()).await;
                 match result {
                     Ok(GraphQlResponse { data, errors }) => {
                         if let Some(AuthenticationQuery { authentication }) = data {
