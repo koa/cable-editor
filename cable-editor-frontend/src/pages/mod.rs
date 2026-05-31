@@ -1,38 +1,50 @@
+pub mod map;
 pub mod router;
 
-use yew_oauth2::agent::OAuth2Operations;
+use crate::error::FrontendError;
 use crate::graphql::anonymous::{AuthenticationData, AuthenticationQuery};
 use crate::graphql::query_anonymous;
-use cynic::{http::ReqwestExt, GraphQlResponse, QueryBuilder};
-use patternfly_yew::prelude::{BackdropViewer, Brand, Button, MastheadBrand, Nav, NavItem, Page, PageSidebar, ToastViewer};
+use crate::pages::router::{AppRoute, Sidebar};
+use cynic::{GraphQlResponse, QueryBuilder, http::ReqwestExt};
+use patternfly_yew::prelude::{
+    BackdropViewer, Brand, Button, MastheadBrand, Nav, NavItem, Page, PageSidebar, ToastViewer,
+};
 use web_sys::MouseEvent;
 use yew::platform::spawn_local;
-use yew::{function_component, html, html_nested, Callback, Context, Html, Properties};
+use yew::{Callback, Context, Html, Properties, function_component, html, html_nested};
 use yew_nested_router::{Router, Switch};
+use yew_oauth2::agent::OAuth2Operations;
 use yew_oauth2::oauth2::{OAuth2, use_auth_agent};
 use yew_oauth2::prelude::{Authenticated, NotAuthenticated};
-use crate::pages::router::{AppRoute, Sidebar};
 
 #[derive(Debug)]
 pub struct App {
     oauth2_config: Option<AuthenticationData>,
+    error: Option<FrontendError>,
 }
 #[derive(Debug)]
 pub enum AppMessage {
     AuthenticationData(AuthenticationData),
+    Error(FrontendError),
 }
+
 impl yew::Component for App {
     type Message = AppMessage;
     type Properties = ();
     fn create(_ctx: &Context<Self>) -> Self {
         Self {
             oauth2_config: None,
+            error: None,
         }
     }
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             AppMessage::AuthenticationData(config) => {
                 self.oauth2_config = Some(config);
+                true
+            }
+            AppMessage::Error(e) => {
+                self.error = Some(e);
                 true
             }
         }
@@ -60,26 +72,10 @@ impl yew::Component for App {
                             scope.send_message(AppMessage::AuthenticationData(authentication));
                         }
                     }
-                    Err(_) => {}
-                }
-
-                /*let result =
-                    query_anonymous::<Settings, _>(scope.clone(), settings::Variables {}).await;
-                match result {
-                    Ok(ResponseData {
-                        authentication:
-                            SettingsAuthentication {
-                                auth_url,
-                                client_id,
-                                token_url,
-                            },
-                    }) => {
-                        scope.send_message(AppMessage::AuthenticationData(Config::new(
-                            client_id, auth_url, token_url,
-                        )));
+                    Err(e) => {
+                        scope.send_message(AppMessage::Error(e));
                     }
-                    Err(err) => error!("Error on server {err:?}"),
-                }*/
+                }
             });
         }
     }

@@ -14,3 +14,29 @@
   font-display: block;
   //src: url("./webfonts/fa-brands-400.woff2");
 }
+
+.map {
+  height: 100%;
+}
+div.pf-v6-c-page__main-container {
+  height: 100%;
+  flex-grow: 1;
+  div.map-container{
+    height: 100%;
+  }
+}
+
+.component-container {
+  border-radius: 0.5em;
+  padding: 1em;
+}
+
+
+.control {
+  text-align: center;
+  border: 1px solid green;
+
+  button {
+    margin: 0.5em;
+  }
+}

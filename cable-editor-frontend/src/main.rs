@@ -1,3 +1,4 @@
+pub mod components;
 pub mod error;
 pub mod graphql;
 pub mod pages;

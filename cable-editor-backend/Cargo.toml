@@ -8,3 +8,13 @@ async-graphql = "7.0"
 lazy_static = "1.5"
 serde = "1.0"
 config = "0.15"
+
+diesel = { version = "2.3", features = ["postgres"] }
+dotenvy = "0.15"
+diesel-async = { version = "0.9", features = ["postgres","deadpool","migrations"] }
+postgis_diesel = { version = "3.1" }
+diesel_migrations = "2.3"
+
+thiserror = "2.0"
+
+log = "0.4"

@@ -5,6 +5,7 @@ use yew_oauth2::oauth2::Config;
 mod schema {}
 
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
+#[cynic(schema = "anonymous")]
 pub struct AuthenticationData {
     pub client_id: String,
     pub token_url: String,
@@ -12,7 +13,7 @@ pub struct AuthenticationData {
 }
 
 #[derive(cynic::QueryFragment, Debug)]
-#[cynic(graphql_type = "Query")]
+#[cynic(graphql_type = "Query", schema = "anonymous")]
 pub struct AuthenticationQuery {
     pub authentication: AuthenticationData,
 }

@@ -1,12 +1,14 @@
+use crate::components::map::{MapComponent, Point};
 use patternfly_yew::prelude::{Nav, NavList, NavRouterItem};
-use yew::{function_component, html, Callback, Html, Properties};
-use yew_nested_router::prelude::{use_router, Target};
+use yew::{Callback, Html, Properties, function_component, html};
+use yew_nested_router::prelude::{Target, use_router};
 
 #[function_component(Sidebar)]
 pub fn sidebar() -> Html {
     html! {
         <Nav>
             <NavList>
+                <NavRouterItem<AppRoute> to={AppRoute::Map}>{"Karte"}</NavRouterItem<AppRoute>>
                 <NavRouterItem<AppRoute> to={AppRoute::ListOfCables}>{"Cables"}</NavRouterItem<AppRoute>>
             </NavList>
         </Nav>
@@ -44,6 +46,7 @@ where
 pub enum AppRoute {
     NotFound,
     #[default]
+    Map,
     ListOfCables,
 }
 
@@ -52,6 +55,9 @@ impl AppRoute {
         match self {
             AppRoute::NotFound => html! {<h1>{"Not Found"}</h1>},
             AppRoute::ListOfCables => html! {<h1>{"List of cables"}</h1>},
+            AppRoute::Map => {
+                html! {<MapComponent center={Point( 47.417986,8.882440)}/>}
+            }
         }
     }
 }

@@ -14,12 +14,16 @@ use actix_web_prometheus::PrometheusMetricsBuilder;
 use actix_web_static_files::ResourceFiles;
 use async_graphql::futures_util::future::join_all;
 use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse};
-use cable_editor_backend::config::CONFIG;
-use cable_editor_backend::graphql::anonymous::{AnonymousGraphqlSchema, create_anonymous_schema};
-use cable_editor_backend::graphql::authenticated::{
-    AuthenticatedGraphqlSchema, create_authenticated_schema,
+use cable_editor_backend::db::{run_sync_migrations, DB};
+use cable_editor_backend::{
+    config::CONFIG,
+    db::connect,
+    graphql::{
+        anonymous::{AnonymousGraphqlSchema, create_anonymous_schema},
+        authenticated::{AuthenticatedGraphqlSchema, create_authenticated_schema},
+        context::UserInfo,
+    },
 };
-use cable_editor_backend::graphql::context::UserInfo;
 use env_logger::Env;
 use log::{error, info, trace};
 use prometheus::{HistogramVec, histogram_opts};
@@ -37,7 +41,7 @@ async fn graphql(
     trace!("Execute Authenticated: {user:#?}");
     let schema = &context.schema;
     let histogram = context.graphql_request_histogram.clone();
-    let request = request.into_inner();
+    let request = request.into_inner().data(context.pool.clone());
     let found_user = if let Some(DecodedInfo { jwt: _jwt, payload }) = user {
         match serde_json::from_value::<UserInfo>(payload.private.clone()) {
             Ok(user) => Some(user),
@@ -94,6 +98,7 @@ struct ApplicationContext {
     graphql_request_histogram: HistogramVec,
     schema: AuthenticatedGraphqlSchema,
     anonymous_schema: AnonymousGraphqlSchema,
+    pool: DB,
 }
 
 #[derive(Error, Debug)]
@@ -106,11 +111,20 @@ enum BackendError {
     ActixWebPrometheus(#[from] actix_web_prometheus::error::Error),
     #[error("Error on OIDC Validation {0}")]
     OidcValidationError(#[from] OIDCValidationError),
+    #[error("Error from backend {0:?}")]
+    Backend(#[from] cable_editor_backend::error::BackendError),
 }
 
 #[actix_web::main]
 async fn main() -> Result<(), BackendError> {
     env_logger::init_from_env(Env::default().filter_or("LOG_LEVEL", "debug"));
+
+    run_sync_migrations();
+
+    let connection_pool = connect().await?;
+
+
+    info!("Database connection established: {:?}", connection_pool.status());
 
     let bind_addr = CONFIG.server_bind_address();
     let api_port = CONFIG.server_port();
@@ -148,6 +162,7 @@ async fn main() -> Result<(), BackendError> {
         graphql_request_histogram,
         schema,
         anonymous_schema,
+        pool: connection_pool,
     });
     let main_server = HttpServer::new(move || {
         let resources: HashMap<&str, Resource> = HashMap::new(); // generate();
