@@ -61,9 +61,6 @@ where
     {
         headers.insert(AUTHORIZATION, format!("Bearer {access_token}").parse()?);
     }
-    if let Some((auth_context, handle)) = scope.context::<OAuth2Context>(Callback::noop()) {
-        auth_context.access_token();
-    }
     let client = reqwest::Client::builder()
         .default_headers(headers)
         .build()

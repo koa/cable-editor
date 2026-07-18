@@ -1,12 +1,19 @@
-use base64::{engine, Engine};
-use crate::graphql::authenticated::list_schacht_typ::{
-    SchachtTypListEntry, fetch_schacht_type_list,
+use crate::{
+    error::FrontendError,
+    graphql::authenticated::list_schacht_typ::{SchachtTypListEntry, fetch_schacht_type_list},
+    util::GuardAppHandle,
 };
-use crate::{error::FrontendError, graphql::query};
+use base64::{Engine, engine};
 use gloo_utils::document;
-use leaflet::{Icon, IconOptions, LatLng, Map, MapOptions, Marker, MarkerOptions, MouseEvent, MouseEvents, Popup, PopupOptions, TileLayerWms, TileLayerWmsOptions};
+use leaflet::{
+    LatLng, Map, MapOptions, Marker, MarkerOptions, MouseEvent, MouseEvents, Popup, PopupOptions,
+    TileLayerWms, TileLayerWmsOptions,
+};
 use log::info;
-use patternfly_yew::prelude::{Button, Menu, MenuAction};
+use patternfly_yew::prelude::{
+    ActionGroup, Backdrop, Backdropper, Bullseye, Button, Form, Menu, MenuAction, Modal,
+    ToggleGroup, ToggleGroupItem,
+};
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{Element, HtmlElement, Node, window};
 use yew::{
@@ -93,13 +100,14 @@ impl Component for MapComponent {
                 info!("Clicked on map {lng:?}");
                 let marker_options = MarkerOptions::new();
                 marker_options.set_draggable(true);
-                let icon_options=IconOptions::default();
-                if let Some(entry)=self.schacht_typ_list.first(){
+                /*if let Some(entry)=self.schacht_typ_list.first(){
+                //let icon_options=IconOptions::default();
                     let encoded = engine::general_purpose::STANDARD.encode(entry.icon.as_bytes());
                     icon_options.set_icon_url(format!("data:image/svg+xml;base64,{encoded}"));
-                    icon_options.set_icon_anchor(leaflet::Point::new(50f64,50f64));
-                }
-                marker_options.set_icon(Icon::new(&icon_options));
+                    icon_options.set_icon_anchor(leaflet::Point::new(15f64,15f64));
+                    icon_options.set_icon_size(leaflet::Point::new(30f64,30f64));
+                //marker_options.set_icon(Icon::new(&icon_options));
+                }*/
                 let marker = Marker::new_with_options(&lng, &marker_options);
                 let map = self.map.clone();
                 let marker_clone = marker.clone();
@@ -129,26 +137,59 @@ impl Component for MapComponent {
                             popup.remove();
                         })
                     };
-                    yew::Renderer::<MarkerPopup>::with_root_and_props(
-                        div_container.clone(),
-                        MarkerPopupProps {
-                            entries: vec![
-                                MenuEntry {
-                                    text: html!("Marker entfernen"),
-                                    callback: remove_marker_callback,
-                                },
-                                MenuEntry {
-                                    text: html!("Schliessen"),
-                                    callback: close_popup_callback,
-                                },
-                            ],
-                        },
-                    )
-                    .render();
+                    let guard: GuardAppHandle<_> =
+                        yew::Renderer::<MarkerPopup>::with_root_and_props(
+                            div_container.clone(),
+                            MarkerPopupProps {
+                                entries: vec![
+                                    MenuEntry {
+                                        text: html!("Marker entfernen"),
+                                        callback: remove_marker_callback,
+                                    },
+                                    MenuEntry {
+                                        text: html!("Schliessen"),
+                                        callback: close_popup_callback,
+                                    },
+                                ],
+                            },
+                        )
+                        .render()
+                        .into();
                     let value: JsValue = div_container.into();
                     popup.set_content(&value).open_on(&map);
                     info!("Clicked on marker {event:?}");
                 }));
+                if let Some((backdropper, _)) = ctx.link().context::<Backdropper>(Callback::noop())
+                {
+                    let marker_clone = marker.clone();
+                    let onclose = {
+                        let scope = ctx.link().clone();
+                        let backdropper = backdropper.clone();
+                        Callback::from(move |_| {
+                            backdropper.close();
+                            scope.send_message(Msg::RemoveMarker(marker_clone.clone()));
+                        })
+                    };
+                    let toggle_group_items = self.schacht_typ_list.iter().map(|entry| {
+                        let encoded = engine::general_purpose::STANDARD.encode(entry.icon.as_bytes());
+                        let url = format!("data:image/svg+xml;base64,{encoded}");
+                        html_nested! {
+                            <ToggleGroupItem text={entry.name.clone()} icon={html!{<img src={url} width="24" height="24"/>}}/>
+                        }
+                    });
+                    backdropper.open(Backdrop::new(html! {
+                            <Bullseye>
+                                <Modal title="Schacht setzen" onclose={onclose}>
+                                    <Form>
+                                        <ToggleGroup>{for toggle_group_items}</ToggleGroup>
+                                        <ActionGroup>
+                                            <Button label="Schacht setzen" />
+                                        </ActionGroup>
+                                    </Form>
+                                </Modal>
+                            </Bullseye>
+                    }));
+                }
                 marker.add_to(&self.map);
                 self.markers.push(marker);
                 false

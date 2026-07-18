@@ -2,6 +2,7 @@ pub mod components;
 pub mod error;
 pub mod graphql;
 pub mod pages;
+pub mod util;
 
 use crate::pages::App;
 use wasm_bindgen::JsValue;

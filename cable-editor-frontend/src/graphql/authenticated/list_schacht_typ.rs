@@ -1,8 +1,9 @@
-use crate::error::FrontendError;
-use crate::graphql::authenticated::schema;
-use crate::graphql::query;
-use yew::Component;
-use yew::html::Scope;
+use crate::{
+    error::FrontendError,
+    graphql::{authenticated::schema, query},
+};
+use patternfly_yew::prelude::SelectItemRenderer;
+use yew::{Component, html::Scope};
 
 #[derive(cynic::QueryFragment, Debug)]
 #[cynic(graphql_type = "Query")]
@@ -10,12 +11,20 @@ struct ListSchachtTypQuery {
     pub list_schacht_typ: Vec<SchachtTypListEntry>,
 }
 
-#[derive(cynic::QueryFragment, Debug)]
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
 #[cynic(graphql_type = "SchachtTyp")]
 pub struct SchachtTypListEntry {
     pub id: i32,
     pub name: String,
     pub icon: String,
+}
+
+impl SelectItemRenderer for SchachtTypListEntry {
+    type Item = i32;
+
+    fn label(&self) -> String {
+        self.name.clone()
+    }
 }
 pub async fn fetch_schacht_type_list<C: Component>(
     scope: Scope<C>,
