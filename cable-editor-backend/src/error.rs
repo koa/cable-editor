@@ -1,6 +1,5 @@
 use diesel_async::pooled_connection::deadpool::{BuildError, PoolError};
-use std::env::VarError;
-use std::error::Error;
+use std::{env::VarError, error::Error};
 use thiserror::Error;
 
 #[derive(Debug, Error)]

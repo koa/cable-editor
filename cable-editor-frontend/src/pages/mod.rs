@@ -1,21 +1,30 @@
+mod list_of_cables;
 pub mod map;
 pub mod router;
 
-use crate::error::FrontendError;
-use crate::graphql::anonymous::{AuthenticationData, AuthenticationQuery};
-use crate::graphql::query_anonymous;
-use crate::pages::router::{AppRoute, Sidebar};
-use cynic::{GraphQlResponse, QueryBuilder, http::ReqwestExt};
+use crate::{
+    error::FrontendError,
+    graphql::{
+        anonymous::{AuthenticationData, AuthenticationQuery},
+        query_anonymous,
+    },
+    pages::router::{AppRoute, Sidebar},
+};
+use cynic::GraphQlResponse;
 use patternfly_yew::prelude::{
-    BackdropViewer, Brand, Button, MastheadBrand, Nav, NavItem, Page, PageSidebar, ToastViewer,
+    BackdropViewer, Brand, Button, MastheadBrand, Page, PageSidebar, ToastViewer,
 };
 use web_sys::MouseEvent;
-use yew::platform::spawn_local;
-use yew::{Callback, Context, Html, Properties, function_component, html, html_nested};
+use yew::{
+    Callback, Context, Html, Properties, function_component, html, html_nested,
+    platform::spawn_local,
+};
 use yew_nested_router::{Router, Switch};
-use yew_oauth2::agent::OAuth2Operations;
-use yew_oauth2::oauth2::{OAuth2, use_auth_agent};
-use yew_oauth2::prelude::{Authenticated, NotAuthenticated};
+use yew_oauth2::{
+    agent::OAuth2Operations,
+    oauth2::{OAuth2, use_auth_agent},
+    prelude::{Authenticated, NotAuthenticated},
+};
 
 #[derive(Debug)]
 pub struct App {

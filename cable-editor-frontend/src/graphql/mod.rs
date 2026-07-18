@@ -3,7 +3,6 @@ use cynic::{GraphQlResponse, QueryBuilder, QueryFragment, QueryVariables, http::
 use lazy_static::lazy_static;
 use reqwest::header::{AUTHORIZATION, HeaderMap};
 use serde::Serialize;
-use yew::{Callback, Component, html::Scope};
 use yew_oauth2::prelude::{Authentication, OAuth2Context};
 
 pub mod anonymous;
@@ -41,20 +40,15 @@ where
     Ok(response)
 }
 
-pub async fn query<Q, C>(
+pub async fn query<Q>(
     request: Q::VariablesFields,
-    scope: Scope<C>,
+    credentials: Option<&OAuth2Context>,
 ) -> Result<GraphQlResponse<Q>, FrontendError>
 where
     Q: QueryFragment + serde::de::DeserializeOwned + 'static,
     Q::SchemaType: cynic::schema::QueryRoot,
     Q::VariablesFields: QueryVariables<Fields = Q::VariablesFields> + Serialize,
-    C: Component,
 {
-    let credentials = scope
-        .context::<OAuth2Context>(Callback::noop())
-        .map(|r| r.0);
-
     let mut headers = HeaderMap::new();
     if let Some(OAuth2Context::Authenticated(Authentication { access_token, .. })) =
         credentials.as_ref()

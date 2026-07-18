@@ -1,6 +1,6 @@
 use crate::{
     components::map::{MapComponent, Point},
-    pages::map::MapTestPage,
+    pages::{list_of_cables::ListOfCables, map::MapTestPage},
 };
 use patternfly_yew::prelude::{Nav, NavList, NavRouterItem};
 use yew::{Callback, Html, Properties, function_component, html};
@@ -59,7 +59,7 @@ impl AppRoute {
     pub fn content(self) -> Html {
         match self {
             AppRoute::NotFound => html! {<h1>{"Not Found"}</h1>},
-            AppRoute::ListOfCables => html! {<h1>{"List of cables"}</h1>},
+            AppRoute::ListOfCables => html! {<ListOfCables/>},
             AppRoute::Map => {
                 html! {<MapComponent center={Point( 47.417986,8.882440)}/>}
             }

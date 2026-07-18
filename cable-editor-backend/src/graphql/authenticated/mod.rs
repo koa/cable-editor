@@ -1,11 +1,12 @@
-use crate::db::entity::SchachtTyp;
-use crate::db::{DB, entity::Schacht, schema::schacht::id};
+use crate::db::{
+    DB,
+    entity::{Cable, Schacht, SchachtTyp},
+    schema::schacht::id,
+};
 use async_graphql::{Context, EmptyMutation, EmptySubscription, Object, Schema};
-use diesel::pg::Pg;
-use diesel::{ExpressionMethods, HasQuery};
-use diesel::{OptionalExtension, QueryDsl};
+use diesel::{ExpressionMethods, HasQuery, OptionalExtension, QueryDsl, pg::Pg};
 use diesel_async::{AsyncConnectionCore, RunQueryDsl};
-use log::{error, info};
+use log::info;
 
 pub type AuthenticatedGraphqlSchema = Schema<Query, EmptyMutation, EmptySubscription>;
 
@@ -37,6 +38,12 @@ impl Query {
     async fn list_schacht_typ(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<SchachtTyp>> {
         let mut connection = get_connection(ctx).await?;
         let query = SchachtTyp::query();
+        let list = query.load(&mut connection).await?;
+        Ok(list)
+    }
+    async fn list_cable(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Cable>> {
+        let mut connection = get_connection(ctx).await?;
+        let query = Cable::query();
         let list = query.load(&mut connection).await?;
         Ok(list)
     }

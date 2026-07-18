@@ -1,8 +1,12 @@
-use crate::error::FrontendError;
-use crate::graphql::authenticated::{Point, schema};
-use crate::graphql::query;
+use crate::{
+    error::FrontendError,
+    graphql::{
+        authenticated::{Point, schema},
+        query,
+    },
+};
 use yew::Component;
-use yew::html::Scope;
+use yew_oauth2::context::OAuth2Context;
 
 #[derive(cynic::QueryFragment, Debug)]
 #[cynic(graphql_type = "Query")]
@@ -19,9 +23,9 @@ pub struct SchachtListEntry {
 }
 
 async fn fetch_schacht_list<C: Component>(
-    scope: Scope<C>,
+    credentials: Option<&OAuth2Context>,
 ) -> Result<Box<[SchachtListEntry]>, FrontendError> {
-    let schacht_list = query::<ListSchachtQuery, _>((), scope).await?;
+    let schacht_list = query::<ListSchachtQuery>((), credentials).await?;
     Ok(schacht_list
         .data
         .map(|l| l.list_schacht)

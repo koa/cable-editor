@@ -3,7 +3,7 @@ use crate::{
     graphql::{authenticated::schema, query},
 };
 use patternfly_yew::prelude::SelectItemRenderer;
-use yew::{Component, html::Scope};
+use yew_oauth2::context::OAuth2Context;
 
 #[derive(cynic::QueryFragment, Debug)]
 #[cynic(graphql_type = "Query")]
@@ -26,10 +26,10 @@ impl SelectItemRenderer for SchachtTypListEntry {
         self.name.clone()
     }
 }
-pub async fn fetch_schacht_type_list<C: Component>(
-    scope: Scope<C>,
+pub async fn fetch_schacht_type_list(
+    credentials: Option<&OAuth2Context>,
 ) -> Result<Box<[SchachtTypListEntry]>, FrontendError> {
-    let schacht_list = query::<ListSchachtTypQuery, _>((), scope).await?;
+    let schacht_list = query::<ListSchachtTypQuery>((), credentials).await?;
     Ok(schacht_list
         .data
         .map(|l| l.list_schacht_typ)

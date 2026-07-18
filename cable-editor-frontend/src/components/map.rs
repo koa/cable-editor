@@ -17,9 +17,10 @@ use patternfly_yew::prelude::{
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{Element, HtmlElement, Node, window};
 use yew::{
-    Callback, Component, Context, Html, Properties, function_component, html, html::Scope,
-    html_nested, platform::spawn_local,
+    Callback, Component, Context, Html, Properties, function_component, html, html_nested,
+    platform::spawn_local,
 };
+use yew_oauth2::prelude::OAuth2Context;
 
 pub enum Msg {
     AddMarker(LatLng),
@@ -256,8 +257,12 @@ impl Component for MapComponent {
                 }));
             }
             let scope = ctx.link().clone();
+            let credentials = scope
+                .context::<OAuth2Context>(Callback::noop())
+                .map(|r| r.0);
+
             spawn_local(async move {
-                match fetch_schacht_type_list(scope.clone()).await {
+                match fetch_schacht_type_list(credentials.as_ref()).await {
                     Ok(list) => {
                         scope.send_message(Msg::SetSchachtTypeList(list));
                     }

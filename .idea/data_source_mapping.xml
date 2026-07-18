@@ -5,5 +5,7 @@
     <file url="file://$PROJECT_DIR$/cable-editor-backend/migrations/00000000000000_diesel_initial_setup/up.sql" value="ad8ea731-02eb-4c8d-b751-b9ade36f8c71" />
     <file url="file://$PROJECT_DIR$/cable-editor-backend/migrations/2026-05-31-042725-0000_create_initial_db/down.sql" value="ad8ea731-02eb-4c8d-b751-b9ade36f8c71" />
     <file url="file://$PROJECT_DIR$/cable-editor-backend/migrations/2026-05-31-042725-0000_create_initial_db/up.sql" value="ad8ea731-02eb-4c8d-b751-b9ade36f8c71" />
+    <file url="file://$PROJECT_DIR$/cable-editor-backend/migrations/2026-05-31-085257-0000_schacht_typ/down.sql" value="ad8ea731-02eb-4c8d-b751-b9ade36f8c71" />
+    <file url="file://$PROJECT_DIR$/cable-editor-backend/migrations/2026-05-31-085257-0000_schacht_typ/up.sql" value="ad8ea731-02eb-4c8d-b751-b9ade36f8c71" />
   </component>
 </project>
