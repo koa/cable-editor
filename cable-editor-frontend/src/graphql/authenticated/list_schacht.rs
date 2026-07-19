@@ -19,7 +19,7 @@ struct ListSchachtQuery {
 pub struct SchachtListEntry {
     pub id: i32,
     pub name: String,
-    pub position: Point,
+    pub position: Option<Point>,
 }
 
 async fn fetch_schacht_list<C: Component>(

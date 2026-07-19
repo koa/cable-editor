@@ -15,7 +15,7 @@ struct ListSchachtTypQuery {
 #[cynic(graphql_type = "SchachtTyp")]
 pub struct SchachtTypListEntry {
     pub id: i32,
-    pub name: String,
+    pub name: Option<String>,
     pub icon: String,
 }
 
@@ -23,7 +23,10 @@ impl SelectItemRenderer for SchachtTypListEntry {
     type Item = i32;
 
     fn label(&self) -> String {
-        self.name.clone()
+        self.name
+            .as_ref()
+            .map(|n| n.clone())
+            .unwrap_or_else(|| format!("schacht {}", self.id))
     }
 }
 pub async fn fetch_schacht_type_list(

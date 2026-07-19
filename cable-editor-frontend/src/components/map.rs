@@ -12,7 +12,7 @@ use leaflet::{
 use log::info;
 use patternfly_yew::prelude::{
     ActionGroup, Backdrop, Backdropper, Bullseye, Button, Form, Menu, MenuAction, Modal,
-    ToggleGroup, ToggleGroupItem,
+    SelectItemRenderer, ToggleGroup, ToggleGroupItem,
 };
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{Element, HtmlElement, Node, window};
@@ -175,7 +175,7 @@ impl Component for MapComponent {
                         let encoded = engine::general_purpose::STANDARD.encode(entry.icon.as_bytes());
                         let url = format!("data:image/svg+xml;base64,{encoded}");
                         html_nested! {
-                            <ToggleGroupItem text={entry.name.clone()} icon={html!{<img src={url} width="24" height="24"/>}}/>
+                            <ToggleGroupItem text={entry.label()} icon={html!{<img src={url} width="24" height="24"/>}}/>
                         }
                     });
                     backdropper.open(Backdrop::new(html! {

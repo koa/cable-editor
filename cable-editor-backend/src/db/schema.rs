@@ -1,49 +1,69 @@
+pub mod sql_types {
+    #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
+    #[diesel(postgres_type(name = "xml", schema = "pg_catalog"))]
+    pub struct Xml;
+}
+
 diesel::table! {
+    kabel (id) {
+        id -> Int4,
+        #[max_length = 20]
+        name -> Varchar,
+        buendel_anz -> Int4,
+        faser_anz -> Int4,
+    }
+}
+
+diesel::table! {
+    kabel_trasse (kabel, sequenz) {
+        kabel -> Int4,
+        trasse -> Int4,
+        sequenz -> Int4,
+    }
+}
+
+diesel::table! {
+    use diesel::sql_types::*;
     use postgis_diesel::sql_types::Geometry;
-    use diesel::sql_types::{Integer, Text};
+
     schacht (id) {
-        id -> Integer,
-        geom -> Geometry,
-        name -> Text,
-        typ -> Integer,
+            id -> Int4,
+            geom -> Nullable<Geometry>,
+            #[max_length = 20]
+            name -> Nullable<Varchar>,
+            typ -> Nullable<Int4>,
     }
 }
 
 diesel::table! {
-    use diesel::sql_types::{Integer, Text};
+    use diesel::sql_types::*;
+    use super::sql_types::Xml;
+
     schacht_typ (id) {
-        id -> Integer,
-        name -> Text,
-        icon -> Text,
+        id -> Int4,
+        #[max_length = 20]
+        name -> Nullable<Varchar>,
+        icon -> Xml,
     }
 }
 
 diesel::table! {
-    use diesel::sql_types::{Integer, Text};
-    kabel(id){
-        id -> Integer,
-        name -> Text,
-        buendel_anz -> Integer,
-        faser_anz -> Integer
-    }
-}
-
-diesel::table! {
-    use diesel::sql_types::{Integer, Text};
+    use diesel::sql_types::*;
     use postgis_diesel::sql_types::Geometry;
-    trasse(id){
-        id -> Integer,
-        geom -> Geometry,
-        description -> Text,
-        schacht_a -> Integer,
-        schacht_z -> Integer,
+
+    trasse (id) {
+            id -> Int4,
+            geom -> Nullable<Geometry>,
+            #[max_length = 50]
+            description -> Nullable<Varchar>,
+            schacht_a -> Int4,
+            schacht_z -> Int4,
+            eigenleistung -> Bool,
     }
 }
 
-//diesel::alias!(schacht as schacht_a);
-//diesel::alias!(schacht as schacht_z);
-
+diesel::joinable!(kabel_trasse -> kabel (kabel));
+diesel::joinable!(kabel_trasse -> trasse (trasse));
 diesel::joinable!(schacht -> schacht_typ (typ));
 
-diesel::allow_tables_to_appear_in_same_query!(schacht, schacht_typ);
-diesel::allow_tables_to_appear_in_same_query!(schacht, trasse,);
+diesel::allow_tables_to_appear_in_same_query!(kabel, kabel_trasse, schacht, schacht_typ, trasse,);
