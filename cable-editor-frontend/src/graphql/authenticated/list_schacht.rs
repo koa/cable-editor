@@ -25,7 +25,7 @@ pub struct SchachtListEntry {
 async fn fetch_schacht_list<C: Component>(
     credentials: Option<&OAuth2Context>,
 ) -> Result<Box<[SchachtListEntry]>, FrontendError> {
-    let schacht_list = query::<ListSchachtQuery>((), credentials).await?;
+    let schacht_list = query::<ListSchachtQuery, _>((), credentials).await?;
     Ok(schacht_list
         .data
         .map(|l| l.list_schacht)

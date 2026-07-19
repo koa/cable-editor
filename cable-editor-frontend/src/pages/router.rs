@@ -1,3 +1,4 @@
+use crate::pages::cable::edit::EditCable;
 use crate::{
     components::map::{MapComponent, Point},
     pages::{list_of_cables::ListOfCables, map::MapTestPage},
@@ -53,6 +54,15 @@ pub enum AppRoute {
     Map,
     MapTest,
     ListOfCables,
+    Cable {
+        id: i32,
+        #[target(nested)]
+        view: CableView,
+    },
+}
+#[derive(Debug, Clone, PartialEq, Eq, Target)]
+pub enum CableView {
+    Edit,
 }
 
 impl AppRoute {
@@ -65,6 +75,17 @@ impl AppRoute {
             }
             AppRoute::MapTest => {
                 html! {<MapTestPage/>}
+            }
+            AppRoute::Cable { id, view } => view.content(id),
+        }
+    }
+}
+
+impl CableView {
+    pub fn content(self, cable_id: i32) -> Html {
+        match self {
+            CableView::Edit => {
+                html!(<EditCable {cable_id}/>)
             }
         }
     }

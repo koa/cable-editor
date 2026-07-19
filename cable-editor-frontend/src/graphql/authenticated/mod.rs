@@ -1,3 +1,4 @@
+pub mod cable_details;
 pub mod list_cables;
 pub mod list_schacht;
 pub mod list_schacht_typ;

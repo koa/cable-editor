@@ -36,7 +36,9 @@ diesel::table! {
 }
 
 diesel::table! {
-    use diesel::sql_types::*;
+    use diesel::sql_types::Int4;
+    use diesel::sql_types::Nullable;
+    use diesel::sql_types::Varchar;
     use super::sql_types::Xml;
 
     schacht_typ (id) {
@@ -62,8 +64,34 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    use diesel::sql_types::Int4;
+    use diesel::sql_types::Nullable;
+    use diesel::sql_types::Varchar;
+    use postgis_diesel::sql_types::Geometry;
+    trassen_mit_endpunkten(id){
+        id -> Int4,
+        geom -> Nullable<Geometry>,
+        sa_id -> Int4,
+        #[max_length = 20]
+        sa_name -> Nullable<Varchar>,
+        sz_id -> Int4,
+        #[max_length = 20]
+        sz_name -> Nullable<Varchar>,
+
+    }
+}
+
 diesel::joinable!(kabel_trasse -> kabel (kabel));
 diesel::joinable!(kabel_trasse -> trasse (trasse));
+diesel::joinable!(kabel_trasse -> trassen_mit_endpunkten (trasse));
 diesel::joinable!(schacht -> schacht_typ (typ));
 
-diesel::allow_tables_to_appear_in_same_query!(kabel, kabel_trasse, schacht, schacht_typ, trasse,);
+diesel::allow_tables_to_appear_in_same_query!(
+    kabel,
+    kabel_trasse,
+    schacht,
+    schacht_typ,
+    trasse,
+    trassen_mit_endpunkten
+);

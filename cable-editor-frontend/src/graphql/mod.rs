@@ -20,14 +20,14 @@ pub fn host() -> String {
     format!("{protocol}//{host}")
 }
 
-// Send Graphql-Query to server
-pub async fn query_anonymous<Q>(
-    request: Q::VariablesFields,
-) -> Result<GraphQlResponse<Q>, FrontendError>
+pub async fn query_anonymous<Q, V>(request: V) -> Result<GraphQlResponse<Q>, FrontendError>
 where
-    Q: QueryFragment + serde::de::DeserializeOwned + 'static,
+    Q: QueryFragment<VariablesFields = V::Fields>
+        + QueryBuilder<V>
+        + serde::de::DeserializeOwned
+        + 'static,
     Q::SchemaType: cynic::schema::QueryRoot,
-    Q::VariablesFields: QueryVariables<Fields = Q::VariablesFields> + Serialize,
+    V: QueryVariables + Serialize,
 {
     let client = reqwest::Client::builder()
         .build()
@@ -40,14 +40,17 @@ where
     Ok(response)
 }
 
-pub async fn query<Q>(
-    request: Q::VariablesFields,
+pub async fn query<Q, V>(
+    request: V,
     credentials: Option<&OAuth2Context>,
 ) -> Result<GraphQlResponse<Q>, FrontendError>
 where
-    Q: QueryFragment + serde::de::DeserializeOwned + 'static,
+    Q: QueryFragment<VariablesFields = V::Fields>
+        + QueryBuilder<V>
+        + serde::de::DeserializeOwned
+        + 'static,
     Q::SchemaType: cynic::schema::QueryRoot,
-    Q::VariablesFields: QueryVariables<Fields = Q::VariablesFields> + Serialize,
+    V: QueryVariables + Serialize,
 {
     let mut headers = HeaderMap::new();
     if let Some(OAuth2Context::Authenticated(Authentication { access_token, .. })) =

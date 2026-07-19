@@ -35,8 +35,7 @@ create index sidx_schacht_geom
 
 create table trasse
 (
-    id            serial
-        primary key,
+    id            serial primary key,
     geom          geometry(LineString, 2056),
     description   varchar(50),
     schacht_a     integer              not null
