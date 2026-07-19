@@ -2,11 +2,9 @@ use crate::{
     components::map_edit::{NoData, ReferencedData},
     util::render_component,
 };
-use leaflet::{
-    DragEvents, LatLng, LatLngBounds, Marker, MarkerOptions, MouseEvents, Popup, PopupOptions,
-};
+use leaflet::{DragEvents, LatLng, LatLngBounds, Marker, MarkerOptions, MouseEvents};
 use log::info;
-use patternfly_yew::prelude::{Label, Spinner};
+use patternfly_yew::prelude::Spinner;
 use std::{
     cell::{Ref, RefCell},
     collections::{HashMap, hash_map},

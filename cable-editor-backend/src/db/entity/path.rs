@@ -1,5 +1,4 @@
 use async_graphql::Enum;
-use log::info;
 use std::{fmt::Debug, marker::PhantomData};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Enum)]
@@ -92,15 +91,10 @@ where
     type Item = Result<DirectedDuct<SI::Item, S>, DuctAlignmentError<SI::Item, S>>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        info!("Has temp entry: {}", self.temp_entry.is_some());
-        let duct = self.temp_entry.take().or_else(|| {
-            info!("Fetch next source");
-            self.source.next()
-        })?;
+        let duct = self.temp_entry.take().or_else(|| self.source.next())?;
         let entry_schacht_a = duct.schacht_a();
         let entry_schacht_z = duct.schacht_z();
         if let Some(last_schacht) = self.last_schacht.take() {
-            info!("Last schacht set");
             if entry_schacht_a == last_schacht {
                 self.last_schacht = Some(entry_schacht_z);
                 Self::forward_result(duct)
@@ -115,18 +109,15 @@ where
             }
         } else {
             if let Some(second_entry) = self.source.next() {
-                info!("Second schacht fetched");
                 if entry_schacht_a == second_entry.schacht_a()
                     || entry_schacht_a == second_entry.schacht_z()
                 {
-                    info!("backward aligned");
                     self.temp_entry = Some(second_entry);
                     self.last_schacht = Some(entry_schacht_a);
                     Self::backward_result(duct)
                 } else if entry_schacht_z == second_entry.schacht_a()
                     || entry_schacht_z == second_entry.schacht_z()
                 {
-                    info!("forward aligned");
                     self.temp_entry = Some(second_entry);
                     self.last_schacht = Some(entry_schacht_z);
                     Self::forward_result(duct)
@@ -137,7 +128,6 @@ where
                     }))
                 }
             } else {
-                info!("Single result");
                 Self::forward_result(duct)
             }
         }

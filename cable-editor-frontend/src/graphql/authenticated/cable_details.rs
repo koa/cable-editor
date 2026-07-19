@@ -23,11 +23,16 @@ pub struct CableDuct {
     pub length: Option<f64>,
 }
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
-#[cynic(graphql_type = "DirectedDuct")]
-pub struct CableDuctSegment {
+#[cynic(graphql_type = "CablePath")]
+pub struct CablePath {
+    pub near_schacht: CableSegmentEndSchacht,
+    pub segments: Vec<CablePathSegment>
+}
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
+#[cynic(graphql_type = "CablePathSegment")]
+pub struct CablePathSegment{
     pub duct: CableDuct,
-    pub begin_schacht: CableSegmentEndSchacht,
-    pub end_schacht: CableSegmentEndSchacht,
+    pub far_schacht: CableSegmentEndSchacht
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
@@ -44,7 +49,7 @@ pub struct CableDetails {
     pub bundle_count: i32,
     pub fiber_count: i32,
     pub length: Option<f64>,
-    pub ducts: Vec<CableDuctSegment>,
+    pub path: Option<CablePath>,
 }
 
 impl CableDetails {

@@ -9,7 +9,7 @@ use crate::{
     },
     graphql::{authenticated::get_connection, model},
 };
-use async_graphql::{Context, Error, Object};
+use async_graphql::{Context, Object};
 use diesel::{
     AsChangeset, AsExpression, Associations, ExpressionMethods, FromSqlRow, HasQuery, Identifiable,
     Insertable, QueryDsl, deserialize,
@@ -150,10 +150,7 @@ impl Cable {
             .await?)
     }
 
-    async fn ducts(
-        &self,
-        ctx: &Context<'_>,
-    ) -> async_graphql::Result<Vec<DirectedDuct<Duct, i32>>> {
+    async fn path(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<CablePath>> {
         let mut connection = get_connection(ctx).await?;
         let vec = trasse::table
             .inner_join(kabel_trasse::table)
@@ -163,10 +160,12 @@ impl Cable {
             .load::<Duct>(&mut connection)
             .await?;
 
-        align_ducts(vec.into_iter())
-            .map(|v| {
-                info!("Entry: {v:?}");
-                v
+        let segments = align_ducts(vec.into_iter())
+            .map(|r| {
+                r.map(|segment| CablePathSegment {
+                    far_schacht: segment.schacht_z(),
+                    segment,
+                })
             })
             .collect::<Result<Vec<_>, _>>()
             .map_err(|error| match error {
@@ -182,15 +181,49 @@ impl Cable {
                         duct.id, last_schacht
                     ))
                 }
-            })
+            })?;
+        Ok(segments
+            .as_slice()
+            .first()
+            .map(|s| s.segment.schacht_a())
+            .map(|first| CablePath {
+                near_schacht: first,
+                segments,
+            }))
+    }
+}
+pub struct CablePath {
+    near_schacht: i32,
+    segments: Vec<CablePathSegment>,
+}
+#[Object]
+impl CablePath {
+    async fn near_schacht(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
+        fetch_schacht(ctx, self.near_schacht).await
+    }
+    async fn segments(&self) -> &[CablePathSegment] {
+        self.segments.as_ref()
+    }
+}
+struct CablePathSegment {
+    segment: DirectedDuct<Duct, i32>,
+    far_schacht: i32,
+}
+#[Object]
+impl CablePathSegment {
+    async fn duct(&self) -> &Duct {
+        &self.segment.duct
+    }
+    async fn far_schacht(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
+        fetch_schacht(ctx, self.far_schacht).await
     }
 }
 #[Object]
 impl DirectedDuct<Duct, i32> {
-    async fn begin_schacht(&self, ctx: &Context<'_>) -> Result<Result<Schacht, Error>, Error> {
+    async fn begin_schacht(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
         fetch_schacht(ctx, self.schacht_a()).await
     }
-    async fn end_schacht(&self, ctx: &Context<'_>) -> Result<Result<Schacht, Error>, Error> {
+    async fn end_schacht(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
         fetch_schacht(ctx, self.schacht_z()).await
     }
     async fn begin_schacht_id(&self) -> i32 {
@@ -223,11 +256,11 @@ impl Duct {
         self.description.as_deref()
     }
     async fn schacht_a(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
-        fetch_schacht(ctx, self.schacht_a).await?
+        fetch_schacht(ctx, self.schacht_a).await
     }
 
     async fn schacht_z(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
-        fetch_schacht(ctx, self.schacht_z).await?
+        fetch_schacht(ctx, self.schacht_z).await
     }
     async fn length(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<f64>> {
         let mut connection = get_connection(ctx).await?;
@@ -238,12 +271,12 @@ impl Duct {
             .await?)
     }
 }
-async fn fetch_schacht(ctx: &Context<'_>, id: i32) -> Result<Result<Schacht, Error>, Error> {
+async fn fetch_schacht(ctx: &Context<'_>, id: i32) -> async_graphql::Result<Schacht> {
     let mut connection = get_connection(ctx).await?;
-    Ok(Ok(Schacht::query()
+    Ok(Schacht::query()
         .filter(schacht::id.eq(id))
         .get_result(&mut connection)
-        .await?))
+        .await?)
 }
 
 impl UnalignedDuct<i32> for Duct {
