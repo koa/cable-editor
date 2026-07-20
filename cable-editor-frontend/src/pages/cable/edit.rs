@@ -1,19 +1,68 @@
-use crate::error::FrontendError;
-use crate::graphql::authenticated::cable_details::{CableDetails, UpdateCableStructure};
-use patternfly_yew::prelude::{Button, ButtonVariant, Form, FormGroup, Spinner, TableHeaderSortBy, TextInput};
+use crate::graphql::authenticated::cable_details::{CableDuct, CableSegmentEndSchacht};
+use crate::{
+    error::FrontendError,
+    graphql::authenticated::cable_details::{CableDetails, UpdateCableStructure},
+};
+use patternfly_yew::prelude::{
+    Button, ButtonVariant, Cell, CellContext, Form, FormGroup, MemoizedTableModel, Spinner, Table,
+    TableColumn, TableEntryRenderer, TableGridMode, TableHeader, TableHeaderSortBy, TableMode,
+    TextInput, UseTableData, use_table_data,
+};
 use std::sync::Arc;
-use yew::html::IntoPropValue;
-use yew::suspense::use_future_with;
 use yew::{
     Callback, Html, HtmlResult, Properties, Suspense, function_component, html,
-    platform::spawn_local, props, use_state,
+    html::IntoPropValue, html_nested, platform::spawn_local, props, suspense::use_future_with,
+    use_memo, use_state,
 };
 use yew_oauth2::hook::use_auth_state;
+
+#[derive(Debug, Clone, PartialEq)]
+enum DuctPathEntry {
+    Schacht {
+        schacht: CableSegmentEndSchacht,
+        pos: f64,
+    },
+    Duct(CableDuct),
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+enum CablePathColumn {
+    Schacht,
+    Length,
+    Position,
+}
+
+impl TableEntryRenderer<CablePathColumn> for DuctPathEntry {
+    fn render_cell(&self, context: CellContext<'_, CablePathColumn>) -> Cell {
+        match context.column {
+            CablePathColumn::Schacht => {
+                if let DuctPathEntry::Schacht { schacht, pos } = self {
+                    Cell::new(schacht.name.as_str().into_prop_value())
+                } else {
+                    Cell::default()
+                }
+            }
+            CablePathColumn::Length => if let DuctPathEntry::Duct(duct) = self {
+                duct.length
+            } else {
+                None
+            }
+            .map(|l| Cell::new(format!("{l:.1} m").into_prop_value()))
+            .unwrap_or_default(),
+            CablePathColumn::Position => {
+                if let DuctPathEntry::Schacht { schacht, pos } = self {
+                    Cell::new(format!("{pos:.1} m").into_prop_value())
+                } else {
+                    Cell::default()
+                }
+            }
+        }
+    }
+}
 
 #[function_component]
 fn CableForm(props: &EditCableProperties) -> HtmlResult {
     let auth_state = use_auth_state();
-    //let sort_state = use_state(|| None::<TableHeaderSortBy<crate::pages::list_of_cables::Columns>>);
     let cable_id = props.cable_id;
     let initial_cable_data = use_future_with(auth_state.clone(), |credentials| async move {
         CableDetails::fetch((*credentials).as_ref(), cable_id)
@@ -40,6 +89,31 @@ fn CableForm(props: &EditCableProperties) -> HtmlResult {
         details
             .as_ref()
             .map(|d| d.fiber_count.to_string())
+            .unwrap_or_default()
+    });
+    let cable_path = use_state(|| {
+        details
+            .as_ref()
+            .and_then(|d| d.path.as_ref())
+            .map(|path| {
+                let mut entries = Vec::with_capacity(1 + path.segments.len() * 2);
+                let mut current_pos = 0.0;
+                entries.push(DuctPathEntry::Schacht {
+                    schacht: path.near_schacht.clone(),
+                    pos: current_pos,
+                });
+                for segment in path.segments.iter() {
+                    entries.push(DuctPathEntry::Duct(segment.duct.clone()));
+                    if let Some(l) = segment.duct.length {
+                        current_pos += l;
+                    }
+                    entries.push(DuctPathEntry::Schacht {
+                        schacht: segment.far_schacht.clone(),
+                        pos: current_pos,
+                    });
+                }
+                entries
+            })
             .unwrap_or_default()
     });
 
@@ -115,6 +189,16 @@ fn CableForm(props: &EditCableProperties) -> HtmlResult {
         })
     };
 
+    let table_header = html_nested! {
+        <TableHeader<CablePathColumn>>
+            <TableColumn<CablePathColumn> label="Name" index={CablePathColumn::Schacht} />
+            <TableColumn<CablePathColumn> label="Position" index={CablePathColumn::Position} />
+            <TableColumn<CablePathColumn> label="Segmentlänge" index={CablePathColumn::Length} />
+        </TableHeader<CablePathColumn>>
+    };
+    let cable_path = use_memo(cable_path.clone(), |p| (**p).clone());
+    let (entries, _) = use_table_data(MemoizedTableModel::new(cable_path));
+
     Ok(html! {
         <Form>
             <FormGroup label="Name">
@@ -133,6 +217,14 @@ fn CableForm(props: &EditCableProperties) -> HtmlResult {
                 <TextInput
                     value={(*fiber_count).clone()}
                     onchange={on_fiber_count_change}
+                />
+            </FormGroup>
+            <FormGroup label="Kabelweg">
+                <Table<CablePathColumn, UseTableData<CablePathColumn, MemoizedTableModel<DuctPathEntry>>>
+                    mode={TableMode::Compact}
+                    grid={TableGridMode::Medium}
+                    header={table_header}
+                    {entries}
                 />
             </FormGroup>
             <FormGroup>
