@@ -59,7 +59,6 @@ fn CablesTable() -> HtmlResult {
         Ok(data) => (data.clone().into_vec(), None),
         Err(e) => (vec![], Some(IntoPropValue::<Html>::into_prop_value(e))),
     };
-    info!("Error: {error:?}");
 
     if let Some(sort) = &*sort_state {
         cables.sort_by(|a, b| {

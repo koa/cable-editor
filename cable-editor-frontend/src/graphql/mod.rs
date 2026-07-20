@@ -1,5 +1,7 @@
 use crate::error::FrontendError;
-use cynic::{GraphQlResponse, QueryBuilder, QueryFragment, QueryVariables, http::ReqwestExt};
+use cynic::{
+    GraphQlResponse, MutationBuilder, QueryBuilder, QueryFragment, QueryVariables, http::ReqwestExt,
+};
 use lazy_static::lazy_static;
 use reqwest::header::{AUTHORIZATION, HeaderMap};
 use serde::Serialize;
@@ -50,6 +52,37 @@ where
         + serde::de::DeserializeOwned
         + 'static,
     Q::SchemaType: cynic::schema::QueryRoot,
+    V: QueryVariables + Serialize,
+{
+    let mut headers = HeaderMap::new();
+    if let Some(OAuth2Context::Authenticated(Authentication { access_token, .. })) =
+        credentials.as_ref()
+    {
+        headers.insert(AUTHORIZATION, format!("Bearer {access_token}").parse()?);
+    }
+    let client = reqwest::Client::builder()
+        .default_headers(headers)
+        .build()
+        .map_err(FrontendError::ErrorQueryingAuthenticatedConnect)?;
+
+    let response = client
+        .post(GRAPHQL_URL.as_str())
+        .run_graphql(Q::build(request))
+        .await
+        .map_err(FrontendError::ErrorQueryingAuthenticatedTransfer)?;
+    Ok(response)
+}
+
+pub async fn mutate<Q, V>(
+    request: V,
+    credentials: Option<&OAuth2Context>,
+) -> Result<GraphQlResponse<Q>, FrontendError>
+where
+    Q: QueryFragment<VariablesFields = V::Fields>
+        + MutationBuilder<V>
+        + serde::de::DeserializeOwned
+        + 'static,
+    Q::SchemaType: cynic::schema::MutationRoot,
     V: QueryVariables + Serialize,
 {
     let mut headers = HeaderMap::new();
