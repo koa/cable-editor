@@ -21,7 +21,6 @@ use diesel::{
     sql_types::Nullable,
 };
 use diesel_async::RunQueryDsl;
-use log::info;
 use postgis_diesel::{
     sql_types::Geometry,
     types::{GeometryContainer, Point},

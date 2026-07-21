@@ -1,18 +1,19 @@
-use crate::graphql::authenticated::cable_details::{CableDuct, CableSegmentEndSchacht};
 use crate::{
     error::FrontendError,
-    graphql::authenticated::cable_details::{CableDetails, UpdateCableStructure},
+    graphql::authenticated::cable_details::{
+        CableDetails, CableDuct, CableSegmentEndSchacht, UpdateCableStructure,
+    },
 };
 use patternfly_yew::prelude::{
     Button, ButtonVariant, Cell, CellContext, Form, FormGroup, MemoizedTableModel, Spinner, Table,
-    TableColumn, TableEntryRenderer, TableGridMode, TableHeader, TableHeaderSortBy, TableMode,
-    TextInput, UseTableData, use_table_data,
+    TableColumn, TableEntryRenderer, TableGridMode, TableHeader, TableMode, TextInput,
+    UseTableData, use_table_data,
 };
 use std::sync::Arc;
 use yew::{
     Callback, Html, HtmlResult, Properties, Suspense, function_component, html,
-    html::IntoPropValue, html_nested, platform::spawn_local, props, suspense::use_future_with,
-    use_memo, use_state,
+    html::IntoPropValue, html_nested, platform::spawn_local, suspense::use_future_with, use_memo,
+    use_state,
 };
 use yew_oauth2::hook::use_auth_state;
 
@@ -138,6 +139,49 @@ fn CableForm(props: &EditCableProperties) -> HtmlResult {
         })
     };
 
+    let has_changes = use_memo(
+        (
+            name.clone(),
+            bundle_count.clone(),
+            fiber_count.clone(),
+            original_data.clone(),
+        ),
+        |(name, bundle_count, fiber_count, original_data)| {
+            if let Some(original) = original_data.as_ref() {
+                let name_changed = **name != original.name;
+                let bundle_changed =
+                    bundle_count.parse::<i32>().ok() != Some(original.bundle_count);
+                let fiber_changed = fiber_count.parse::<i32>().ok() != Some(original.fiber_count);
+                name_changed || bundle_changed || fiber_changed
+            } else {
+                false
+            }
+        },
+    );
+
+    let name_changed = use_memo(
+        (name.clone(), original_data.clone()),
+        |(name, original_data)| original_data.as_ref().map_or(false, |o| **name != o.name),
+    );
+
+    let bundle_count_changed = use_memo(
+        (bundle_count.clone(), original_data.clone()),
+        |(bundle_count, original_data)| {
+            original_data
+                .as_ref()
+                .is_some_and(|o| bundle_count.parse::<i32>().ok() != Some(o.bundle_count))
+        },
+    );
+
+    let fiber_count_changed = use_memo(
+        (fiber_count.clone(), original_data.clone()),
+        |(fiber_count, original_data)| {
+            original_data
+                .as_ref()
+                .is_some_and(|o| fiber_count.parse::<i32>().ok() != Some(o.fiber_count))
+        },
+    );
+
     let on_save = {
         let name = name.clone();
         let bundle_count = bundle_count.clone();
@@ -205,18 +249,21 @@ fn CableForm(props: &EditCableProperties) -> HtmlResult {
                 <TextInput
                     value={(*name).clone()}
                     onchange={on_name_change}
+                    class={if *name_changed { "pf-m-warning" } else { "" }}
                 />
             </FormGroup>
             <FormGroup label="Anzahl der Bündel">
                 <TextInput
                     value={(*bundle_count).clone()}
                     onchange={on_bundle_count_change}
+                    class={if *bundle_count_changed { "pf-m-warning" } else { "" }}
                 />
             </FormGroup>
             <FormGroup label="Anzahl der Fasern">
                 <TextInput
                     value={(*fiber_count).clone()}
                     onchange={on_fiber_count_change}
+                    class={if *fiber_count_changed { "pf-m-warning" } else { "" }}
                 />
             </FormGroup>
             <FormGroup label="Kabelweg">
@@ -231,6 +278,7 @@ fn CableForm(props: &EditCableProperties) -> HtmlResult {
                 <Button variant={ButtonVariant::Primary}
                     label="Speichern"
                     onclick={on_save}
+                    disabled={!*has_changes}
                 />
             </FormGroup>
         </Form>

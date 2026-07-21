@@ -2,7 +2,6 @@ use crate::{
     graphql::authenticated::list_cables::{CableListEntry, fetch_cables_list},
     pages::router::{AppRoute, CableView},
 };
-use log::info;
 use patternfly_yew::prelude::{
     Cell, CellContext, MemoizedTableModel, Order, Spinner, Table, TableColumn, TableEntryRenderer,
     TableGridMode, TableHeader, TableHeaderSortBy, TableMode, UseTableData, use_table_data,
