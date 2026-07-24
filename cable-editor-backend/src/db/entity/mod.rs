@@ -1,5 +1,4 @@
 pub mod path;
-
 use crate::db::entity::path::{
     DirectedDuct, DuctAlignmentError, DuctDirection, UnalignedDuct, align_ducts,
 };
@@ -10,6 +9,7 @@ use crate::{
     graphql::{authenticated::get_connection, model},
 };
 use async_graphql::{Context, Object};
+use diesel::BoolExpressionMethods;
 use diesel::{
     AsChangeset, AsExpression, Associations, ExpressionMethods, FromSqlRow, HasQuery, Identifiable,
     Insertable, QueryDsl, deserialize,
@@ -100,7 +100,57 @@ impl Schacht {
         }
     }
     async fn position(&self) -> Option<model::Point> {
-        self.geom.map(|p| Point::into(p))
+        self.geom.map(Point::into)
+    }
+    async fn connecting_duct(
+        &self,
+        ctx: &Context<'_>,
+    ) -> async_graphql::Result<Vec<PotentialPathSegment>> {
+        let mut connection = get_connection(ctx).await?;
+
+        let ducts: Vec<Duct> = Duct::query()
+            .filter(
+                trasse::schacht_a
+                    .eq(self.id)
+                    .or(trasse::schacht_z.eq(self.id)),
+            )
+            .load(&mut connection)
+            .await?;
+
+        let mut results = Vec::new();
+        for duct in ducts {
+            let other_schacht_id = if duct.schacht_a == self.id {
+                duct.schacht_z
+            } else {
+                duct.schacht_a
+            };
+
+            let other_schacht = Schacht::query()
+                .filter(schacht::id.eq(other_schacht_id))
+                .get_result(&mut connection)
+                .await?;
+            results.push(PotentialPathSegment {
+                duct,
+                schacht: other_schacht,
+            });
+        }
+
+        Ok(results)
+    }
+}
+
+struct PotentialPathSegment {
+    duct: Duct,
+    schacht: Schacht,
+}
+
+#[Object]
+impl PotentialPathSegment {
+    async fn duct(&self) -> &Duct {
+        &self.duct
+    }
+    async fn schacht(&self) -> &Schacht {
+        &self.schacht
     }
 }
 
@@ -155,8 +205,8 @@ impl Cable {
             .inner_join(kabel_trasse::table)
             .filter(kabel_trasse::kabel.eq(self.id))
             .order(kabel_trasse::sequenz.asc())
-            .select(trasse::all_columns)
-            .load::<Duct>(&mut connection)
+            .select((trasse::all_columns, kabel_trasse::sequenz))
+            .load::<(Duct, i32)>(&mut connection)
             .await?;
 
         let segments = align_ducts(vec.into_iter())
@@ -171,13 +221,13 @@ impl Cable {
                 DuctAlignmentError::NoConnectionFoundOnPair { first, second } => {
                     async_graphql::Error::new(format!(
                         "Duct {} and {} are not connected",
-                        first.id, second.id
+                        first.0.id, second.0.id
                     ))
                 }
                 DuctAlignmentError::NoConnectionFoundForSchacht { last_schacht, duct } => {
                     async_graphql::Error::new(format!(
                         "Duct {} don't contain schacht {}",
-                        duct.id, last_schacht
+                        duct.0.id, last_schacht
                     ))
                 }
             })?;
@@ -205,16 +255,19 @@ impl CablePath {
     }
 }
 struct CablePathSegment {
-    segment: DirectedDuct<Duct, i32>,
+    segment: DirectedDuct<(Duct, i32), i32>,
     far_schacht: i32,
 }
 #[Object]
 impl CablePathSegment {
     async fn duct(&self) -> &Duct {
-        &self.segment.duct
+        &self.segment.duct.0
     }
     async fn far_schacht(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
         fetch_schacht(ctx, self.far_schacht).await
+    }
+    async fn sequence(&self) -> i32 {
+        self.segment.duct.1
     }
 }
 #[Object]
@@ -285,6 +338,15 @@ impl UnalignedDuct<i32> for Duct {
 
     fn schacht_z(&self) -> i32 {
         self.schacht_z
+    }
+}
+impl UnalignedDuct<i32> for (Duct, i32) {
+    fn schacht_a(&self) -> i32 {
+        self.0.schacht_a
+    }
+
+    fn schacht_z(&self) -> i32 {
+        self.0.schacht_z
     }
 }
 

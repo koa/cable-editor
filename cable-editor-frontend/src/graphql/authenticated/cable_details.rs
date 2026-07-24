@@ -1,7 +1,6 @@
 use crate::error::FrontendError;
 use crate::graphql::authenticated::schema;
 use crate::graphql::{mutate, query};
-use cynic::QueryFragment;
 use yew_oauth2::context::OAuth2Context;
 
 #[derive(cynic::QueryVariables)]
@@ -36,6 +35,12 @@ struct FetchCableDetailsQuery {
     #[arguments(cableId: $id)]
     pub cable: Option<CableDetails>,
 }
+#[derive(cynic::QueryFragment, Debug)]
+#[cynic(graphql_type = "Query", variables = "Variables")]
+struct FetchAvailableDuctFromSchacht {
+    #[arguments(schachtId: $id)]
+    pub schacht: Option<AvailableDuctsOnSchacht>,
+}
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
 #[cynic(graphql_type = "Duct")]
 pub struct CableDuct {
@@ -62,6 +67,19 @@ pub struct CableSegmentEndSchacht {
     pub id: i32,
     pub name: String,
 }
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
+#[cynic(graphql_type = "Schacht")]
+pub struct AvailableDuctsOnSchacht {
+    pub connecting_duct: Vec<PotentialDuct>,
+}
+
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
+#[cynic(graphql_type = "PotentialPathSegment")]
+pub struct PotentialDuct {
+    pub duct: CableDuct,
+    pub schacht: CableSegmentEndSchacht,
+}
+
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
 #[cynic(graphql_type = "Cable")]
 pub struct CableDetails {
@@ -105,6 +123,32 @@ impl CableDetails {
             Err(FrontendError::Graphql(errors))
         } else {
             Ok(response.data.and_then(|m| m.update_cable))
+        }
+    }
+}
+
+impl CablePath {
+    pub fn duct_sequence(&self) -> impl Iterator<Item = i32> {
+        self.segments.iter().map(|s| s.duct.id)
+    }
+}
+
+impl CableSegmentEndSchacht {
+    pub async fn fetch_connected_ducts(
+        &self,
+        credentials: Option<&OAuth2Context>,
+    ) -> Result<Vec<PotentialDuct>, FrontendError> {
+        let response =
+            query::<FetchAvailableDuctFromSchacht, _>(Variables { id: self.id }, credentials)
+                .await?;
+        if let Some(errors) = response.errors {
+            Err(FrontendError::Graphql(errors))
+        } else {
+            Ok(response
+                .data
+                .and_then(|l| l.schacht)
+                .map(|s| s.connecting_duct)
+                .unwrap_or_default())
         }
     }
 }

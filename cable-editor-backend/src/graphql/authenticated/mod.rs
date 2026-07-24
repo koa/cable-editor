@@ -78,6 +78,7 @@ impl Mutation {
         cable_id: i32,
         name: Option<String>,
         fibers: Option<UpdateCableStructure>,
+        path: Option<Vec<i32>>,
     ) -> async_graphql::Result<Option<Cable>> {
         let mut connection = get_connection(ctx).await?;
 
