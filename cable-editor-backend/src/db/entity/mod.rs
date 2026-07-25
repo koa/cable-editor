@@ -299,6 +299,12 @@ pub struct UpdateCableChangeset {
     pub faser_anz: Option<i32>,
 }
 
+impl UpdateCableChangeset {
+    pub fn any(&self) -> bool {
+        self.name.is_some() || self.buendel_anz.is_some() || self.faser_anz.is_some()
+    }
+}
+
 #[Object]
 impl Duct {
     async fn id(&self) -> i32 {

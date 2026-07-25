@@ -1,14 +1,16 @@
-use crate::db::entity::UpdateCableChangeset;
-use crate::db::schema::kabel;
 use crate::db::{
     DB,
-    entity::{Cable, Schacht, SchachtTyp},
-    schema::schacht::id,
+    entity::{Cable, Schacht, SchachtTyp, UpdateCableChangeset},
+    schema::{kabel, kabel_trasse, schacht::id},
 };
+use async_graphql::futures_util::StreamExt;
 use async_graphql::{Context, EmptySubscription, InputObject, Object, Schema};
-use diesel::{ExpressionMethods, HasQuery, OptionalExtension, QueryDsl, pg::Pg};
-use diesel_async::{AsyncConnectionCore, RunQueryDsl};
-use log::info;
+use diesel::{AsChangeset, ExpressionMethods, HasQuery, OptionalExtension, QueryDsl};
+use diesel_async::{
+    AsyncConnection, AsyncPgConnection, RunQueryDsl,
+    pooled_connection::deadpool::Object as DpObject,
+};
+use scoped_futures::ScopedFutureExt;
 
 pub type AuthenticatedGraphqlSchema = Schema<Query, Mutation, EmptySubscription>;
 
@@ -81,21 +83,60 @@ impl Mutation {
         path: Option<Vec<i32>>,
     ) -> async_graphql::Result<Option<Cable>> {
         let mut connection = get_connection(ctx).await?;
-
-        let mut changeset = UpdateCableChangeset {
-            name,
-            buendel_anz: None,
-            faser_anz: None,
+        let (buendel_anz, faser_anz) = if let Some(UpdateCableStructure {
+            bundle_count,
+            fiber_count,
+        }) = fibers
+        {
+            (Some(bundle_count as i32), Some(fiber_count as i32))
+        } else {
+            (None, None)
         };
-        if let Some(f) = fibers {
-            changeset.buendel_anz = Some(f.bundle_count as i32);
-            changeset.faser_anz = Some(f.fiber_count as i32);
-        }
-        let updated_db_cable = diesel::update(kabel::table.find(cable_id))
-            .set(&changeset)
-            .get_result::<Cable>(&mut connection)
-            .await
-            .optional()?;
+
+        let changeset = UpdateCableChangeset {
+            name,
+            buendel_anz,
+            faser_anz,
+        };
+
+        let connection = connection.as_mut();
+
+        let updated_db_cable = connection
+            .transaction(async move |conn| {
+                if let Some(ref path_ids) = path {
+                    diesel::delete(kabel_trasse::table.filter(kabel_trasse::kabel.eq(cable_id)))
+                        .execute(&mut *conn)
+                        .await?;
+
+                    for (sequenz, &trasse_id) in path_ids.iter().enumerate() {
+                        diesel::insert_into(kabel_trasse::table)
+                            .values((
+                                kabel_trasse::kabel.eq(cable_id),
+                                kabel_trasse::trasse.eq(trasse_id),
+                                kabel_trasse::sequenz.eq(sequenz as i32),
+                            ))
+                            .execute(&mut *conn)
+                            .await?;
+                    }
+                }
+
+                let updated = if changeset.any() {
+                    diesel::update(kabel::table.find(cable_id))
+                        .set(&changeset)
+                        .get_result::<Cable>(&mut *conn)
+                        .await
+                        .optional()?
+                } else {
+                    kabel::table
+                        .find(cable_id)
+                        .first::<Cable>(&mut *conn)
+                        .await
+                        .optional()?
+                };
+
+                Ok::<Option<Cable>, diesel::result::Error>(updated)
+            })
+            .await?;
 
         Ok(updated_db_cable)
     }
@@ -107,9 +148,7 @@ pub fn create_authenticated_schema() -> AuthenticatedGraphqlSchema {
 
 pub async fn get_connection(
     ctx: &Context<'_>,
-) -> async_graphql::Result<impl AsyncConnectionCore<Backend = Pg>> {
+) -> async_graphql::Result<DpObject<AsyncPgConnection>> {
     let db = ctx.data::<DB>()?;
-    info!("Database connection established: {:?}", db.status());
-
     Ok(db.get().await?)
 }
