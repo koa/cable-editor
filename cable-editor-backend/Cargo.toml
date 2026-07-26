@@ -18,4 +18,3 @@ diesel_migrations = "2.3"
 thiserror = "2.0"
 
 log = "0.4"
-scoped-futures = "0.1.4"

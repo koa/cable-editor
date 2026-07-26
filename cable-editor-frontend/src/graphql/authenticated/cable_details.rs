@@ -20,12 +20,13 @@ struct UpdateCableMutationVariables {
     cable_id: i32,
     name: Option<String>,
     fibers: Option<UpdateCableStructure>,
+    path: Option<Vec<i32>>,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
 #[cynic(graphql_type = "Mutation", variables = "UpdateCableMutationVariables")]
 struct UpdateCableMutation {
-    #[arguments(cableId: $cable_id, name: $name, fibers: $fibers)]
+    #[arguments(cableId: $cable_id, name: $name, fibers: $fibers, path: $path)]
     pub update_cable: Option<CableDetails>,
 }
 
@@ -109,12 +110,14 @@ impl CableDetails {
         cable_id: i32,
         name: Option<String>,
         fibers: Option<UpdateCableStructure>,
+        path: Option<Vec<i32>>,
     ) -> Result<Option<CableDetails>, FrontendError> {
         let response = mutate::<UpdateCableMutation, _>(
             UpdateCableMutationVariables {
                 cable_id,
                 name,
                 fibers,
+                path,
             },
             credentials,
         )

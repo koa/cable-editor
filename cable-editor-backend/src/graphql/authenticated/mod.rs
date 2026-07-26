@@ -3,14 +3,12 @@ use crate::db::{
     entity::{Cable, Schacht, SchachtTyp, UpdateCableChangeset},
     schema::{kabel, kabel_trasse, schacht::id},
 };
-use async_graphql::futures_util::StreamExt;
 use async_graphql::{Context, EmptySubscription, InputObject, Object, Schema};
-use diesel::{AsChangeset, ExpressionMethods, HasQuery, OptionalExtension, QueryDsl};
+use diesel::{ExpressionMethods, HasQuery, OptionalExtension, QueryDsl};
 use diesel_async::{
     AsyncConnection, AsyncPgConnection, RunQueryDsl,
     pooled_connection::deadpool::Object as DpObject,
 };
-use scoped_futures::ScopedFutureExt;
 
 pub type AuthenticatedGraphqlSchema = Schema<Query, Mutation, EmptySubscription>;
 
@@ -99,13 +97,11 @@ impl Mutation {
             faser_anz,
         };
 
-        let connection = connection.as_mut();
-
         let updated_db_cable = connection
             .transaction(async move |conn| {
                 if let Some(ref path_ids) = path {
                     diesel::delete(kabel_trasse::table.filter(kabel_trasse::kabel.eq(cable_id)))
-                        .execute(&mut *conn)
+                        .execute(conn)
                         .await?;
 
                     for (sequenz, &trasse_id) in path_ids.iter().enumerate() {
@@ -115,7 +111,7 @@ impl Mutation {
                                 kabel_trasse::trasse.eq(trasse_id),
                                 kabel_trasse::sequenz.eq(sequenz as i32),
                             ))
-                            .execute(&mut *conn)
+                            .execute(conn)
                             .await?;
                     }
                 }
@@ -123,13 +119,13 @@ impl Mutation {
                 let updated = if changeset.any() {
                     diesel::update(kabel::table.find(cable_id))
                         .set(&changeset)
-                        .get_result::<Cable>(&mut *conn)
+                        .get_result::<Cable>(conn)
                         .await
                         .optional()?
                 } else {
                     kabel::table
                         .find(cable_id)
-                        .first::<Cable>(&mut *conn)
+                        .first::<Cable>(conn)
                         .await
                         .optional()?
                 };

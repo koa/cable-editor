@@ -8,16 +8,16 @@ use crate::{
 };
 use log::{error, info};
 use patternfly_yew::prelude::{
-    Backdrop, Backdropper, Bullseye, Button, ButtonVariant, Cell, CellContext, ExpansionState,
-    Form, FormGroup, Icon, InputState, MemoizedTableModel, Modal, ModalVariant, SimpleList,
-    SimpleListItem, Spinner, Table, TableColumn, TableEntryRenderer, TableGridMode, TableHeader,
-    TableMode, TextInput, Toolbar, ToolbarContent, ToolbarItem,
+    Alert, AlertType, Backdrop, Backdropper, Bullseye, Button, ButtonVariant, Cell, CellContext,
+    ExpansionState, Form, FormGroup, Icon, InputState, LabelIcon, MemoizedTableModel, Modal,
+    ModalVariant, Panel, PanelVariant, SimpleList, SimpleListItem, Spinner, Table, TableColumn,
+    TableEntryRenderer, TableGridMode, TableHeader, TableMode, TextInput, Toolbar, ToolbarContent,
+    ToolbarItem,
 };
 use std::{cell::RefCell, collections::HashMap, mem, rc::Rc};
 use yew::{
-    Callback, Component, Context, Html, HtmlResult, Properties, Suspense, classes,
-    function_component, html, html::IntoPropValue, html::Scope, html_nested, platform::spawn_local,
-    suspense::use_future_with, use_memo, use_state,
+    Callback, Component, Context, Html, Properties, function_component, html, html::IntoPropValue,
+    html::Scope, html_nested, platform::spawn_local,
 };
 use yew_oauth2::prelude::OAuth2Context;
 
@@ -264,8 +264,9 @@ impl Component for EditCable {
                     let cable_name = self.cable_name.clone();
                     let bundle_count = self.bundle_count.clone();
                     let string = self.fiber_count.clone();
+                    let path = self.path.clone();
                     let cable_details = data.clone();
-                    update_cable(scope, cable_name, bundle_count, string, cable_details);
+                    update_cable(scope, cable_name, bundle_count, string, path, cable_details);
                 }
                 true
             }
@@ -372,9 +373,16 @@ impl Component for EditCable {
                     let onchange = ctx.link().callback(Msg::SetFiberCount);
                     let state = match value.parse::<i32>() {
                         Ok(count) if count == data.fiber_count => InputState::Default,
-                        Ok(_) => {
-                            has_changes = true;
-                            InputState::Success
+                        Ok(count) => {
+                            if count == data.fiber_count {
+                                InputState::Default
+                            } else if count > 24 {
+                                has_error = true;
+                                InputState::Error
+                            } else {
+                                has_changes = true;
+                                InputState::Success
+                            }
                         }
                         Err(_) => {
                             has_error = true;
@@ -384,7 +392,7 @@ impl Component for EditCable {
                     html! {<TextInput {value} {onchange} {state}/>}
                 };
 
-                has_changes |= data
+                let path_changed = data
                     .path
                     .as_ref()
                     .map(|p| p.duct_sequence().collect::<Vec<_>>())
@@ -392,6 +400,7 @@ impl Component for EditCable {
                         .path
                         .as_ref()
                         .map(|p| p.duct_sequence().collect::<Vec<_>>());
+                has_changes |= path_changed;
 
                 let scope = ctx.link().clone();
 
@@ -503,18 +512,22 @@ impl Component for EditCable {
                                 <TableColumn<CablePathColumn> index={CablePathColumn::Actions} />
                             </TableHeader<CablePathColumn>>
                         };
-
+                        let label_icon= if path_changed {
+                            LabelIcon::Children(Icon::CheckCircle.as_html())
+                        }else{
+                            LabelIcon::None
+                        };
                         html!{
-                        <FormGroup label="Kabelweg">
-                            <Table<CablePathColumn, ListModel<CablePathColumn, MemoizedTableModel<DuctPathEntry>>>
-                                mode={TableMode::Compact}
-                                grid={TableGridMode::Medium}
-                                header={table_header}
-                                {entries}
-                            />
-                        </FormGroup>
-
-                    }
+                            <FormGroup label="Kabelweg" {label_icon}>
+                                <Table<CablePathColumn, ListModel<CablePathColumn, MemoizedTableModel<DuctPathEntry>>>
+                                    class="pf-m-warning"
+                                    mode={TableMode::Compact}
+                                    grid={TableGridMode::Medium}
+                                    header={table_header}
+                                    {entries}
+                                />
+                            </FormGroup>
+                        }
                 });
 
                 html! {
@@ -550,6 +563,7 @@ fn update_cable(
     cable_name: String,
     bundle_count: String,
     fiber_count: String,
+    path: Option<CablePath>,
     current_details: CableDetails,
 ) {
     let credentials = scope
@@ -576,6 +590,16 @@ fn update_cable(
             })
         }
     });
+    let target_path = path.map(|p| p.duct_sequence().collect::<Vec<_>>());
+    let current_path = current_details
+        .path
+        .as_ref()
+        .map(|p| p.duct_sequence().collect::<Vec<_>>());
+    let path_update = if (current_path != target_path) {
+        Some(target_path.unwrap_or_default())
+    } else {
+        None
+    };
     spawn_local(async move {
         scope.send_message(
             match CableDetails::update_cable(
@@ -583,6 +607,7 @@ fn update_cable(
                 current_details.id,
                 update_cable,
                 update_structure,
+                path_update,
             )
             .await
             {
