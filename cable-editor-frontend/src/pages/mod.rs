@@ -1,4 +1,5 @@
 pub mod cable;
+pub mod duct;
 mod list_of_cables;
 pub mod map;
 pub mod router;

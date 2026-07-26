@@ -1,10 +1,11 @@
+use crate::db::entity::Duct;
 use crate::db::{
     DB,
     entity::{Cable, Schacht, SchachtTyp, UpdateCableChangeset},
     schema::{kabel, kabel_trasse, schacht::id},
 };
 use async_graphql::{Context, EmptySubscription, InputObject, Object, Schema};
-use diesel::{ExpressionMethods, HasQuery, OptionalExtension, QueryDsl};
+use diesel::{BoolExpressionMethods, ExpressionMethods, HasQuery, OptionalExtension, QueryDsl};
 use diesel_async::{
     AsyncConnection, AsyncPgConnection, RunQueryDsl,
     pooled_connection::deadpool::Object as DpObject,
@@ -46,8 +47,7 @@ impl Query {
     async fn list_cable(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Cable>> {
         let mut connection = get_connection(ctx).await?;
         let query = Cable::query();
-        let list = query.load(&mut connection).await?;
-        Ok(list)
+        Ok(query.load(&mut connection).await?)
     }
     async fn cable(
         &self,
@@ -61,6 +61,11 @@ impl Query {
             .await
             .optional()?)
     }
+    async fn list_duct(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Duct>> {
+        let mut connection = get_connection(ctx).await?;
+        let query = Duct::query();
+        Ok(query.load(&mut connection).await?)
+    }
 }
 pub struct Mutation;
 
@@ -72,6 +77,17 @@ struct UpdateCableStructure {
 
 #[Object]
 impl Mutation {
+    async fn create_cable(&self, ctx: &Context<'_>, name: String) -> async_graphql::Result<Cable> {
+        let mut connection = get_connection(ctx).await?;
+        Ok(diesel::insert_into(kabel::table)
+            .values((
+                kabel::name.eq(name),
+                kabel::buendel_anz.eq(1),
+                kabel::faser_anz.eq(12),
+            ))
+            .get_result::<Cable>(&mut connection)
+            .await?)
+    }
     async fn update_cable(
         &self,
         ctx: &Context<'_>,

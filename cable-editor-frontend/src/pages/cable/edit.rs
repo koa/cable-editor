@@ -1,3 +1,6 @@
+use crate::graphql::authenticated::select_duct::DuctListEntry;
+use crate::pages::duct::select_duct::SelectDuct;
+use crate::pages::router::AppRoute;
 use crate::{
     components::table::ListModel,
     error::FrontendError,
@@ -10,15 +13,16 @@ use log::{error, info};
 use patternfly_yew::prelude::{
     Alert, AlertType, Backdrop, Backdropper, Bullseye, Button, ButtonVariant, Cell, CellContext,
     ExpansionState, Form, FormGroup, Icon, InputState, LabelIcon, MemoizedTableModel, Modal,
-    ModalVariant, Panel, PanelVariant, SimpleList, SimpleListItem, Spinner, Table, TableColumn,
-    TableEntryRenderer, TableGridMode, TableHeader, TableMode, TextInput, Toolbar, ToolbarContent,
-    ToolbarItem,
+    ModalVariant, Panel, PanelVariant, SimpleList, SimpleListItem, Spinner,  Table,
+    TableColumn, TableEntryRenderer, TableGridMode, TableHeader, TableMode, TextInput, Toolbar,
+    ToolbarContent, ToolbarItem,
 };
 use std::{cell::RefCell, collections::HashMap, mem, rc::Rc};
 use yew::{
     Callback, Component, Context, Html, Properties, function_component, html, html::IntoPropValue,
     html::Scope, html_nested, platform::spawn_local,
 };
+use yew_nested_router::prelude::{RouterContext, State};
 use yew_oauth2::prelude::OAuth2Context;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -138,7 +142,7 @@ fn DuctSelectionDialog(props: &DuctSelectionDialogProperties) -> Html {
     html! {
         <Bullseye>
             <Modal
-                title="Rohr auswählen"
+                title="Trasse auswählen"
                 variant={ModalVariant::Small}
                 {footer}
             >
@@ -212,6 +216,12 @@ pub enum Msg {
     RemoveSegment {
         end: PathEnd,
     },
+    InitFirstSegment {
+        schacht_a: CableSegmentEndSchacht,
+        duct: CableDuct,
+        schacht_z: CableSegmentEndSchacht,
+    },
+    RemoveEntry,
 }
 #[derive(Copy, Clone, Debug)]
 pub enum PathEnd {
@@ -290,23 +300,19 @@ impl Component for EditCable {
                         }
                     }
                 }
-                info!("Append segment: {end:?}");
                 true
             }
             Msg::RemoveSegment { end } => {
                 if let Some(mut path) = self.path.take() {
                     match end {
                         PathEnd::Front => {
-                            let mut segments = path.segments;
+                            let segments = &mut path.segments;
 
                             let segment_count = segments.len();
-                            if segment_count > 1 {
-                                let head = segments.remove(0);
-                                let tail = segments.split_off(1);
-                                path.segments = tail;
-                                path.near_schacht = head.far_schacht;
+                            if segment_count > 0 {
+                                path.near_schacht = segments.remove(0).far_schacht;
                             } else {
-                                path.segments = Vec::new();
+                                path.segments.clear();
                             }
                         }
                         PathEnd::Tail => {
@@ -322,6 +328,32 @@ impl Component for EditCable {
                     }
                 }
                 true
+            }
+            Msg::InitFirstSegment {
+                schacht_a,
+                duct,
+                schacht_z,
+            } => {
+                if self.path.is_none() {
+                    self.path = Some(CablePath {
+                        near_schacht: schacht_a,
+                        segments: vec![CablePathSegment {
+                            duct,
+                            far_schacht: schacht_z,
+                        }],
+                    });
+                }
+                true
+            }
+            Msg::RemoveEntry => {
+                info!("Lösche wirklich");
+                if let Some((rt, _)) = ctx
+                    .link()
+                    .context::<RouterContext<AppRoute>>(Callback::noop())
+                {
+                    rt.push(AppRoute::ListOfCables);
+                }
+                false
             }
         }
     }
@@ -409,12 +441,28 @@ impl Component for EditCable {
                     if self.saving {
                         html!(<Spinner/>)
                     } else {
+                        let scope = ctx.link().clone();
+                        let delete_button = scope.context::<Backdropper>(Callback::noop()).map(
+                            |(backdropper, _)| {
+                                let onclick = scope.callback(|_| Msg::RemoveEntry);
+                                html! {
+                                <Button variant={ButtonVariant::DangerSecondary}
+                                    label="Löschen"
+                                    {onclick}
+                                    disabled={has_changes}
+                                />
+                                }
+                            },
+                        );
                         html! {
+                            <>
                             <Button variant={ButtonVariant::Primary}
                                 label="Speichern"
                                 onclick={on_save}
                                 disabled={!has_changes || has_error}
                             />
+                            {delete_button}
+                            </>
                         }
                     }
                 };
@@ -448,32 +496,33 @@ impl Component for EditCable {
                             on_extend: None,
                         });
                     }
-                    let credentials = ctx.link().context::<OAuth2Context>(Callback::noop()).map(|(c,_)|c);
-                    if let Some((backdrop,_))= ctx.link().context::<Backdropper>(Callback::noop()){
-                        for (idx, end) in [(0,PathEnd::Front),(entries.len()-1,PathEnd::Tail)]{
-                            if let Some(first_schacht) = entries.get_mut(idx) && let DuctPathEntry::Schacht {  on_extend, schacht, .. }= first_schacht {
-                                let backdrop=backdrop.clone();
-                                let schacht=schacht.clone();
-                                let scope=scope.clone();
-                                let credentials=credentials.clone();
-                                *on_extend=Some(Callback::from(move |_| {
-                                    let backdrop=backdrop.clone();
-                                    let schacht=schacht.clone();
-                                    let scope=scope.clone();
-                                    let credentials=credentials.clone();
+                    let credentials = ctx.link().context::<OAuth2Context>(Callback::noop()).map(|(c, _)| c);
+                    if let Some((backdrop, _)) = ctx.link().context::<Backdropper>(Callback::noop()) {
+                        for (idx, end) in [(0, PathEnd::Front), (entries.len() - 1, PathEnd::Tail)] {
+                            if let Some(first_schacht) = entries.get_mut(idx) && let DuctPathEntry::Schacht { on_extend, schacht, .. } = first_schacht {
+                                let backdrop = backdrop.clone();
+                                let schacht = schacht.clone();
+                                let scope = scope.clone();
+                                let credentials = credentials.clone();
+                                *on_extend = Some(Callback::from(move |_| {
+                                    let backdrop = backdrop.clone();
+                                    let schacht = schacht.clone();
+                                    let scope = scope.clone();
+                                    let credentials = credentials.clone();
                                     spawn_local(async move {
                                         match schacht.fetch_connected_ducts(credentials.as_ref()).await {
                                             Ok(available_ducts) => {
                                                 let on_select = {
-                                                    let backdrop=backdrop.clone();
-                                                    scope.callback(move | PotentialDuct{ duct, schacht }|{
+                                                    let backdrop = backdrop.clone();
+                                                    scope.callback(move |PotentialDuct { duct, schacht }| {
                                                         backdrop.close();
-                                                    Msg::AppendSegment {
-                                                        end,
-                                                        duct,
-                                                        other_schacht: schacht,
-                                                    }
-                                                })};
+                                                        Msg::AppendSegment {
+                                                            end,
+                                                            duct,
+                                                            other_schacht: schacht,
+                                                        }
+                                                    })
+                                                };
 
                                                 backdrop.open(Backdrop::new(html! {
                                                     <DuctSelectionDialog
@@ -486,24 +535,21 @@ impl Component for EditCable {
                                                 info!("Error fetching connected ducts: {e:?}");
                                             }
                                         }
-
                                     });
                                 }));
-
                             }
                         }
                     }
-                    for (idx, end) in [(1,PathEnd::Front),(entries.len()-2,PathEnd::Tail)]{
-                        if let Some(duct)=entries.get_mut(idx) && let DuctPathEntry::Duct {on_remove, ..}= duct {
-                            *on_remove=Some(scope.callback(move |_| Msg::RemoveSegment { end }));
+                    for (idx, end) in [(1, PathEnd::Front), (entries.len() - 2, PathEnd::Tail)] {
+                        if let Some(duct) = entries.get_mut(idx) && let DuctPathEntry::Duct { on_remove, .. } = duct {
+                            *on_remove = Some(scope.callback(move |_| Msg::RemoveSegment { end }));
                         }
-
                     }
 
                     entries
-                }).map(|cable_path| MemoizedTableModel::new(Rc::new( cable_path)))
+                }).map(|cable_path| MemoizedTableModel::new(Rc::new(cable_path)))
                     .map(|d| ListModel::new(d, self.table_state.clone()))
-                    .map(|entries|{
+                    .map(|entries| {
                         let table_header = html_nested! {
                             <TableHeader<CablePathColumn>>
                                 <TableColumn<CablePathColumn> label="Name" index={CablePathColumn::Schacht} />
@@ -512,12 +558,12 @@ impl Component for EditCable {
                                 <TableColumn<CablePathColumn> index={CablePathColumn::Actions} />
                             </TableHeader<CablePathColumn>>
                         };
-                        let label_icon= if path_changed {
+                        let label_icon = if path_changed {
                             LabelIcon::Children(Icon::CheckCircle.as_html())
-                        }else{
+                        } else {
                             LabelIcon::None
                         };
-                        html!{
+                        html! {
                             <FormGroup label="Kabelweg" {label_icon}>
                                 <Table<CablePathColumn, ListModel<CablePathColumn, MemoizedTableModel<DuctPathEntry>>>
                                     class="pf-m-warning"
@@ -528,6 +574,54 @@ impl Component for EditCable {
                                 />
                             </FormGroup>
                         }
+                    }).unwrap_or_else(|| {
+                    if let Some((backdrop, _)) = ctx.link().context::<Backdropper>(Callback::noop()) {
+                        let scope=ctx.link().clone();
+                        let onclick = Callback::from(move |_| {
+                            let scope=scope.clone();
+                            let on_select={
+                                let backdrop=backdrop.clone();
+                                Callback::from(move |details: DuctListEntry|{
+                                    scope.send_message(Msg::InitFirstSegment{
+                                        schacht_a: details.schacht_a,
+                                        duct: CableDuct {
+                                            id: details.id,
+                                            description: details.description,
+                                            length: details.length,
+                                        },
+                                        schacht_z: details.schacht_z,
+                                    });
+                                    backdrop.close();
+                                })
+                            };
+                            let onclick={
+                                let backdrop=backdrop.clone();
+                                Callback::from(move |_|{
+                                    backdrop.close();
+                                })
+                            };
+
+                            let footer = html! {
+                                <Button
+                                    label="Abbrechen"
+                                    {onclick}
+                                    variant={ButtonVariant::Secondary}
+                                />};
+                            backdrop.open(Backdrop::new(html! {
+                                        <Bullseye>
+                                            <Modal
+                                                title="Trasse auswählen"
+                                                variant={ModalVariant::Small}
+                                                {footer}>
+                                                <SelectDuct {on_select}/>
+                                            </Modal>
+                                        </Bullseye>
+                            }));
+                        });
+                        html!(<Button {onclick} variant={ButtonVariant::Primary} label="Trasse auswählen"/>)
+                    } else {
+                        "Kein Backdrop".into()
+                    }
                 });
 
                 html! {

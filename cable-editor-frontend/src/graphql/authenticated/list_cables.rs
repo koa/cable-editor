@@ -1,3 +1,5 @@
+use crate::graphql::authenticated::cable_details::{CableDetails, UpdateCableStructure};
+use crate::graphql::mutate;
 use crate::{
     error::FrontendError,
     graphql::{authenticated::schema, query},
@@ -33,4 +35,31 @@ pub async fn fetch_cables_list(
             .unwrap_or_default()
             .into_boxed_slice())
     }
+}
+pub async fn create_cable(
+    credentials: Option<&OAuth2Context>,
+    name: String,
+) -> Result<CableListEntry, FrontendError> {
+    let response =
+        mutate::<AddCableMutation, _>(AddCableMutationVariables { name }, credentials).await?;
+    if let Some(errors) = response.errors {
+        Err(FrontendError::Graphql(errors))
+    } else {
+        Ok(response
+            .data
+            .map(|l| l.create_cable)
+            .expect("Invalid result"))
+    }
+}
+
+#[derive(cynic::QueryVariables)]
+struct AddCableMutationVariables {
+    name: String,
+}
+
+#[derive(cynic::QueryFragment, Debug)]
+#[cynic(graphql_type = "Mutation", variables = "AddCableMutationVariables")]
+struct AddCableMutation {
+    #[arguments( name: $name)]
+    pub create_cable: CableListEntry,
 }

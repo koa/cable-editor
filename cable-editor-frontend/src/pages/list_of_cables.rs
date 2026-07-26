@@ -1,18 +1,23 @@
 use crate::{
-    graphql::authenticated::list_cables::{CableListEntry, fetch_cables_list},
+    error::FrontendError,
+    graphql::authenticated::list_cables::{CableListEntry, create_cable, fetch_cables_list},
     pages::router::{AppRoute, CableView},
 };
 use patternfly_yew::prelude::{
-    Cell, CellContext, MemoizedTableModel, Order, Spinner, Table, TableColumn, TableEntryRenderer,
-    TableGridMode, TableHeader, TableHeaderSortBy, TableMode, UseTableData, use_table_data,
+    ActionGroup, Backdrop, Bullseye, Button, ButtonType, ButtonVariant, Cell, CellContext, Form,
+    FormGroup, MemoizedTableModel, Modal, ModalVariant, Order, Spinner, Table, TableColumn,
+    TableEntryRenderer, TableGridMode, TableHeader, TableHeaderSortBy, TableMode, TextInput,
+    UseTableData, use_backdrop, use_table_data,
 };
 use std::cmp::Ordering;
+use web_sys::SubmitEvent;
 use yew::{
-    Callback, Html, HtmlResult, Suspense, function_component, html, html::IntoPropValue,
-    html_nested, suspense::use_future_with, use_memo, use_state,
+    Callback, Component, Context, Html, HtmlResult, Properties, Suspense, function_component, html,
+    html::IntoPropValue, html_nested, platform::spawn_local, suspense::use_future_with, use_memo,
+    use_state,
 };
 use yew_nested_router::components::Link;
-use yew_oauth2::hook::use_auth_state;
+use yew_oauth2::{hook::use_auth_state, prelude::OAuth2Context};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 enum Columns {
@@ -98,15 +103,37 @@ fn CablesTable() -> HtmlResult {
             <TableColumn<Columns> label="Streckenlänge" index={Columns::Length} onsort={onsort.clone()} sortby={(*sort_state)}/>
         </TableHeader<Columns>>
     };
+    let backdrop = use_backdrop();
+    let add_cable = Callback::from(move |_| {
+        if let Some(backdrop) = backdrop.as_ref() {
+            let on_close = {
+                let backdrop = backdrop.clone();
+                Callback::from(move |_| backdrop.close())
+            };
+            backdrop.open(Backdrop::new(html! {
+                <Bullseye>
+                    <Modal
+                        title="Neues Kabel"
+                        variant={ModalVariant::Small}
+                    >
+                        <AddCable {on_close}/>
+                    </Modal>
+                </Bullseye>
+            }));
+        }
+    });
 
     Ok(html! {
-        <Table<Columns, UseTableData<Columns, MemoizedTableModel<CableListEntry>>>
-            mode={TableMode::Compact}
-            grid={TableGridMode::Medium}
-            caption="Kabel"
-            {header}
-            {entries}
-        />
+        <>
+            <Table<Columns, UseTableData<Columns, MemoizedTableModel<CableListEntry>>>
+                mode={TableMode::Compact}
+                grid={TableGridMode::Medium}
+                caption="Kabel"
+                {header}
+                {entries}
+            />
+            <Button variant={ButtonVariant::Primary} label="Neues Kabel" onclick={add_cable}/ >
+        </>
     })
 }
 #[function_component]
@@ -116,5 +143,84 @@ pub fn ListOfCables() -> Html {
         <Suspense {fallback}>
             <CablesTable />
         </Suspense>
+    }
+}
+struct AddCable {
+    cable_name: String,
+    error: Option<FrontendError>,
+}
+enum AddCableMsg {
+    Save,
+    Cancel,
+    UpdateText(String),
+    Error(FrontendError),
+}
+#[derive(Properties, PartialEq)]
+struct AddCableProps {
+    on_close: Callback<()>,
+}
+impl Component for AddCable {
+    type Message = AddCableMsg;
+    type Properties = AddCableProps;
+
+    fn create(ctx: &Context<Self>) -> Self {
+        Self {
+            cable_name: "".to_string(),
+            error: None,
+        }
+    }
+
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+        match msg {
+            AddCableMsg::Save => {
+                let name = self.cable_name.clone();
+                let scope = ctx.link().clone();
+                let on_close = ctx.props().on_close.clone();
+                if let Some((credentials, _)) = scope.context::<OAuth2Context>(Callback::noop()) {
+                    spawn_local(async move {
+                        match create_cable(Some(&credentials), name).await {
+                            Ok(_) => {
+                                on_close.emit(());
+                            }
+                            Err(error) => {
+                                scope.send_message(AddCableMsg::Error(error));
+                            }
+                        }
+                    });
+                }
+                false
+            }
+            AddCableMsg::Cancel => {
+                ctx.props().on_close.emit(());
+                true
+            }
+            AddCableMsg::UpdateText(text) => {
+                self.cable_name = text;
+                true
+            }
+            AddCableMsg::Error(error) => {
+                self.error = Some(error);
+                true
+            }
+        }
+    }
+
+    fn view(&self, ctx: &Context<Self>) -> Html {
+        let value = self.cable_name.clone();
+        let disabled = value.is_empty();
+        html! {
+            <Form onsubmit={ctx.link().callback(|event: SubmitEvent|{
+                event.prevent_default();
+                AddCableMsg::Save
+            })}>
+                <FormGroup label="name" required=true>
+                    <TextInput required=true {value} onchange={ctx.link().callback(|text|{AddCableMsg::UpdateText(text)})}/>
+                </FormGroup>
+                <ActionGroup>
+                    <Button variant={ButtonVariant::Primary} label="Speichern" onclick={ctx.link().callback(|_|{AddCableMsg::Save})} {disabled}/>
+                    <Button variant={ButtonVariant::Secondary} label="Abbrechen" onclick={ctx.link().callback(|_|{AddCableMsg::Cancel})}/>
+                </ActionGroup>
+            </Form>
+        }
     }
 }
