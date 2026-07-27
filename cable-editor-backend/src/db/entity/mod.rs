@@ -253,6 +253,14 @@ impl CablePath {
     async fn segments(&self) -> &[CablePathSegment] {
         self.segments.as_ref()
     }
+    async fn far_schacht(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
+        let schacht_id = self
+            .segments
+            .last()
+            .expect("Empty path is invalid")
+            .far_schacht;
+        fetch_schacht(ctx, schacht_id).await
+    }
 }
 struct CablePathSegment {
     segment: DirectedDuct<(Duct, i32), i32>,

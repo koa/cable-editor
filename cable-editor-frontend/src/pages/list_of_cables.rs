@@ -24,6 +24,8 @@ enum Columns {
     Name,
     Fibers,
     Length,
+    SchachtA,
+    SchachtZ,
 }
 impl TableEntryRenderer<Columns> for CableListEntry {
     fn render_cell(&self, context: CellContext<'_, Columns>) -> Cell {
@@ -47,6 +49,16 @@ impl TableEntryRenderer<Columns> for CableListEntry {
             Columns::Length => {
                 Cell::new(self.length.map(|l| format!("{l:.1} m")).into_prop_value())
             }
+            Columns::SchachtA => self
+                .path
+                .as_ref()
+                .map(|sch| Cell::new(sch.near_schacht.name.as_str().into()))
+                .unwrap_or_default(),
+            Columns::SchachtZ => self
+                .path
+                .as_ref()
+                .map(|sch| Cell::new(sch.far_schacht.name.as_str().into()))
+                .unwrap_or_default(),
         }
     }
 }
@@ -72,6 +84,16 @@ fn CablesTable() -> HtmlResult {
                     (a.fiber_count * a.bundle_count).cmp(&(b.fiber_count * b.bundle_count))
                 }
                 Columns::Length => a.length.partial_cmp(&b.length).unwrap_or(Ordering::Equal),
+                Columns::SchachtA => a
+                    .path
+                    .as_ref()
+                    .map(|sch| sch.near_schacht.id)
+                    .cmp(&b.path.as_ref().map(|sch| sch.near_schacht.id)),
+                Columns::SchachtZ => a
+                    .path
+                    .as_ref()
+                    .map(|sch| sch.far_schacht.id)
+                    .cmp(&b.path.as_ref().map(|sch| sch.far_schacht.id)),
             };
 
             if sort.order == Order::Descending {
@@ -101,6 +123,8 @@ fn CablesTable() -> HtmlResult {
             <TableColumn<Columns> label="Name" index={Columns::Name} onsort={onsort.clone()} sortby={(*sort_state)}/>
             <TableColumn<Columns> label="Fasern" index={Columns::Fibers} onsort={onsort.clone()} sortby={(*sort_state)}/>
             <TableColumn<Columns> label="Streckenlänge" index={Columns::Length} onsort={onsort.clone()} sortby={(*sort_state)}/>
+            <TableColumn<Columns> label="Von" index={Columns::SchachtA} onsort={onsort.clone()} sortby={(*sort_state)}/>
+            <TableColumn<Columns> label="Bis" index={Columns::SchachtZ} onsort={onsort.clone()} sortby={(*sort_state)}/>
         </TableHeader<Columns>>
     };
     let backdrop = use_backdrop();
@@ -112,10 +136,7 @@ fn CablesTable() -> HtmlResult {
             };
             backdrop.open(Backdrop::new(html! {
                 <Bullseye>
-                    <Modal
-                        title="Neues Kabel"
-                        variant={ModalVariant::Small}
-                    >
+                    <Modal title="Neues Kabel" variant={ModalVariant::Small}>
                         <AddCable {on_close}/>
                     </Modal>
                 </Bullseye>

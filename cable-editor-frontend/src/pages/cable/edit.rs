@@ -1,3 +1,4 @@
+use crate::graphql::authenticated::list_cables::delete_cable;
 use crate::graphql::authenticated::select_duct::DuctListEntry;
 use crate::pages::duct::select_duct::SelectDuct;
 use crate::pages::router::AppRoute;
@@ -13,9 +14,9 @@ use log::{error, info};
 use patternfly_yew::prelude::{
     Alert, AlertType, Backdrop, Backdropper, Bullseye, Button, ButtonVariant, Cell, CellContext,
     ExpansionState, Form, FormGroup, Icon, InputState, LabelIcon, MemoizedTableModel, Modal,
-    ModalVariant, Panel, PanelVariant, SimpleList, SimpleListItem, Spinner,  Table,
-    TableColumn, TableEntryRenderer, TableGridMode, TableHeader, TableMode, TextInput, Toolbar,
-    ToolbarContent, ToolbarItem,
+    ModalVariant, Panel, PanelVariant, SimpleList, SimpleListItem, Spinner, Table, TableColumn,
+    TableEntryRenderer, TableGridMode, TableHeader, TableMode, TextInput, Toolbar, ToolbarContent,
+    ToolbarItem,
 };
 use std::{cell::RefCell, collections::HashMap, mem, rc::Rc};
 use yew::{
@@ -129,6 +130,43 @@ struct DuctSelectionDialogProperties {
     pub on_select: Callback<PotentialDuct>,
     #[prop_or_default]
     pub on_cancel: Callback<()>,
+}
+
+#[derive(Debug, Clone, PartialEq, Properties)]
+struct DeleteConfirmationDialogProperties {
+    #[prop_or_default]
+    pub on_confirm: Callback<()>,
+    #[prop_or_default]
+    pub on_cancel: Callback<()>,
+}
+
+#[function_component]
+fn DeleteConfirmationDialog(props: &DeleteConfirmationDialogProperties) -> Html {
+    let footer = html! {
+        <>
+            <Button
+                label="Ja"
+                onclick={props.on_confirm.reform(|_| ())}
+                variant={ButtonVariant::Danger}
+            />
+            <Button
+                label="Nein"
+                onclick={props.on_cancel.reform(|_| ())}
+                variant={ButtonVariant::Secondary}
+            />
+        </>
+    };
+    html! {
+        <Bullseye>
+            <Modal
+                title="Bestätigung"
+                variant={ModalVariant::Small}
+                {footer}
+            >
+                <p>{"Wirklich löschen?"}</p>
+            </Modal>
+        </Bullseye>
+    }
 }
 
 #[function_component]
@@ -346,12 +384,21 @@ impl Component for EditCable {
                 true
             }
             Msg::RemoveEntry => {
-                info!("Lösche wirklich");
-                if let Some((rt, _)) = ctx
-                    .link()
-                    .context::<RouterContext<AppRoute>>(Callback::noop())
-                {
-                    rt.push(AppRoute::ListOfCables);
+                if let DataState::Data(data) = &self.state {
+                    let id = data.id;
+                    if let (Some((rt, _)), Some((credentials, _))) = (
+                        ctx.link()
+                            .context::<RouterContext<AppRoute>>(Callback::noop()),
+                        ctx.link().context::<OAuth2Context>(Callback::noop()),
+                    ) {
+                        spawn_local(async move {
+                            if let Err(err) = delete_cable(Some(&credentials), id).await {
+                                error!("Cannot delete cable: {err}")
+                            } else {
+                                rt.push(AppRoute::ListOfCables);
+                            }
+                        });
+                    }
                 }
                 false
             }
@@ -444,7 +491,31 @@ impl Component for EditCable {
                         let scope = ctx.link().clone();
                         let delete_button = scope.context::<Backdropper>(Callback::noop()).map(
                             |(backdropper, _)| {
-                                let onclick = scope.callback(|_| Msg::RemoveEntry);
+                                let onclick = {
+                                    let backdropper = backdropper.clone();
+                                    let scope = scope.clone();
+                                    Callback::from(move |_| {
+                                        let backdropper = backdropper.clone();
+                                        let scope = scope.clone();
+                                        let on_confirm = {
+                                            let backdropper = backdropper.clone();
+                                            let scope = scope.clone();
+                                            Callback::from(move |_| {
+                                                backdropper.close();
+                                                scope.send_message(Msg::RemoveEntry);
+                                            })
+                                        };
+                                        let on_cancel = {
+                                            let backdropper = backdropper.clone();
+                                            Callback::from(move |_| {
+                                                backdropper.close();
+                                            })
+                                        };
+                                        backdropper.open(Backdrop::new(html! {
+                                            <DeleteConfirmationDialog {on_confirm} {on_cancel} />
+                                        }));
+                                    })
+                                };
                                 html! {
                                 <Button variant={ButtonVariant::DangerSecondary}
                                     label="Löschen"

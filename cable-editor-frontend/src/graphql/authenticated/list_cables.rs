@@ -1,4 +1,6 @@
-use crate::graphql::authenticated::cable_details::{CableDetails, UpdateCableStructure};
+use crate::graphql::authenticated::cable_details::{
+    CableDetails, CableSegmentEndSchacht, UpdateCableStructure,
+};
 use crate::graphql::mutate;
 use crate::{
     error::FrontendError,
@@ -20,6 +22,13 @@ pub struct CableListEntry {
     pub bundle_count: i32,
     pub fiber_count: i32,
     pub length: Option<f64>,
+    pub path: Option<CablePathDescription>,
+}
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
+#[cynic(graphql_type = "CablePath")]
+pub struct CablePathDescription {
+    pub near_schacht: CableSegmentEndSchacht,
+    pub far_schacht: CableSegmentEndSchacht,
 }
 
 pub async fn fetch_cables_list(
@@ -51,6 +60,19 @@ pub async fn create_cable(
             .expect("Invalid result"))
     }
 }
+pub async fn delete_cable(
+    credentials: Option<&OAuth2Context>,
+    cable_id: i32,
+) -> Result<(), FrontendError> {
+    let response =
+        mutate::<DeleteCableMutation, _>(DeleteCableMutationVariables { cable_id }, credentials)
+            .await?;
+    if let Some(errors) = response.errors {
+        Err(FrontendError::Graphql(errors))
+    } else {
+        Ok(())
+    }
+}
 
 #[derive(cynic::QueryVariables)]
 struct AddCableMutationVariables {
@@ -62,4 +84,15 @@ struct AddCableMutationVariables {
 struct AddCableMutation {
     #[arguments( name: $name)]
     pub create_cable: CableListEntry,
+}
+
+#[derive(cynic::QueryVariables)]
+struct DeleteCableMutationVariables {
+    cable_id: i32,
+}
+#[derive(cynic::QueryFragment, Debug)]
+#[cynic(graphql_type = "Mutation", variables = "DeleteCableMutationVariables")]
+struct DeleteCableMutation {
+    #[arguments( cableId: $cable_id)]
+    delete_cable: bool,
 }

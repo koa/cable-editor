@@ -5,7 +5,7 @@ use crate::db::{
     schema::{kabel, kabel_trasse, schacht::id},
 };
 use async_graphql::{Context, EmptySubscription, InputObject, Object, Schema};
-use diesel::{BoolExpressionMethods, ExpressionMethods, HasQuery, OptionalExtension, QueryDsl};
+use diesel::{ExpressionMethods, HasQuery, OptionalExtension, QueryDsl};
 use diesel_async::{
     AsyncConnection, AsyncPgConnection, RunQueryDsl,
     pooled_connection::deadpool::Object as DpObject,
@@ -151,6 +151,20 @@ impl Mutation {
             .await?;
 
         Ok(updated_db_cable)
+    }
+    async fn delete_cable(&self, ctx: &Context<'_>, cable_id: i32) -> async_graphql::Result<bool> {
+        let mut connection = get_connection(ctx).await?;
+        connection
+            .transaction(async move |conn| {
+                diesel::delete(kabel_trasse::table.filter(kabel_trasse::kabel.eq(cable_id)))
+                    .execute(conn)
+                    .await?;
+                diesel::delete(kabel::table.filter(kabel::id.eq(cable_id)))
+                    .execute(conn)
+                    .await?;
+                Ok(true)
+            })
+            .await
     }
 }
 
