@@ -21,6 +21,34 @@ diesel::table! {
         sequenz -> Int4,
     }
 }
+diesel::table! {
+    panel (id) {
+        id -> Int4,
+        #[max_length = 20]
+        name -> Nullable<Varchar>,
+        schacht_id -> Int4,
+        parent_panel -> Nullable<Int4>,
+        parent_order -> Nullable<Int4>,
+    }
+}
+
+diesel::table! {
+    panel_port (id) {
+        id -> Int4,
+        panel_id -> Int4,
+        port_number -> Int4,
+        #[max_length = 20]
+        label -> Nullable<Varchar>,
+        #[max_length = 20]
+        port_type -> Varchar,
+        f1_kabel_id -> Nullable<Int4>,
+        f1_buendel -> Nullable<Int4>,
+        f1_faser -> Nullable<Int4>,
+        f2_kabel_id -> Nullable<Int4>,
+        f2_buendel -> Nullable<Int4>,
+        f2_faser -> Nullable<Int4>,
+    }
+}
 
 diesel::table! {
     use diesel::sql_types::*;
@@ -78,7 +106,6 @@ diesel::table! {
         sz_id -> Int4,
         #[max_length = 20]
         sz_name -> Nullable<Varchar>,
-
     }
 }
 
@@ -86,10 +113,14 @@ diesel::joinable!(kabel_trasse -> kabel (kabel));
 diesel::joinable!(kabel_trasse -> trasse (trasse));
 diesel::joinable!(kabel_trasse -> trassen_mit_endpunkten (trasse));
 diesel::joinable!(schacht -> schacht_typ (typ));
+diesel::joinable!(panel -> schacht (schacht_id));
+diesel::joinable!(panel_port -> panel (panel_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     kabel,
     kabel_trasse,
+    panel,
+    panel_port,
     schacht,
     schacht_typ,
     trasse,

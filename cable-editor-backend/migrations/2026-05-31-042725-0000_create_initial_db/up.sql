@@ -1,4 +1,3 @@
--- Your SQL goes here
 create table kabel
 (
     id          serial
