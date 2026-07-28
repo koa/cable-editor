@@ -1,11 +1,14 @@
-use crate::db::entity::Duct;
 use crate::db::{
     DB,
-    entity::{Cable, Schacht, SchachtTyp, UpdateCableChangeset},
-    schema::{kabel, kabel_trasse, schacht::id},
+    entity::{
+        Cable, Duct, InsertPanel, InsertPanelPort, PanelPortType, Schacht, SchachtTyp,
+        UpdateCableChangeset,
+    },
+    schema::{kabel, kabel_trasse, panel, panel_port, schacht::id},
 };
 use async_graphql::{Context, EmptySubscription, InputObject, Object, Schema};
-use diesel::{ExpressionMethods, HasQuery, OptionalExtension, QueryDsl};
+use async_recursion::async_recursion;
+use diesel::{ExpressionMethods, HasQuery, OptionalExtension, QueryDsl, QueryResult, dsl::max};
 use diesel_async::{
     AsyncConnection, AsyncPgConnection, RunQueryDsl,
     pooled_connection::deadpool::Object as DpObject,
@@ -67,6 +70,20 @@ impl Query {
         Ok(query.load(&mut connection).await?)
     }
 }
+
+#[derive(Debug, Clone, PartialEq, InputObject)]
+pub struct CreatePanel {
+    pub name: Option<String>,
+    pub schacht_id: i32,
+    pub children: Box<[CreatePanel]>,
+    pub ports: Box<[CreatePort]>,
+}
+#[derive(Debug, Clone, PartialEq, InputObject)]
+pub struct CreatePort {
+    pub label: Option<String>,
+    pub port_type: PanelPortType,
+}
+
 pub struct Mutation;
 
 #[derive(InputObject)]
@@ -153,8 +170,8 @@ impl Mutation {
         Ok(updated_db_cable)
     }
     async fn delete_cable(&self, ctx: &Context<'_>, cable_id: i32) -> async_graphql::Result<bool> {
-        let mut connection = get_connection(ctx).await?;
-        connection
+        get_connection(ctx)
+            .await?
             .transaction(async move |conn| {
                 diesel::delete(kabel_trasse::table.filter(kabel_trasse::kabel.eq(cable_id)))
                     .execute(conn)
@@ -166,6 +183,83 @@ impl Mutation {
             })
             .await
     }
+    async fn create_panel(
+        &self,
+        ctx: &Context<'_>,
+        panel: CreatePanel,
+        parent_panel: Option<i32>,
+    ) -> async_graphql::Result<bool> {
+        get_connection(ctx)
+            .await?
+            .transaction(async move |conn| {
+                let parent_order = if let Some(parent_id) = parent_panel {
+                    let max_order: Option<i32> = panel::table
+                        .filter(panel::parent_panel.eq(parent_id))
+                        .select(max(panel::parent_order))
+                        .first(conn)
+                        .await?;
+                    Some(max_order.unwrap_or(0) + 1)
+                } else {
+                    None
+                };
+                insert_panel_tree_recursive(conn, panel, parent_panel, parent_order).await?;
+                Ok(true)
+            })
+            .await
+    }
+}
+
+#[async_recursion]
+async fn insert_panel_tree_recursive(
+    conn: &mut AsyncPgConnection,
+    node: CreatePanel,
+    parent_id: Option<i32>,
+    parent_order_val: Option<i32>,
+) -> async_graphql::Result<()> {
+    // 1. Das aktuelle Panel speichern
+    let new_panel = InsertPanel {
+        name: node.name.clone(),
+        schacht_id: node.schacht_id,
+        parent_panel: parent_id,
+        parent_order: parent_order_val,
+    };
+
+    let inserted_panel_id: i32 = diesel::insert_into(panel::table)
+        .values(new_panel)
+        .returning(panel::id)
+        .get_result(conn)
+        .await?;
+
+    // 2. Die Ports für dieses Panel speichern (Batch-Insert)
+    if !node.ports.is_empty() {
+        let mut new_ports = Vec::with_capacity(node.ports.len());
+
+        for (index, port) in node.ports.into_iter().enumerate() {
+            new_ports.push(InsertPanelPort {
+                panel_id: inserted_panel_id,
+                port_number: (index + 1) as i32, // Port-Nummern starten bei 1
+                port_type: port.port_type,
+                label: port.label,
+            });
+        }
+
+        diesel::insert_into(panel_port::table)
+            .values(new_ports)
+            .execute(conn)
+            .await?;
+    }
+
+    // 3. Rekursiv alle Kinder dieses Panels speichern
+    for (index, child) in node.children.into_iter().enumerate() {
+        insert_panel_tree_recursive(
+            conn,
+            child,
+            Some(inserted_panel_id),
+            Some((index + 1) as i32), // parent_order startet bei 1
+        )
+        .await?;
+    }
+    Ok(())
 }
 
 pub fn create_authenticated_schema() -> AuthenticatedGraphqlSchema {
@@ -177,4 +271,67 @@ pub async fn get_connection(
 ) -> async_graphql::Result<DpObject<AsyncPgConnection>> {
     let db = ctx.data::<DB>()?;
     Ok(db.get().await?)
+}
+
+use crate::db::entity::FiberPathNode;
+use diesel::sql_query;
+use diesel::sql_types::Integer;
+
+pub async fn trace_fiber_path(
+    conn: &mut AsyncPgConnection,
+    start_panel_id: i32,
+    start_port_number: i32,
+) -> QueryResult<Vec<FiberPathNode>> {
+    let raw_sql = r#"
+    WITH RECURSIVE
+    -- 1. Diese CTE ist nur ein "Makro", sie lädt NICHT die ganze Tabelle
+    endpoints AS (
+        SELECT panel_id, port_number, f1_kabel_id AS k_id, f1_buendel AS b, f1_faser AS f
+        FROM panel_port WHERE f1_kabel_id IS NOT NULL
+        UNION ALL
+        SELECT panel_id, port_number, f2_kabel_id, f2_buendel, f2_faser
+        FROM panel_port WHERE f2_kabel_id IS NOT NULL
+    ),
+
+    signal_path AS (
+        -- 2. Basisfall: Wir filtern DIREKT HIER am Startpunkt ($1 und $2)
+        SELECT
+            1 AS step,
+            e1.panel_id AS from_panel, e1.port_number AS from_port,
+            e2.panel_id AS to_panel, e2.port_number AS to_port,
+            e1.k_id AS kabel, e1.b AS buendel, e1.f AS faser,
+            ARRAY[e1.panel_id::text || '-' || e1.port_number::text] AS visited
+        FROM endpoints e1
+        JOIN endpoints e2
+          ON e1.k_id = e2.k_id AND e1.b = e2.b AND e1.f = e2.f
+         AND (e1.panel_id != e2.panel_id OR e1.port_number != e2.port_number)
+        WHERE e1.panel_id = $1 AND e1.port_number = $2
+
+        UNION ALL
+
+        -- 3. Rekursion: Sucht nur iterativ die exakten Folge-Ports
+        SELECT
+            sp.step + 1,
+            e1.panel_id, e1.port_number,
+            e2.panel_id, e2.port_number,
+            e1.k_id, e1.b, e1.f,
+            sp.visited || (e1.panel_id::text || '-' || e1.port_number::text)
+        FROM signal_path sp
+        -- Vom Ziel des letzten Schritts...
+        JOIN endpoints e1 ON e1.panel_id = sp.to_panel AND e1.port_number = sp.to_port
+        -- ...auf das andere Ende der verbundenen Faser springen
+        JOIN endpoints e2 ON e1.k_id = e2.k_id AND e1.b = e2.b AND e1.f = e2.f
+         AND (e1.panel_id != e2.panel_id OR e1.port_number != e2.port_number)
+        WHERE NOT ((e2.panel_id::text || '-' || e2.port_number::text) = ANY(sp.visited))
+    )
+    SELECT step, from_panel, from_port, to_panel, to_port, kabel, buendel, faser
+    FROM signal_path
+    ORDER BY step;
+"#;
+
+    sql_query(raw_sql)
+        .bind::<Integer, _>(start_panel_id)
+        .bind::<Integer, _>(start_port_number)
+        .load::<FiberPathNode>(conn)
+        .await
 }

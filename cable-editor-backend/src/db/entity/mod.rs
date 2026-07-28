@@ -4,23 +4,28 @@ use crate::db::entity::path::{
 };
 use crate::{
     db::schema::{
-        kabel, kabel_trasse, schacht, schacht_typ, sql_types::Xml, trasse, trassen_mit_endpunkten,
+        kabel, kabel_trasse, panel, panel_port, schacht, schacht_typ,
+        sql_types::{PortTypeEnum, Xml},
+        trasse, trassen_mit_endpunkten,
     },
     graphql::{authenticated::get_connection, model},
 };
-use async_graphql::{Context, Object};
-use diesel::BoolExpressionMethods;
+use async_graphql::{Context, Enum, Object, SimpleObject};
 use diesel::{
-    AsChangeset, AsExpression, Associations, ExpressionMethods, FromSqlRow, HasQuery, Identifiable,
-    Insertable, QueryDsl, deserialize,
+    AsChangeset, AsExpression, Associations, BoolExpressionMethods, ExpressionMethods, FromSqlRow,
+    HasQuery, Identifiable, Insertable, QueryDsl, QueryableByName, deserialize,
     deserialize::FromSql,
+    dsl::not,
     dsl::sum,
     pg::{Pg, PgValue},
     serialize,
     serialize::{IsNull, Output, ToSql},
+    sql_query,
+    sql_types::Integer,
     sql_types::Nullable,
 };
-use diesel_async::RunQueryDsl;
+use diesel_async::{AsyncConnection, RunQueryDsl};
+use diesel_derive_enum::DbEnum;
 use postgis_diesel::{
     sql_types::Geometry,
     types::{GeometryContainer, Point},
@@ -75,6 +80,62 @@ pub struct CableDuct {
     pub kabel: i32,
     pub trasse: i32,
     pub sequenz: i32,
+}
+
+#[derive(QueryableByName, Identifiable, Insertable, HasQuery, Debug, Clone, PartialEq)]
+#[diesel(table_name = panel)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct Panel {
+    pub id: i32,
+    pub name: Option<String>,
+    pub schacht_id: i32,
+    pub parent_panel: Option<i32>,
+    pub parent_order: Option<i32>,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = panel)]
+pub struct InsertPanel {
+    pub name: Option<String>,
+    pub schacht_id: i32,
+    pub parent_panel: Option<i32>,
+    pub parent_order: Option<i32>,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = panel_port)]
+pub struct InsertPanelPort {
+    pub panel_id: i32,
+    pub port_number: i32,
+    pub port_type: PanelPortType,
+    pub label: Option<String>,
+}
+
+#[derive(
+    Identifiable, Insertable, HasQuery, Debug, Clone, PartialEq, Hash, PartialOrd, Ord, Eq,
+)]
+#[diesel(table_name = panel_port)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+#[diesel(primary_key(panel_id, port_number))]
+pub struct PanelPort {
+    pub panel_id: i32,
+    pub port_number: i32,
+    pub label: Option<String>,
+    pub port_type: PanelPortType,
+    pub f1_kabel_id: Option<i32>,
+    pub f1_buendel: Option<i32>,
+    pub f1_faser: Option<i32>,
+
+    pub f2_kabel_id: Option<i32>,
+    pub f2_buendel: Option<i32>,
+    pub f2_faser: Option<i32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Copy, Eq, DbEnum, Enum, Hash, PartialOrd, Ord)]
+#[ExistingTypePath = "PortTypeEnum"]
+pub enum PanelPortType {
+    Splice,
+    Connector,
 }
 
 #[Object]
@@ -136,6 +197,13 @@ impl Schacht {
         }
 
         Ok(results)
+    }
+    async fn root_panels(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Panel>> {
+        let mut connection = get_connection(ctx).await?;
+        Ok(Panel::query()
+            .filter(panel::schacht_id.eq(self.id).and(panel::parent_panel.eq(0)))
+            .load(&mut connection)
+            .await?)
     }
 }
 
@@ -240,6 +308,203 @@ impl Cable {
                 segments,
             }))
     }
+}
+
+#[Object]
+impl Panel {
+    async fn id(&self) -> i32 {
+        self.id
+    }
+    async fn name(&self) -> Option<&str> {
+        self.name.as_deref()
+    }
+    async fn schacht(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
+        let mut connection = get_connection(ctx).await?;
+        let schacht = Schacht::query()
+            .filter(schacht::id.eq(self.schacht_id))
+            .first(&mut connection)
+            .await?;
+        Ok(schacht)
+    }
+    async fn parent_id(&self) -> Option<i32> {
+        self.parent_panel
+    }
+    async fn parent_order(&self) -> Option<i32> {
+        self.parent_order
+    }
+    async fn ports(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<PanelPort>> {
+        let mut connection = get_connection(ctx).await?;
+        Ok(PanelPort::query()
+            .filter(panel_port::panel_id.eq(self.id))
+            .order(panel_port::port_number.asc())
+            .load(&mut connection)
+            .await?)
+    }
+    async fn parent(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<Panel>> {
+        if let Some(parent_panel_id) = self.parent_panel {
+            let mut connection = get_connection(ctx).await?;
+            Ok(Some(
+                Panel::query()
+                    .filter(panel::id.eq(parent_panel_id))
+                    .first(&mut connection)
+                    .await?,
+            ))
+        } else {
+            Ok(None)
+        }
+    }
+    async fn children(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Panel>> {
+        let mut connection = get_connection(ctx).await?;
+        Ok(Panel::query()
+            .filter(panel::parent_panel.eq(self.id))
+            .order(panel::parent_order.asc())
+            .load(&mut connection)
+            .await?)
+    }
+    async fn all_children_recursive(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Panel>> {
+        let mut connection = get_connection(ctx).await?;
+        let raw_sql = r#"
+        WITH RECURSIVE panel_tree AS (
+            SELECT
+                id, name, schacht_id, parent_panel, parent_order,
+                1 as level
+            FROM panel
+            WHERE parent_panel = $1
+
+            UNION ALL
+
+            SELECT
+                p.id, p.name, p.schacht_id, p.parent_panel, p.parent_order,
+                pt.level + 1 as level
+            FROM panel p
+            INNER JOIN panel_tree pt ON p.parent_panel = pt.id
+        )
+        SELECT
+            id, name, schacht_id, parent_panel, parent_order
+        FROM panel_tree
+        ORDER BY level, parent_order;
+    "#;
+
+        Ok(sql_query(raw_sql)
+            .bind::<Integer, _>(self.id)
+            .load::<Panel>(&mut connection)
+            .await?)
+    }
+}
+
+impl PanelPort {
+    fn fiber1(&self) -> Option<Fiber> {
+        if let (Some(cable), Some(bundle), Some(fiber)) =
+            (self.f1_faser, self.f1_buendel, self.f1_faser)
+        {
+            Some(Fiber {
+                cable,
+                bundle,
+                fiber,
+            })
+        } else {
+            None
+        }
+    }
+    fn fiber2(&self) -> Option<Fiber> {
+        if let (Some(cable), Some(bundle), Some(fiber)) =
+            (self.f2_faser, self.f2_buendel, self.f2_faser)
+        {
+            Some(Fiber {
+                cable,
+                bundle,
+                fiber,
+            })
+        } else {
+            None
+        }
+    }
+    fn fibers(&self) -> impl Iterator<Item = Fiber> {
+        self.fiber1().into_iter().chain(self.fiber2())
+    }
+}
+
+#[Object]
+impl PanelPort {
+    async fn order_number(&self) -> i32 {
+        self.port_number
+    }
+    async fn panel(&self, ctx: &Context<'_>) -> async_graphql::Result<Panel> {
+        let mut connection = get_connection(ctx).await?;
+        Ok(Panel::query()
+            .filter(panel::id.eq(self.panel_id))
+            .first(&mut connection)
+            .await?)
+    }
+    async fn label(&self) -> Option<&str> {
+        self.label.as_deref()
+    }
+    async fn connected_fibers(
+        &self,
+        ctx: &Context<'_>,
+    ) -> async_graphql::Result<Vec<FiberPathSegment>> {
+        let mut connection = get_connection(ctx).await?;
+        connection
+            .transaction(async move |conn| {
+                let mut path = Vec::with_capacity(2);
+                for fiber in self.fibers() {
+                    PanelPort::query()
+                        .filter(
+                            ((panel_port::f1_faser
+                                .eq(fiber.fiber)
+                                .and(panel_port::f1_buendel.eq(fiber.bundle))
+                                .and(panel_port::f1_kabel_id.eq(fiber.cable)))
+                            .or(panel_port::f2_faser
+                                .eq(fiber.fiber)
+                                .and(panel_port::f2_buendel.eq(fiber.bundle))
+                                .and(panel_port::f2_kabel_id.eq(fiber.cable))))
+                            .and(not(panel_port::panel_id
+                                .eq(self.panel_id)
+                                .and(panel_port::port_number.eq(self.port_number)))),
+                        )
+                        .load::<PanelPort>(conn)
+                        .await?
+                        .into_iter()
+                        .map(|next_port| FiberPathSegment { fiber, next_port })
+                        .for_each(|segment| path.push(segment));
+                }
+                Ok(path)
+            })
+            .await
+    }
+}
+#[derive(Clone, PartialEq, Hash, Ord, PartialOrd, Eq, Debug, SimpleObject)]
+struct FiberPathSegment {
+    pub fiber: Fiber,
+    pub next_port: PanelPort,
+}
+
+#[derive(Copy, Clone, PartialEq, Hash, Ord, PartialOrd, Eq, Debug)]
+pub struct Fiber {
+    pub cable: i32,
+    pub bundle: i32,
+    pub fiber: i32,
+}
+#[Object]
+impl Fiber {
+    async fn bundle(&self) -> i32 {
+        self.bundle
+    }
+    async fn fiber(&self) -> i32 {
+        self.fiber
+    }
+    async fn cable(&self, ctx: &Context<'_>) -> async_graphql::Result<Cable> {
+        let mut connection = get_connection(ctx).await?;
+        Ok(Cable::query()
+            .filter(kabel::id.eq(self.cable))
+            .first(&mut connection)
+            .await?)
+    }
+}
+#[derive(Copy, Clone, PartialEq, Hash, Ord, PartialOrd, Eq, Debug)]
+pub struct PortId {
+    pub panel_id: i32,
+    pub port_number: i32,
 }
 pub struct CablePath {
     near_schacht: i32,
@@ -362,6 +627,29 @@ impl UnalignedDuct<i32> for (Duct, i32) {
     fn schacht_z(&self) -> i32 {
         self.0.schacht_z
     }
+}
+
+#[derive(QueryableByName, Debug, Clone)]
+pub struct FiberPathNode {
+    #[diesel(sql_type = Integer)]
+    pub step: i32,
+
+    #[diesel(sql_type = Integer)]
+    pub from_panel: i32,
+    #[diesel(sql_type = Integer)]
+    pub from_port: i32,
+
+    #[diesel(sql_type = Integer)]
+    pub to_panel: i32,
+    #[diesel(sql_type = Integer)]
+    pub to_port: i32,
+
+    #[diesel(sql_type = Integer)]
+    pub kabel: i32,
+    #[diesel(sql_type = Integer)]
+    pub buendel: i32,
+    #[diesel(sql_type = Integer)]
+    pub faser: i32,
 }
 
 #[derive(Debug, Clone, FromSqlRow, AsExpression, PartialOrd, PartialEq, Hash)]

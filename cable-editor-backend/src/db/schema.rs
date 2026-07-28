@@ -2,6 +2,9 @@ pub mod sql_types {
     #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "xml", schema = "pg_catalog"))]
     pub struct Xml;
+    #[derive(diesel::sql_types::SqlType)]
+    #[diesel(postgres_type(name = "port_type_enum"))]
+    pub struct PortTypeEnum;
 }
 
 diesel::table! {
@@ -33,14 +36,15 @@ diesel::table! {
 }
 
 diesel::table! {
-    panel_port (id) {
-        id -> Int4,
+    use diesel::sql_types::*;
+    use super::sql_types::PortTypeEnum;
+
+    panel_port (panel_id, port_number) {
         panel_id -> Int4,
         port_number -> Int4,
         #[max_length = 20]
         label -> Nullable<Varchar>,
-        #[max_length = 20]
-        port_type -> Varchar,
+        port_type -> PortTypeEnum,
         f1_kabel_id -> Nullable<Int4>,
         f1_buendel -> Nullable<Int4>,
         f1_faser -> Nullable<Int4>,

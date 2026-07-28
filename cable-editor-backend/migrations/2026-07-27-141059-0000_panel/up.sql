@@ -14,17 +14,17 @@ create table panel
     CONSTRAINT check_parent_order_required CHECK (parent_panel IS NULL OR parent_order IS NOT NULL)
 );
 
+CREATE TYPE port_type_enum AS ENUM ('Splice', 'Connector');
+
 CREATE TABLE panel_port
 (
-    id          serial
-        constraint panel_port_pk primary key,
-
-    panel_id    integer     not null
+    panel_id    integer        not null
         constraint panel_port_panel_id_fk references panel,
 
-    port_number integer     not null,
+    port_number integer        not null,
+    PRIMARY KEY (panel_id, port_number),
     label       varchar(20),
-    port_type   varchar(20) not null,
+    port_type   port_type_enum not null,
 
     f1_kabel_id integer
         CONSTRAINT port_f1_kabel_fk REFERENCES kabel (id),
@@ -66,10 +66,20 @@ CREATE OR REPLACE FUNCTION check_faser_limits()
     RETURNS TRIGGER AS
 $$
 DECLARE
-    k_buendel_anz integer;
-    k_faser_anz   integer;
-    usage_count   integer;
+    k_buendel_anz       integer;
+    k_faser_anz         integer;
+    usage_count         integer;
+
+    -- Variablen zum Ausschließen der eigenen Zeile beim Update
+    exclude_panel_id    integer := -1;
+    exclude_port_number integer := -1;
 BEGIN
+    -- Wenn es ein UPDATE ist, merken wir uns den alten Primärschlüssel der Zeile
+    IF TG_OP = 'UPDATE' THEN
+        exclude_panel_id := OLD.panel_id;
+        exclude_port_number := OLD.port_number;
+    END IF;
+
     -- 1. Plausibilitätsprüfung: Faser 1 und Faser 2 am selben Port dürfen nicht identisch sein
     IF NEW.f1_kabel_id IS NOT NULL AND NEW.f2_kabel_id IS NOT NULL THEN
         IF NEW.f1_kabel_id = NEW.f2_kabel_id AND
@@ -81,7 +91,6 @@ BEGIN
 
     -- Prüfung für Faser 1 (falls vorhanden)
     IF NEW.f1_kabel_id IS NOT NULL THEN
-        -- a) Existieren Bündel/Faser auf dem Kabel?
         SELECT buendel_anz, faser_anz
         INTO k_buendel_anz, k_faser_anz
         FROM kabel
@@ -95,11 +104,10 @@ BEGIN
             RAISE EXCEPTION 'Faser 1: Faser % ist ungültig (Kabel erlaubt max. %)', NEW.f1_faser, k_faser_anz;
         END IF;
 
-        -- b) [NEU] Ist die Faser bereits 2x belegt?
         SELECT count(*)
         INTO usage_count
         FROM panel_port
-        WHERE id IS DISTINCT FROM NEW.id -- Wichtig für Updates, damit wir die eigene Zeile nicht mitzählen
+        WHERE NOT (panel_id = exclude_panel_id AND port_number = exclude_port_number) -- Ignoriert die eigene Zeile beim Update
           AND (
             (f1_kabel_id = NEW.f1_kabel_id AND f1_buendel = NEW.f1_buendel AND f1_faser = NEW.f1_faser)
                 OR (f2_kabel_id = NEW.f1_kabel_id AND f2_buendel = NEW.f1_buendel AND f2_faser = NEW.f1_faser)
@@ -112,7 +120,6 @@ BEGIN
 
     -- Prüfung für Faser 2 (falls vorhanden)
     IF NEW.f2_kabel_id IS NOT NULL THEN
-        -- a) Existieren Bündel/Faser auf dem Kabel?
         SELECT buendel_anz, faser_anz
         INTO k_buendel_anz, k_faser_anz
         FROM kabel
@@ -126,11 +133,10 @@ BEGIN
             RAISE EXCEPTION 'Faser 2: Faser % ist ungültig (Kabel erlaubt max. %)', NEW.f2_faser, k_faser_anz;
         END IF;
 
-        -- b) [NEU] Ist die Faser bereits 2x belegt?
         SELECT count(*)
         INTO usage_count
         FROM panel_port
-        WHERE id IS DISTINCT FROM NEW.id
+        WHERE NOT (panel_id = exclude_panel_id AND port_number = exclude_port_number) -- Ignoriert die eigene Zeile beim Update
           AND (
             (f1_kabel_id = NEW.f2_kabel_id AND f1_buendel = NEW.f2_buendel AND f1_faser = NEW.f2_faser)
                 OR (f2_kabel_id = NEW.f2_kabel_id AND f2_buendel = NEW.f2_buendel AND f2_faser = NEW.f2_faser)
@@ -143,7 +149,7 @@ BEGIN
 
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;;
 
 -- 2. Den Trigger an die Tabelle hängen
 CREATE TRIGGER trg_check_panel_port_fasern
@@ -189,3 +195,7 @@ CREATE TRIGGER trg_check_kabel_update
     ON kabel
     FOR EACH ROW
 EXECUTE FUNCTION check_kabel_update_limits();
+
+CREATE INDEX idx_panel_port_f1 ON panel_port (f1_kabel_id, f1_buendel, f1_faser);
+
+CREATE INDEX idx_panel_port_f2 ON panel_port (f2_kabel_id, f2_buendel, f2_faser);
