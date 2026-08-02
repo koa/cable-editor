@@ -18,6 +18,8 @@ pub enum FrontendError {
     InvalidHeader(#[from] InvalidHeaderValue),
     #[error("Errors from server: {0:?}")]
     Graphql(Vec<cynic::GraphQlError>),
+    #[error("Plan not found: {0}")]
+    PlanNotFound(i32),
 }
 
 impl IntoPropValue<Html> for &FrontendError {
@@ -61,6 +63,9 @@ impl IntoPropValue<Html> for &FrontendError {
                     html!(<Popover {target} {body}/>)
                 })
                 .collect(),
+            FrontendError::PlanNotFound(id) => {
+                format!("Plan {id} existiert nicht").into_prop_value()
+            }
         }
     }
 }

@@ -1,6 +1,8 @@
 use log::debug;
 use web_sys::{Element, window};
-use yew::{AppHandle, BaseComponent};
+use yew::html::Scope;
+use yew::{AppHandle, BaseComponent, Callback, Context};
+use yew_oauth2::context::OAuth2Context;
 
 #[derive(Debug)]
 pub struct GuardAppHandle<C: BaseComponent + 'static>(Option<AppHandle<C>>);
@@ -32,4 +34,10 @@ where
             .render()
             .into();
     (guard, div_container)
+}
+
+pub fn get_credentials(scope: &Scope<impl BaseComponent>) -> Option<OAuth2Context> {
+    scope
+        .context::<OAuth2Context>(Callback::noop())
+        .map(|(c, _)| c)
 }

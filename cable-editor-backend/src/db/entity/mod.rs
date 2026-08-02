@@ -1,13 +1,16 @@
 pub mod path;
-use crate::db::entity::path::{
-    DirectedDuct, DuctAlignmentError, DuctDirection, UnalignedDuct, align_ducts,
-};
 use crate::{
-    db::schema::{
-        kabel, kabel_trasse, panel, panel_port, schacht, schacht_typ,
-        sql_types::{PortTypeEnum, Xml},
-        trasse, trassen_mit_endpunkten,
+    db::{
+        entity::path::{
+            DirectedDuct, DuctAlignmentError, DuctDirection, UnalignedDuct, align_ducts,
+        },
+        schema::{
+            kabel, kabel_trasse, panel, panel_port, plan, schacht, schacht_typ,
+            sql_types::{PlanStatusEnum, PortTypeEnum, Xml},
+            trasse, trassen_mit_endpunkten,
+        },
     },
+    graphql::authenticated::planned::PlannedPanel,
     graphql::{authenticated::get_connection, model},
 };
 use async_graphql::{Context, Enum, Object, SimpleObject};
@@ -93,6 +96,28 @@ pub struct Panel {
     pub parent_order: Option<i32>,
 }
 
+#[derive(QueryableByName, Identifiable, Insertable, HasQuery, Debug, Clone, PartialEq)]
+#[diesel(table_name = plan)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct Plan {
+    pub id: i32,
+    pub name: String,
+    pub status: PlanStatusType,
+}
+
+#[derive(Debug, Clone, PartialEq, Copy, Eq, DbEnum, Enum, Hash, PartialOrd, Ord)]
+#[ExistingTypePath = "crate::db::schema::sql_types::PlanStatusEnum"]
+pub enum PlanStatusType {
+    #[db_rename = "Open"]
+    Open,
+
+    #[db_rename = "Implemented"]
+    Implemented,
+
+    #[db_rename = "Rejected"]
+    Rejected,
+}
+
 #[derive(Insertable)]
 #[diesel(table_name = panel)]
 pub struct InsertPanel {
@@ -136,6 +161,65 @@ pub struct PanelPort {
 pub enum PanelPortType {
     Splice,
     Connector,
+}
+
+#[Object]
+impl Plan {
+    async fn id(&self) -> i32 {
+        self.id
+    }
+    async fn name(&self) -> &str {
+        self.name.as_str()
+    }
+
+    async fn root_panels(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<PlannedPanel>> {
+        {
+            let mut connection = get_connection(ctx).await?;
+            let raw_sql = r#"
+WITH RECURSIVE affected_panels AS (
+    -- 1. Basisfall (Anchor):
+    -- Finde alle Panels, die direkt mindestens einen Port in dieser plan_id haben
+    SELECT p.id, p.parent_panel
+    FROM panel p
+    WHERE EXISTS (
+        SELECT 1
+        FROM panel_port pp
+        WHERE pp.panel_id = p.id AND pp.plan_id = $1 -- Hier die plan_id übergeben
+    )
+
+    UNION
+    -- Wichtig: UNION (ohne ALL) entfernt Duplikate, falls mehrere Kinder denselben Parent haben
+
+    -- 2. Rekursiver Schritt:
+    -- Klettere von den gefundenen Panels immer einen Parent nach oben
+    SELECT parent.id, parent.parent_panel
+    FROM panel parent
+    INNER JOIN affected_panels child ON child.parent_panel = parent.id
+)
+-- 3. Finale Ausgabe:
+-- Filtere aus allen berührten Panels nur jene heraus, die keinen Parent haben (Root)
+-- und lade deren komplette Daten.
+SELECT p.id, p.name, p.schacht_id, p.parent_panel, p.parent_order
+FROM affected_panels a
+    JOIN panel p ON a.id = p.id
+WHERE a.parent_panel IS NULL;
+    "#;
+
+            Ok(sql_query(raw_sql)
+                .bind::<Integer, _>(self.id)
+                .load::<Panel>(&mut connection)
+                .await
+                .map(|panels| {
+                    panels
+                        .into_iter()
+                        .map(|panel| PlannedPanel {
+                            panel,
+                            plan: self.clone(),
+                        })
+                        .collect()
+                })?)
+        }
+    }
 }
 
 #[Object]
@@ -331,14 +415,6 @@ impl Panel {
     }
     async fn parent_order(&self) -> Option<i32> {
         self.parent_order
-    }
-    async fn ports(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<PanelPort>> {
-        let mut connection = get_connection(ctx).await?;
-        Ok(PanelPort::query()
-            .filter(panel_port::panel_id.eq(self.id))
-            .order(panel_port::port_number.asc())
-            .load(&mut connection)
-            .await?)
     }
     async fn parent(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<Panel>> {
         if let Some(parent_panel_id) = self.parent_panel {

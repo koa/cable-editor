@@ -85,16 +85,14 @@ impl Component for SelectDuct {
             };
             let onrowclick = ctx.props().on_select.clone();
             html! {
-                <>
-                    <Table<Columns, ListModel<Columns, MemoizedTableModel<DuctListEntry>>>
-                        mode={TableMode::Compact}
-                        grid={TableGridMode::Medium}
-                        caption="Trassen"
-                        {onrowclick}
-                        {header}
-                        {entries}
-                    />
-                </>
+                <Table<Columns, ListModel<Columns, MemoizedTableModel<DuctListEntry>>>
+                    mode={TableMode::Compact}
+                    grid={TableGridMode::Medium}
+                    caption="Trassen"
+                    {onrowclick}
+                    {header}
+                    {entries}
+                />
             }
         } else {
             html!(<Spinner/>)

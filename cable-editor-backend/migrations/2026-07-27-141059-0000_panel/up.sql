@@ -36,7 +36,7 @@ CREATE TABLE panel_port
     f2_buendel  integer,
     f2_faser    integer,
 
-    CONSTRAINT panel_port_unique_number UNIQUE (panel_id, port_number),
+    CONSTRAINT panel_port_pkey UNIQUE (panel_id, port_number),
     CONSTRAINT check_valid_port_type CHECK (port_type IN ('Splice', 'Connector')),
     CONSTRAINT check_port_number_positive CHECK (port_number > 0),
     CONSTRAINT check_port_belegung CHECK (

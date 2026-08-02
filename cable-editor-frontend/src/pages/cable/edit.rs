@@ -1,7 +1,8 @@
 use crate::graphql::authenticated::list_cables::delete_cable;
 use crate::graphql::authenticated::select_duct::DuctListEntry;
 use crate::pages::duct::select_duct::SelectDuct;
-use crate::pages::router::AppRoute;
+use crate::pages::router::{AppRoute, PlanView};
+use crate::util::get_credentials;
 use crate::{
     components::table::ListModel,
     error::FrontendError,
@@ -9,6 +10,7 @@ use crate::{
         CableDetails, CableDuct, CablePath, CablePathSegment, CableSegmentEndSchacht,
         PotentialDuct, UpdateCableStructure,
     },
+    util,
 };
 use log::{error, info};
 use patternfly_yew::prelude::{
@@ -20,8 +22,8 @@ use patternfly_yew::prelude::{
 };
 use std::{cell::RefCell, collections::HashMap, mem, rc::Rc};
 use yew::{
-    Callback, Component, Context, Html, Properties, function_component, html, html::IntoPropValue,
-    html::Scope, html_nested, platform::spawn_local,
+    BaseComponent, Callback, Component, Context, Html, Properties, function_component, html,
+    html::IntoPropValue, html::Scope, html_nested, platform::spawn_local,
 };
 use yew_nested_router::prelude::{RouterContext, State};
 use yew_oauth2::prelude::OAuth2Context;
@@ -391,11 +393,15 @@ impl Component for EditCable {
                             .context::<RouterContext<AppRoute>>(Callback::noop()),
                         ctx.link().context::<OAuth2Context>(Callback::noop()),
                     ) {
+                        let plan_id = ctx.props().plan_id;
                         spawn_local(async move {
                             if let Err(err) = delete_cable(Some(&credentials), id).await {
                                 error!("Cannot delete cable: {err}")
                             } else {
-                                rt.push(AppRoute::ListOfCables);
+                                rt.push(AppRoute::Plan {
+                                    plan_id,
+                                    view: PlanView::ListOfCables,
+                                });
                             }
                         });
                     }
@@ -567,7 +573,7 @@ impl Component for EditCable {
                             on_extend: None,
                         });
                     }
-                    let credentials = ctx.link().context::<OAuth2Context>(Callback::noop()).map(|(c, _)| c);
+                    let credentials = get_credentials(ctx.link());
                     if let Some((backdrop, _)) = ctx.link().context::<Backdropper>(Callback::noop()) {
                         for (idx, end) in [(0, PathEnd::Front), (entries.len() - 1, PathEnd::Tail)] {
                             if let Some(first_schacht) = entries.get_mut(idx) && let DuctPathEntry::Schacht { on_extend, schacht, .. } = first_schacht {
@@ -806,5 +812,6 @@ impl EditCable {
 
 #[derive(Debug, Clone, PartialEq, Properties)]
 pub struct EditCableProperties {
+    pub plan_id: i32,
     pub cable_id: i32,
 }

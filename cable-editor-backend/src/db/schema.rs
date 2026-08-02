@@ -5,6 +5,9 @@ pub mod sql_types {
     #[derive(diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "port_type_enum"))]
     pub struct PortTypeEnum;
+    #[derive(diesel::sql_types::SqlType)]
+    #[diesel(postgres_type(name = "plan_status_enum"))]
+    pub struct PlanStatusEnum;
 }
 
 diesel::table! {
@@ -39,7 +42,7 @@ diesel::table! {
     use diesel::sql_types::*;
     use super::sql_types::PortTypeEnum;
 
-    panel_port (panel_id, port_number) {
+    panel_port (panel_id, port_number, plan_id) {
         panel_id -> Int4,
         port_number -> Int4,
         #[max_length = 20]
@@ -51,6 +54,19 @@ diesel::table! {
         f2_kabel_id -> Nullable<Int4>,
         f2_buendel -> Nullable<Int4>,
         f2_faser -> Nullable<Int4>,
+        plan_id -> Int4,
+    }
+}
+
+diesel::table! {
+    use diesel::sql_types::*;
+    use super::sql_types::PlanStatusEnum;
+
+    plan (id) {
+        id -> Int4,
+        #[max_length = 50]
+        name -> Varchar,
+        status -> PlanStatusEnum,
     }
 }
 
@@ -125,6 +141,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     kabel_trasse,
     panel,
     panel_port,
+    plan,
     schacht,
     schacht_typ,
     trasse,

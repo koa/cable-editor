@@ -1,3 +1,5 @@
+pub mod planned;
+
 use crate::db::{
     DB,
     entity::{
@@ -69,6 +71,19 @@ impl Query {
         let query = Duct::query();
         Ok(query.load(&mut connection).await?)
     }
+    async fn list_plan(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Plan>> {
+        let mut connection = get_connection(ctx).await?;
+        let query = Plan::query();
+        Ok(query.load(&mut connection).await?)
+    }
+    async fn plan(&self, ctx: &Context<'_>, plan_id: i32) -> async_graphql::Result<Option<Plan>> {
+        let mut connection = get_connection(ctx).await?;
+        Ok(plan::table
+            .find(plan_id)
+            .first::<Plan>(&mut connection)
+            .await
+            .optional()?)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, InputObject)]
@@ -76,7 +91,6 @@ pub struct CreatePanel {
     pub name: Option<String>,
     pub schacht_id: i32,
     pub children: Box<[CreatePanel]>,
-    pub ports: Box<[CreatePort]>,
 }
 #[derive(Debug, Clone, PartialEq, InputObject)]
 pub struct CreatePort {
@@ -230,26 +244,7 @@ async fn insert_panel_tree_recursive(
         .get_result(conn)
         .await?;
 
-    // 2. Die Ports für dieses Panel speichern (Batch-Insert)
-    if !node.ports.is_empty() {
-        let mut new_ports = Vec::with_capacity(node.ports.len());
-
-        for (index, port) in node.ports.into_iter().enumerate() {
-            new_ports.push(InsertPanelPort {
-                panel_id: inserted_panel_id,
-                port_number: (index + 1) as i32, // Port-Nummern starten bei 1
-                port_type: port.port_type,
-                label: port.label,
-            });
-        }
-
-        diesel::insert_into(panel_port::table)
-            .values(new_ports)
-            .execute(conn)
-            .await?;
-    }
-
-    // 3. Rekursiv alle Kinder dieses Panels speichern
+    // 2. Rekursiv alle Kinder dieses Panels speichern
     for (index, child) in node.children.into_iter().enumerate() {
         insert_panel_tree_recursive(
             conn,
@@ -273,7 +268,8 @@ pub async fn get_connection(
     Ok(db.get().await?)
 }
 
-use crate::db::entity::FiberPathNode;
+use crate::db::entity::{FiberPathNode, Plan};
+use crate::db::schema::plan;
 use diesel::sql_query;
 use diesel::sql_types::Integer;
 
@@ -284,13 +280,21 @@ pub async fn trace_fiber_path(
 ) -> QueryResult<Vec<FiberPathNode>> {
     let raw_sql = r#"
     WITH RECURSIVE
+    -- Das Overlay: Ist-Zustand (0) und EINE Planung ($3) mischen
+    overlay_ports AS (
+        SELECT DISTINCT ON (panel_id, port_number)
+            panel_id, port_number,
+            f1_kabel_id, f1_buendel, f1_faser,
+            f2_kabel_id, f2_buendel, f2_faser
+        FROM panel_port
+        WHERE plan_id IN (0, $3) -- 0 für Ist-Zustand, $3 für die gewählte Planung
+        -- plan_id DESC überschreibt den Ist-Zustand (0) mit der Planung (>0)
+        ORDER BY panel_id, port_number, plan_id DESC
+    ),
     -- 1. Diese CTE ist nur ein "Makro", sie lädt NICHT die ganze Tabelle
     endpoints AS (
         SELECT panel_id, port_number, f1_kabel_id AS k_id, f1_buendel AS b, f1_faser AS f
-        FROM panel_port WHERE f1_kabel_id IS NOT NULL
-        UNION ALL
-        SELECT panel_id, port_number, f2_kabel_id, f2_buendel, f2_faser
-        FROM panel_port WHERE f2_kabel_id IS NOT NULL
+        FROM overlay_ports WHERE f1_kabel_id IS NOT NULL
     ),
 
     signal_path AS (

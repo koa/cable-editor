@@ -1,3 +1,5 @@
+use crate::components::plan_link::PlanLink;
+use crate::pages::router::PlanView;
 use crate::{
     error::FrontendError,
     graphql::authenticated::list_cables::{CableListEntry, create_cable, fetch_cables_list},
@@ -31,11 +33,11 @@ impl TableEntryRenderer<Columns> for CableListEntry {
     fn render_cell(&self, context: CellContext<'_, Columns>) -> Cell {
         match &context.column {
             Columns::Name => {
-                let to = AppRoute::Cable {
+                let to = PlanView::Cable {
                     id: self.id,
                     view: CableView::Edit,
                 };
-                Cell::new(html! {<Link<AppRoute> {to}>{self.name.as_str()}</Link<AppRoute>>})
+                Cell::new(html! {<PlanLink {to}>{self.name.as_str()}</PlanLink>})
             }
             Columns::Fibers => Cell::new(
                 format!(
