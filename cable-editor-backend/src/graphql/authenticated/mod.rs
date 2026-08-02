@@ -98,6 +98,11 @@ pub struct CreatePort {
     pub port_type: PanelPortType,
 }
 
+#[derive(Debug, Clone, PartialEq, InputObject)]
+pub struct CreatePlan {
+    pub name: String,
+}
+
 pub struct Mutation;
 
 #[derive(InputObject)]
@@ -221,6 +226,19 @@ impl Mutation {
             })
             .await
     }
+    async fn create_plan(
+        &self,
+        ctx: &Context<'_>,
+        plan: CreatePlan,
+    ) -> async_graphql::Result<bool> {
+        let mut connection = get_connection(ctx).await?;
+        let new_plan = InsertPlan { name: plan.name };
+        diesel::insert_into(plan::table)
+            .values(new_plan)
+            .execute(&mut connection)
+            .await?;
+        Ok(true)
+    }
 }
 
 #[async_recursion]
@@ -268,7 +286,7 @@ pub async fn get_connection(
     Ok(db.get().await?)
 }
 
-use crate::db::entity::{FiberPathNode, Plan};
+use crate::db::entity::{FiberPathNode, InsertPlan, Plan};
 use crate::db::schema::plan;
 use diesel::sql_query;
 use diesel::sql_types::Integer;

@@ -35,12 +35,8 @@ impl Component for PlanLink {
             any: props.any,
             predicate: props.predicate.clone().map(|p| {
                 Callback::<AppRoute, bool>::from(move |view| {
-                    if let AppRoute::Plan {
-                        plan_id: pid,
-                        view,
-                    } = view
-                    {
-                        pid==plan_id && p.emit(view)
+                    if let AppRoute::Plan { plan_id: pid, view } = view {
+                        pid == plan_id && p.emit(view)
                     } else {
                         false
                     }

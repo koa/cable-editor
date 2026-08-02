@@ -1,12 +1,10 @@
 use crate::error::FrontendError;
 use crate::graphql::authenticated::plan_details::PlanDetails;
+use crate::pages::cabinet::list::ListOfCabinets;
 use crate::pages::cable::edit::EditCable;
-use crate::pages::list_of_cabinets::ListOfCabinets;
+use crate::pages::list_of_cables::ListOfCables;
+use crate::pages::planning::list::ListOfPlannings;
 use crate::util::get_credentials;
-use crate::{
-    components::map::{MapComponent, Point},
-    pages::{list_of_cables::ListOfCables, map::MapTestPage},
-};
 use patternfly_yew::prelude::{Nav, NavList, NavRouterItem, Spinner};
 use yew::html::IntoPropValue;
 use yew::platform::spawn_local;
@@ -98,7 +96,7 @@ impl Component for Sidebar {
                             <NavList>
                                 //<NavRouterItem<AppRoute> to={AppRoute::Map}>{"Karte"}</NavRouterItem<AppRoute>>
                                 //<NavRouterItem<AppRoute> to={AppRoute::MapTest}>{"Karte Editor Test"}</NavRouterItem<AppRoute>>
-                                <NavRouterItem<AppRoute> to={AppRoute::ListOfPlans}>{format!("Planung {id}")}</NavRouterItem<AppRoute>>
+                                <NavRouterItem<AppRoute> to={AppRoute::ListOfPlans}>{format!("Planung \"{id}\"")}</NavRouterItem<AppRoute>>
                                 <NavRouterItem<AppRoute> to={AppRoute::Plan {plan_id: plan.id,view: PlanView::ListOfCabinets}}>{"Schächte"}</NavRouterItem<AppRoute>>
                                 <NavRouterItem<AppRoute> to={AppRoute::Plan {plan_id: plan.id,view: PlanView::ListOfCables}}>{"Kabel"}</NavRouterItem<AppRoute>>
                             </NavList>
@@ -198,7 +196,7 @@ impl AppRoute {
             AppRoute::MapTest => {
                 html! {<MapTestPage/>}
             }*/
-            AppRoute::ListOfPlans => html! {"Planungen"},
+            AppRoute::ListOfPlans => html! {<ListOfPlannings/>},
             AppRoute::Plan { plan_id, view } => view.content(plan_id),
         }
     }
@@ -206,7 +204,7 @@ impl AppRoute {
 impl PlanView {
     fn content(self, plan_id: i32) -> Html {
         match self {
-            PlanView::Edit => format!("Edit Cabinet {plan_id}").into_prop_value(),
+            PlanView::Edit => format!("Edit Plan {plan_id}").into_prop_value(),
             PlanView::ListOfCabinets => html! {<ListOfCabinets {plan_id}/>},
             PlanView::Cabinet { id, view } => view.content(plan_id, id),
             PlanView::ListOfCables => html! {<ListOfCables/>},

@@ -3,11 +3,11 @@ use crate::pages::router::PlanView;
 use crate::{
     error::FrontendError,
     graphql::authenticated::list_cables::{CableListEntry, create_cable, fetch_cables_list},
-    pages::router::{AppRoute, CableView},
+    pages::router::CableView,
 };
 use patternfly_yew::prelude::{
-    ActionGroup, Backdrop, Bullseye, Button, ButtonType, ButtonVariant, Cell, CellContext, Form,
-    FormGroup, MemoizedTableModel, Modal, ModalVariant, Order, Spinner, Table, TableColumn,
+    ActionGroup, Backdrop, Bullseye, Button, ButtonVariant, Cell, CellContext, Form, FormGroup,
+    MemoizedTableModel, Modal, ModalVariant, Order, Spinner, Table, TableColumn,
     TableEntryRenderer, TableGridMode, TableHeader, TableHeaderSortBy, TableMode, TextInput,
     UseTableData, use_backdrop, use_table_data,
 };
@@ -18,7 +18,6 @@ use yew::{
     html::IntoPropValue, html_nested, platform::spawn_local, suspense::use_future_with, use_memo,
     use_state,
 };
-use yew_nested_router::components::Link;
 use yew_oauth2::{hook::use_auth_state, prelude::OAuth2Context};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]

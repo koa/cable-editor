@@ -136,6 +136,11 @@ pub struct InsertPanelPort {
     pub label: Option<String>,
 }
 
+#[derive(Insertable)]
+#[diesel(table_name = plan)]
+pub struct InsertPlan {
+    pub name: String,
+}
 #[derive(
     Identifiable, Insertable, HasQuery, Debug, Clone, PartialEq, Hash, PartialOrd, Ord, Eq,
 )]
@@ -170,6 +175,9 @@ impl Plan {
     }
     async fn name(&self) -> &str {
         self.name.as_str()
+    }
+    async fn status(&self) -> PlanStatusType {
+        self.status
     }
 
     async fn root_panels(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<PlannedPanel>> {

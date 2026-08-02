@@ -1,9 +1,7 @@
 use crate::components::table::ListModel;
 use crate::error::FrontendError;
-use crate::graphql::authenticated::list_cables::CableListEntry;
 use crate::graphql::authenticated::list_schacht::{SchachtListEntry, fetch_schacht_list};
 use crate::util::get_credentials;
-use log::info;
 use patternfly_yew::prelude::{
     Cell, CellContext, ExpansionState, MemoizedTableModel, Span, Spinner, Table, TableColumn,
     TableEntryRenderer, TableGridMode, TableHeader, TableHeaderSortBy, TableMode,
@@ -14,7 +12,7 @@ use std::collections::hash_map::Entry;
 use std::rc::Rc;
 use yew::html::{IntoPropValue, Scope};
 use yew::platform::spawn_local;
-use yew::{Callback, Component, Context, Html, Properties, html, html_nested};
+use yew::{Component, Context, Html, Properties, html, html_nested};
 
 pub struct ListOfCabinets {
     data: Option<Rc<Vec<SchachtListEntry>>>,
@@ -22,6 +20,7 @@ pub struct ListOfCabinets {
     sort: Option<TableHeaderSortBy<Columns>>,
     table_state: Rc<RefCell<HashMap<usize, ExpansionState<Columns>>>>,
 }
+
 pub enum Msg {
     Data(Box<[SchachtListEntry]>),
     Error(FrontendError),
@@ -141,6 +140,7 @@ enum Columns {
     Name,
     Cabinets,
 }
+
 impl TableEntryRenderer<Columns> for SchachtListEntry {
     fn render_cell(&self, context: CellContext<'_, Columns>) -> Cell {
         match context.column {
