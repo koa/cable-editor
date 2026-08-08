@@ -1,4 +1,5 @@
 use log::debug;
+use patternfly_yew::prelude::Backdropper;
 use web_sys::{Element, window};
 use yew::html::Scope;
 use yew::{AppHandle, BaseComponent, Callback, Context};
@@ -39,5 +40,10 @@ where
 pub fn get_credentials(scope: &Scope<impl BaseComponent>) -> Option<OAuth2Context> {
     scope
         .context::<OAuth2Context>(Callback::noop())
+        .map(|(c, _)| c)
+}
+pub fn get_backdrop(scope: &Scope<impl BaseComponent>) -> Option<Backdropper> {
+    scope
+        .context::<Backdropper>(Callback::noop())
         .map(|(c, _)| c)
 }

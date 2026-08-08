@@ -31,6 +31,7 @@ base64 = "0.22"
 
 futures = "0.3"
 ouroboros = "0.18"
+uuid = { version = "1.24.0", features = ["v4", "js"] }
 
 [build-dependencies]
 cable-editor-backend = { path = "../cable-editor-backend" }

@@ -29,6 +29,7 @@ use diesel::{
 };
 use diesel_async::{AsyncConnection, RunQueryDsl};
 use diesel_derive_enum::DbEnum;
+use log::info;
 use postgis_diesel::{
     sql_types::Geometry,
     types::{GeometryContainer, Point},
@@ -293,7 +294,11 @@ impl Schacht {
     async fn root_panels(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Panel>> {
         let mut connection = get_connection(ctx).await?;
         Ok(Panel::query()
-            .filter(panel::schacht_id.eq(self.id).and(panel::parent_panel.eq(0)))
+            .filter(
+                panel::schacht_id
+                    .eq(self.id)
+                    .and(panel::parent_panel.is_null()),
+            )
             .load(&mut connection)
             .await?)
     }

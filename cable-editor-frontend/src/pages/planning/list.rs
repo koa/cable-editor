@@ -2,7 +2,7 @@ use crate::components::table::ListModel;
 use crate::error::FrontendError;
 use crate::graphql::authenticated::list_plans::{PlanListEntry, PlanStatus};
 use crate::pages::router::{AppRoute, PlanView};
-use crate::util::get_credentials;
+use crate::util::{get_backdrop, get_credentials};
 use log::info;
 use patternfly_yew::prelude::{
     Action, ActionGroup, Backdrop, Backdropper, Bullseye, Button, ButtonVariant, Cell, CellContext,
@@ -94,9 +94,8 @@ impl Component for ListOfPlannings {
                 </TableHeader<Columns>>
             };
 
-            let create_button = ctx.link()
-                .context::<Backdropper>(Callback::noop())
-                .map(|(bd, _)| {
+            let create_button = get_backdrop(ctx.link())
+                .map(|(bd)| {
                     let scope=ctx.link().clone();
                     let onclick = Callback::from(move |_|{
                         let scope=scope.clone();
@@ -190,7 +189,10 @@ impl TableEntryRenderer<Columns> for PlanListEntry {
     fn actions(&self) -> Vec<MenuChildVariant> {
         match self.status {
             PlanStatus::IMPLEMENTED => vec![],
-            PlanStatus::OPEN => vec![html_nested!(<MenuAction>{"Akzeptieren"}</MenuAction>).into(),html_nested!(<MenuAction>{"Abbrechen"}</MenuAction>).into()],
+            PlanStatus::OPEN => vec![
+                html_nested!(<MenuAction>{"Akzeptieren"}</MenuAction>).into(),
+                html_nested!(<MenuAction>{"Abbrechen"}</MenuAction>).into(),
+            ],
             PlanStatus::REJECTED => vec![],
         }
     }

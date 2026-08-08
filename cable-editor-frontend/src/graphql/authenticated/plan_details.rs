@@ -1,5 +1,4 @@
 use crate::error::FrontendError;
-use crate::graphql::authenticated::cable_details::CableDetails;
 use crate::graphql::authenticated::schema;
 use crate::graphql::query;
 use yew_oauth2::context::OAuth2Context;

@@ -1,3 +1,4 @@
+pub mod cabinet_details;
 pub mod cable_details;
 pub mod list_cables;
 pub mod list_plans;

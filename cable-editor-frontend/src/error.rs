@@ -1,5 +1,5 @@
 use cynic::http::CynicReqwestError;
-use patternfly_yew::prelude::{Popover, PopoverBody};
+use patternfly_yew::prelude::{Alert, AlertType, Popover, PopoverBody};
 use reqwest::header::InvalidHeaderValue;
 use thiserror::Error;
 use yew::{Html, html, html::IntoPropValue, html_nested};
@@ -24,20 +24,23 @@ pub enum FrontendError {
 
 impl IntoPropValue<Html> for &FrontendError {
     fn into_prop_value(self) -> Html {
+        html!(<Alert inline=true title={""} r#type={AlertType::Danger} />);
         match self {
             FrontendError::ErrorQueryingAnonymousConnect(e) => {
-                format!("Fehler beim anyonymen Verbindungsaufbau: {e}").into_prop_value()
+                html!(<Alert inline=true title={format!("Fehler beim anyonymen Verbindungsaufbau: {e}")} r#type={AlertType::Danger} />)
             }
             FrontendError::ErrorQueryingAnonymousTransfer(e) => {
-                format!("Fehler bei einer anonymen Abfrage: {e}").into_prop_value()
+                html!(<Alert inline=true title={format!("Fehler bei einer anonymen Abfrage: {e}")} r#type={AlertType::Danger} />)
             }
             FrontendError::ErrorQueryingAuthenticatedConnect(e) => {
-                format!("Fehler beim authentisierten Verbindungsaufbau: {e}").into_prop_value()
+                html!(<Alert inline=true title={format!("Fehler beim authentisierten Verbindungsaufbau: {e}")} r#type={AlertType::Danger} />)
             }
             FrontendError::ErrorQueryingAuthenticatedTransfer(e) => {
-                format!("Fehler bei einer authentisierten Abfrage: {e}").into_prop_value()
+                html!(<Alert inline=true title={format!("Fehler bei einer authentisierten Abfrage: {e}")} r#type={AlertType::Danger} />)
             }
-            FrontendError::InvalidHeader(e) => format!("Ungültiger Heder: {e}").into_prop_value(),
+            FrontendError::InvalidHeader(e) => {
+                html!(<Alert inline=true title={format!("Ungültiger Header: {e}")} r#type={AlertType::Danger} />)
+            }
             FrontendError::Graphql(e) => e
                 .iter()
                 .map(|e| {
@@ -64,7 +67,7 @@ impl IntoPropValue<Html> for &FrontendError {
                 })
                 .collect(),
             FrontendError::PlanNotFound(id) => {
-                format!("Plan {id} existiert nicht").into_prop_value()
+                html!(<Alert inline=true title={format!("Plan {id} existiert nicht")} r#type={AlertType::Danger} />)
             }
         }
     }

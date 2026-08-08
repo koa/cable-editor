@@ -8,9 +8,12 @@ use crate::db::{
     },
     schema::{kabel, kabel_trasse, panel, panel_port, schacht::id},
 };
-use async_graphql::{Context, EmptySubscription, InputObject, Object, Schema};
+use async_graphql::{Context, EmptySubscription, Enum, InputObject, Object, Schema, Union};
 use async_recursion::async_recursion;
-use diesel::{ExpressionMethods, HasQuery, OptionalExtension, QueryDsl, QueryResult, dsl::max};
+use diesel::dsl::update;
+use diesel::{
+    AsChangeset, ExpressionMethods, HasQuery, OptionalExtension, QueryDsl, QueryResult, dsl::max,
+};
 use diesel_async::{
     AsyncConnection, AsyncPgConnection, RunQueryDsl,
     pooled_connection::deadpool::Object as DpObject,
@@ -96,6 +99,26 @@ pub struct CreatePanel {
 pub struct CreatePort {
     pub label: Option<String>,
     pub port_type: PanelPortType,
+}
+
+#[derive(Debug, Clone, PartialEq, InputObject)]
+pub struct PanelUpdate {
+    panel_id: i32,
+    name: Option<PanelUpdateSetName>,
+    order: Option<PanelUpdateSetOrder>,
+    parent: Option<PanelUpdateSetParent>,
+}
+#[derive(Debug, Clone, PartialEq, InputObject)]
+pub struct PanelUpdateSetName {
+    value: Option<String>,
+}
+#[derive(Debug, Clone, PartialEq, InputObject)]
+pub struct PanelUpdateSetOrder {
+    order: i32,
+}
+#[derive(Debug, Clone, PartialEq, InputObject)]
+pub struct PanelUpdateSetParent {
+    parent: Option<i32>,
 }
 
 #[derive(Debug, Clone, PartialEq, InputObject)]
@@ -226,6 +249,36 @@ impl Mutation {
             })
             .await
     }
+    async fn update_panels(
+        &self,
+        ctx: &Context<'_>,
+        updates: Vec<PanelUpdate>,
+    ) -> async_graphql::Result<bool> {
+        get_connection(ctx)
+            .await?
+            .transaction(async move |conn| {
+                for PanelUpdate {
+                    panel_id,
+                    name,
+                    order,
+                    parent,
+                } in updates
+                {
+                    diesel::update(panel::table)
+                        .filter(panel::id.eq(panel_id))
+                        .set(UpdatePanelChangeset {
+                            name: name.map(|n| n.value),
+                            parent_panel: order.map(|o| Some(o.order)),
+                            parent_order: parent.map(|p| p.parent),
+                        })
+                        .execute(conn)
+                        .await?;
+                }
+
+                Ok(true)
+            })
+            .await
+    }
     async fn create_plan(
         &self,
         ctx: &Context<'_>,
@@ -239,6 +292,13 @@ impl Mutation {
             .await?;
         Ok(true)
     }
+}
+#[derive(AsChangeset)]
+#[diesel(table_name = panel)]
+struct UpdatePanelChangeset {
+    name: Option<Option<String>>,
+    parent_panel: Option<Option<i32>>,
+    parent_order: Option<Option<i32>>,
 }
 
 #[async_recursion]

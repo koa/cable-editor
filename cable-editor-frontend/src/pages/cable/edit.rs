@@ -2,7 +2,7 @@ use crate::graphql::authenticated::list_cables::delete_cable;
 use crate::graphql::authenticated::select_duct::DuctListEntry;
 use crate::pages::duct::select_duct::SelectDuct;
 use crate::pages::router::{AppRoute, PlanView};
-use crate::util::get_credentials;
+use crate::util::{get_backdrop, get_credentials};
 use crate::{
     components::table::ListModel,
     error::FrontendError,
@@ -495,42 +495,40 @@ impl Component for EditCable {
                         html!(<Spinner/>)
                     } else {
                         let scope = ctx.link().clone();
-                        let delete_button = scope.context::<Backdropper>(Callback::noop()).map(
-                            |(backdropper, _)| {
-                                let onclick = {
+                        let delete_button = get_backdrop(ctx.link()).map(|(backdropper)| {
+                            let onclick = {
+                                let backdropper = backdropper.clone();
+                                let scope = scope.clone();
+                                Callback::from(move |_| {
                                     let backdropper = backdropper.clone();
                                     let scope = scope.clone();
-                                    Callback::from(move |_| {
+                                    let on_confirm = {
                                         let backdropper = backdropper.clone();
                                         let scope = scope.clone();
-                                        let on_confirm = {
-                                            let backdropper = backdropper.clone();
-                                            let scope = scope.clone();
-                                            Callback::from(move |_| {
-                                                backdropper.close();
-                                                scope.send_message(Msg::RemoveEntry);
-                                            })
-                                        };
-                                        let on_cancel = {
-                                            let backdropper = backdropper.clone();
-                                            Callback::from(move |_| {
-                                                backdropper.close();
-                                            })
-                                        };
-                                        backdropper.open(Backdrop::new(html! {
-                                            <DeleteConfirmationDialog {on_confirm} {on_cancel} />
-                                        }));
-                                    })
-                                };
-                                html! {
-                                <Button variant={ButtonVariant::DangerSecondary}
-                                    label="Löschen"
-                                    {onclick}
-                                    disabled={has_changes}
-                                />
-                                }
-                            },
-                        );
+                                        Callback::from(move |_| {
+                                            backdropper.close();
+                                            scope.send_message(Msg::RemoveEntry);
+                                        })
+                                    };
+                                    let on_cancel = {
+                                        let backdropper = backdropper.clone();
+                                        Callback::from(move |_| {
+                                            backdropper.close();
+                                        })
+                                    };
+                                    backdropper.open(Backdrop::new(html! {
+                                        <DeleteConfirmationDialog {on_confirm} {on_cancel} />
+                                    }));
+                                })
+                            };
+                            html! {
+                            <Button variant={ButtonVariant::DangerSecondary}
+                                label="Löschen"
+                                {onclick}
+                                disabled={has_changes}
+                            />
+                            }
+                        });
                         html! {
                             <>
                             <Button variant={ButtonVariant::Primary}
@@ -574,7 +572,7 @@ impl Component for EditCable {
                         });
                     }
                     let credentials = get_credentials(ctx.link());
-                    if let Some((backdrop, _)) = ctx.link().context::<Backdropper>(Callback::noop()) {
+                    if let Some((backdrop)) = get_backdrop(ctx.link()) {
                         for (idx, end) in [(0, PathEnd::Front), (entries.len() - 1, PathEnd::Tail)] {
                             if let Some(first_schacht) = entries.get_mut(idx) && let DuctPathEntry::Schacht { on_extend, schacht, .. } = first_schacht {
                                 let backdrop = backdrop.clone();
@@ -652,7 +650,7 @@ impl Component for EditCable {
                             </FormGroup>
                         }
                     }).unwrap_or_else(|| {
-                    if let Some((backdrop, _)) = ctx.link().context::<Backdropper>(Callback::noop()) {
+                    if let Some((backdrop)) = get_backdrop(ctx.link()) {
                         let scope=ctx.link().clone();
                         let onclick = Callback::from(move |_| {
                             let scope=scope.clone();

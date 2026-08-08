@@ -1,3 +1,4 @@
+use crate::components::cabinet::edit::EditCabinet;
 use crate::components::table::ListModel;
 use crate::error::FrontendError;
 use crate::graphql::authenticated::list_schacht::{SchachtListEntry, fetch_schacht_list};
@@ -155,7 +156,7 @@ impl TableEntryRenderer<Columns> for SchachtListEntry {
                 vec![Span::max(html!("Can't expand"))]
             }
             Columns::Cabinets => {
-                vec![Span::max(html!("Can expand"))]
+                vec![Span::max(html!(<EditCabinet cabinet_id={self.id}/>))]
             }
         }
     }

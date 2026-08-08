@@ -1,3 +1,4 @@
+use crate::util::get_backdrop;
 use crate::{
     error::FrontendError,
     graphql::authenticated::list_schacht_typ::{SchachtTypListEntry, fetch_schacht_type_list},
@@ -160,8 +161,8 @@ impl Component for MapComponent {
                     popup.set_content(&value).open_on(&map);
                     info!("Clicked on marker {event:?}");
                 }));
-                if let Some((backdropper, _)) = ctx.link().context::<Backdropper>(Callback::noop())
-                {
+
+                if let Some((backdropper)) = get_backdrop(ctx.link()) {
                     let marker_clone = marker.clone();
                     let onclose = {
                         let scope = ctx.link().clone();
