@@ -52,7 +52,7 @@ pub struct PanelEntry {
 pub enum Msg {
     FetchPanels,
     PanelsFetched(Box<[PanelTreeEntry]>),
-    CreatePanel(NewPanelData),
+    CreatePanel,
     PanelCreated(()),
     UpdatePanel(i32, String, i32),
     PanelUpdated(Result<(), FrontendError>),
@@ -71,13 +71,14 @@ pub struct EditCabinetProps {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
 enum PanelColumn {
     Name,
+    Id,
     Actions,
 }
 #[derive(Clone, PartialEq, Hash, Eq)]
 enum PanelEditAction {
     Remove(IdOrNew),
     ExchangeSiblings {
-        parent: IdOrNew,
+        parent: Option<IdOrNew>,
         siblings: [IdOrNew; 2],
     },
     NewParent {
@@ -108,18 +109,10 @@ impl TreeTableColumn<IdOrNew, PanelEntry, PanelEditAction> for PanelColumn {
                         }
                     })
                 };
-                Cell::new(html!(<span {onblur} contenteditable="true">{text}</span>))
+                Cell::new(html!(<span {onblur} contenteditable="true" key={text}>{text}</span>))
             }
             PanelColumn::Actions => {
                 let mut buttons = Vec::new();
-                if context.children.is_empty() {
-                    let key = *context.key;
-                    let callback = context.callback.clone();
-                    let onclick =
-                        Callback::from(move |_| callback.emit(PanelEditAction::Remove(key)));
-
-                    buttons.push(html!(<Button icon={Icon::Trash} {onclick} variant={ButtonVariant::DangerSecondary} />))
-                }
                 if context.parent.is_some() {
                     let key = *context.key;
                     let callback = context.callback.clone();
@@ -128,11 +121,8 @@ impl TreeTableColumn<IdOrNew, PanelEntry, PanelEditAction> for PanelColumn {
 
                     buttons.push(html!(<Button icon={Icon::AngleDoubleLeft} {onclick} variant={ButtonVariant::Secondary} />))
                 }
-                if let (Some(other_sibling), Some(parent)) =
-                    (context.previous_sibling, context.parent)
-                {
-                    let key = *context.key;
-                    let parent = *parent;
+                if let (Some(other_sibling)) = (context.previous_sibling) {
+                    let parent = context.parent.copied();
                     let siblings = [*context.key, *other_sibling];
                     let callback = context.callback.clone();
                     let onclick = Callback::from(move |_| {
@@ -150,8 +140,19 @@ impl TreeTableColumn<IdOrNew, PanelEntry, PanelEditAction> for PanelColumn {
                     });
                     buttons.push(html!(<Button icon={Icon::AngleDoubleRight} {onclick} variant={ButtonVariant::Secondary}/>))
                 }
+                if context.children.is_empty() {
+                    let key = *context.key;
+                    let callback = context.callback.clone();
+                    let onclick =
+                        Callback::from(move |_| callback.emit(PanelEditAction::Remove(key)));
+
+                    buttons.push(html!(<Button icon={Icon::Trash} {onclick} variant={ButtonVariant::DangerSecondary} />))
+                }
+
+
                 Cell::new(buttons.into_iter().collect())
             }
+            PanelColumn::Id => Cell::new(format!("{:?}", context.key).into_prop_value()),
         }
     }
 }
@@ -208,26 +209,38 @@ impl Component for EditCabinet {
                 self.model = TreeModel::new(roots.into_boxed_slice(), entries, child_rels);
                 true
             }
-            Msg::CreatePanel(panel_input) => {
-                let cabinet_id = ctx.props().cabinet_id;
-                let credentials = get_credentials(ctx.link());
-                let link = ctx.link().clone();
-                spawn_local(async move {
-                    link.send_message(
-                        create_panel(
-                            credentials.as_ref(),
-                            CreatePanelInput {
-                                name: panel_input.name,
-                                schacht_id: cabinet_id,
-                                children: vec![],
-                            },
-                            None,
-                        )
-                        .await
-                        .map_or_else(Msg::Error, Msg::PanelCreated),
-                    );
-                });
-                false
+            Msg::CreatePanel => {
+                let new_id = IdOrNew::default();
+                let roots = self
+                    .model
+                    .roots()
+                    .iter()
+                    .copied()
+                    .chain(Some(new_id))
+                    .collect();
+                let entries = self
+                    .model
+                    .entries()
+                    .iter()
+                    .map(|(k, v)| (*k, v.clone()))
+                    .chain(Some((
+                        new_id,
+                        PanelEntry {
+                            id: new_id,
+                            name: None,
+                        },
+                    )))
+                    .collect();
+                self.model = TreeModel::new(
+                    roots,
+                    entries,
+                    self.model
+                        .children()
+                        .iter()
+                        .map(|(k, v)| (*k, v.clone()))
+                        .collect(),
+                );
+                true
             }
             Msg::PanelCreated(result) => {
                 ctx.link().send_message(Msg::FetchPanels);
@@ -286,7 +299,8 @@ impl Component for EditCabinet {
                 true
             }
             Msg::PanelEvent(PanelEditAction::NewParent { entry, new_parent }) => {
-                self.model = self.model.new_parent(entry, new_parent);
+                self.model = self.model.new_parent(entry, Some(new_parent));
+                self.state.open(new_parent);
                 true
             }
             Msg::PanelEvent(PanelEditAction::MoveUp(entry)) => {
@@ -295,13 +309,18 @@ impl Component for EditCabinet {
                     .children()
                     .iter()
                     .find(|(_, children)| children.contains(&entry))
-                    && let Some((new_parent, _)) = self
+                {
+                    let new_parent = self
                         .model
                         .children()
                         .iter()
                         .find(|(_, children)| children.contains(current_parent))
-                {
-                    self.model = self.model.new_parent(entry, *new_parent);
+                        .map(|(key, _)| *key);
+                    if let Some(parent) = new_parent {
+                        self.state.open(parent);
+                    }
+
+                    self.model = self.model.new_parent(entry, new_parent);
                     true
                 } else {
                     false
@@ -327,6 +346,7 @@ impl Component for EditCabinet {
         } else {
             let header = html_nested! {
                 <TableHeader<PanelColumn>>
+                    //<TableColumn<PanelColumn> label="ID" index={PanelColumn::Id} />
                     <TableColumn<PanelColumn> label="Name" index={PanelColumn::Name} />
                     <TableColumn<PanelColumn> index={PanelColumn::Actions} />
                 </TableHeader<PanelColumn>>
@@ -336,40 +356,12 @@ impl Component for EditCabinet {
                 .error
                 .as_ref()
                 .map(IntoPropValue::<Html>::into_prop_value);
-            let create_panel_callback = get_backdrop(ctx.link())
-                .map(|bd| {
-                    let scope = ctx.link().clone();
-
-                    Callback::from(move |_| {
-                        let on_confirm = {
-                            let bd = bd.clone();
-                            let scope = scope.clone();
-                            Callback::from(move |new_panel| {
-                                bd.close();
-                                scope.send_message(Msg::CreatePanel(new_panel));
-                            })
-                        };
-                        let on_cancel = {
-                            let bd = bd.clone();
-                            Callback::from(move |_| {
-                                bd.close();
-                            })
-                        };
-
-                        bd.open(Backdrop::new(html! {
-                            <Bullseye>
-                                <NewPanel {on_confirm} {on_cancel}/>
-                            </Bullseye>
-                        }))
-                    })
-                })
-                .unwrap_or_default();
-
+            let create_panel_callback = ctx.link().callback(|_| Msg::CreatePanel);
             let row_event = ctx.link().callback(Msg::PanelEvent);
 
             html! {
                 <>
-                <Title>{"Panels in Cabinet"}</Title>
+                <Title>{"Panels im Schacht"}</Title>
                 {error}
                 <TreeTable<IdOrNew, PanelEntry,PanelEditAction, PanelColumn>
                     state={self.state.clone()}
@@ -379,7 +371,7 @@ impl Component for EditCabinet {
                     {model}
                     />
                  <Button
-                    label="Create Panel"
+                    label="Panel hinzufügen"
                     variant={ButtonVariant::Primary}
                     onclick={create_panel_callback}
                 />

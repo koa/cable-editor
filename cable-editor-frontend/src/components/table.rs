@@ -185,27 +185,24 @@ where
             .collect();
         Self::new(roots, entries, children)
     }
-    pub fn exchange_siblings(&self, parent: Key, siblings: [Key; 2]) -> Self {
-        let mut children = self.children().clone();
-        if let Some(all_siblings) = children.remove(&parent) {
-            children.insert(
-                parent,
-                all_siblings
-                    .into_iter()
-                    .map(|k| {
-                        if k == siblings[0] {
-                            siblings[1].clone()
-                        } else if k == siblings[1] {
-                            siblings[0].clone()
-                        } else {
-                            k
-                        }
-                    })
-                    .collect(),
-            );
-        }
+    pub fn exchange_siblings(&self, parent: Option<Key>, siblings: [Key; 2]) -> Self {
+        let (children, roots) = if let Some(parent) = parent {
+            let mut children = self.children().clone();
+            if let Some(all_siblings) = children.remove(&parent) {
+                children.insert(
+                    parent,
+                    Self::exchange_siblings_in_list(siblings, &all_siblings),
+                );
+            }
+            (children, self.roots().iter().cloned().collect())
+        } else {
+            (
+                self.children().clone(),
+                Self::exchange_siblings_in_list(siblings, self.roots()),
+            )
+        };
         Self::new(
-            self.roots().iter().cloned().collect(),
+            roots,
             self.entries()
                 .iter()
                 .map(|(k, v)| (k.clone(), v.clone()))
@@ -213,13 +210,30 @@ where
             children,
         )
     }
-    pub fn new_parent(&self, entry: Key, new_parent: Key) -> Self {
-        let roots = self
+
+    fn exchange_siblings_in_list(switching_siblings: [Key; 2], all_siblings: &[Key]) -> Box<[Key]> {
+        all_siblings
+            .iter()
+            .cloned()
+            .map(|k| {
+                if k == switching_siblings[0] {
+                    switching_siblings[1].clone()
+                } else if k == switching_siblings[1] {
+                    switching_siblings[0].clone()
+                } else {
+                    k
+                }
+            })
+            .collect()
+    }
+
+    pub fn new_parent(&self, entry: Key, new_parent: Option<Key>) -> Self {
+        let mut roots = self
             .roots()
             .iter()
             .filter(|id| *id != &entry)
             .cloned()
-            .collect();
+            .collect::<Vec<_>>();
         let mut children: HashMap<Key, Box<[Key]>> = self
             .children()
             .iter()
@@ -234,15 +248,19 @@ where
                 )
             })
             .collect();
-        let mut new_list = children
-            .remove(&new_parent)
-            .map(|e| e.into_vec())
-            .unwrap_or_default();
-        new_list.push(entry);
-        children.insert(new_parent, new_list.into_boxed_slice());
+        if let Some(new_parent) = new_parent {
+            let mut new_list = children
+                .remove(&new_parent)
+                .map(|e| e.into_vec())
+                .unwrap_or_default();
+            new_list.push(entry);
+            children.insert(new_parent, new_list.into_boxed_slice());
+        } else {
+            roots.push(entry);
+        }
 
         Self::new(
-            roots,
+            roots.into_boxed_slice(),
             self.entries()
                 .iter()
                 .map(|(k, v)| (k.clone(), v.clone()))
