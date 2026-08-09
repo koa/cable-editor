@@ -1,14 +1,19 @@
-use crate::db::entity::{Panel, PanelPort, Plan};
-use crate::db::schema::{panel, panel_port};
+use crate::db::entity::{Panel, PanelPort, PanelPortType, Plan, PortSide, PortUsage};
+use crate::db::schema::{panel, panel_port, port_usage};
 use crate::graphql::authenticated::get_connection;
 use async_graphql::{Context, Object};
 use diesel::HasQuery;
+use diesel::OptionalExtension;
 use diesel::QueryDsl;
 use diesel::sql_types::Integer;
 use diesel::{ExpressionMethods, sql_query};
 use diesel_async::RunQueryDsl;
 pub struct PlannedPanel {
     pub panel: Panel,
+    pub plan: Plan,
+}
+pub struct PlannedPort {
+    pub port: PanelPort,
     pub plan: Plan,
 }
 
@@ -48,17 +53,25 @@ impl PlannedPanel {
                     .collect()
             })?)
     }
-    async fn ports(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<PanelPort>> {
+    async fn ports(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<PlannedPort>> {
         let mut connection = get_connection(ctx).await?;
-        Ok(PanelPort::query()
-            .filter(panel_port::panel_id.eq(self.panel.id))
-            .filter(panel_port::plan_id.eq_any([0, self.plan.id]))
-            .distinct_on(panel_port::port_number)
-            .order_by((panel_port::port_number.asc(), panel_port::plan_id.desc()))
-            .load(&mut connection)
-            .await?)
-    }
 
+        // Lade einfach alle existierenden Hardware-Ports für dieses Panel
+        let ports = PanelPort::query()
+            .filter(panel_port::panel_id.eq(self.panel.id))
+            .order_by(panel_port::port_order.asc())
+            .load::<PanelPort>(&mut connection)
+            .await?;
+
+        // Gib sie im Kontext des aktuellen Plans zurück
+        Ok(ports
+            .into_iter()
+            .map(|port| PlannedPort {
+                port,
+                plan: self.plan.clone(),
+            })
+            .collect())
+    }
     async fn all_children_recursive(
         &self,
         ctx: &Context<'_>,
@@ -99,5 +112,51 @@ impl PlannedPanel {
                     })
                     .collect()
             })?)
+    }
+}
+#[Object]
+impl PlannedPort {
+    async fn id(&self) -> i32 {
+        self.port.id
+    }
+    async fn order_number(&self) -> i32 {
+        self.port.port_order
+    }
+    async fn port_type(&self) -> PanelPortType {
+        self.port.port_type
+    }
+    async fn label(&self) -> Option<&str> {
+        self.port.label.as_deref()
+    }
+
+    /// Lädt die effektive Belegung für eine bestimmte Seite des Ports
+    async fn usage(
+        &self,
+        ctx: &Context<'_>,
+        side: PortSide,
+    ) -> async_graphql::Result<Option<PortUsage>> {
+        let mut connection = get_connection(ctx).await?;
+
+        let usage = port_usage::table
+            .filter(port_usage::port_id.eq(self.port.id))
+            .filter(port_usage::side.eq(side))
+            // Wir betrachten nur die Baseline (0) und den aktuellen Plan
+            .filter(port_usage::plan_id.eq_any([0, self.plan.id]))
+            // Der höchste plan_id gewinnt (Plan überschreibt Baseline)
+            .order_by(port_usage::plan_id.desc())
+            .first::<PortUsage>(&mut connection)
+            .await
+            .optional()?;
+
+        // Wenn ein Eintrag existiert, prüfen wir, ob es ein "Tombstone" (Löschung) ist.
+        // Falls cable == None ist, wurde die Faser in diesem Plan absichtlich entfernt.
+        if let Some(u) = usage {
+            if u.cable.is_none() {
+                return Ok(None);
+            }
+            return Ok(Some(u));
+        }
+
+        Ok(None)
     }
 }

@@ -1,7 +1,9 @@
+use crate::components::cabinet::edit::IdOrNew;
 use crate::error::FrontendError;
 use crate::graphql::authenticated::cable_details::CableDetails;
 use crate::graphql::authenticated::schema;
 use crate::graphql::{mutate, query};
+use cynic::GraphQlResponse;
 use log::info;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use yew_oauth2::prelude::OAuth2Context;
@@ -155,4 +157,69 @@ pub async fn create_panel(
     } else {
         Ok(())
     }
+}
+
+#[derive(cynic::InputObject, Debug, Clone)]
+#[cynic(graphql_type = "IdOrNewInput")]
+pub struct IdOrNewInput {
+    pub id: Option<i32>,
+    pub temporary: Option<String>,
+}
+
+// Praktischer Helfer für die Konvertierung
+impl From<IdOrNew> for IdOrNewInput {
+    fn from(val: IdOrNew) -> Self {
+        match val {
+            IdOrNew::Id(id) => IdOrNewInput {
+                id: Some(id),
+                temporary: None,
+            },
+            IdOrNew::Temporary(uuid) => IdOrNewInput {
+                id: None,
+                temporary: Some(uuid.to_string()),
+            },
+        }
+    }
+}
+
+// Ein einziges Input-Struct für Create UND Update
+#[derive(cynic::InputObject, Debug, Clone)]
+#[cynic(graphql_type = "FlatPanelInput")]
+pub struct FlatPanelInput {
+    pub id: IdOrNewInput,
+    pub name: Option<String>,
+    pub parent_id: Option<IdOrNewInput>,
+    pub order: i32,
+}
+
+#[derive(cynic::QueryVariables, Debug)]
+pub struct SyncCabinetPanelsVariables {
+    pub cabinet_id: i32,
+    pub changes: Vec<FlatPanelInput>,
+    pub deletes: Vec<i32>,
+}
+
+#[derive(cynic::QueryFragment, Debug)]
+#[cynic(graphql_type = "Mutation", variables = "SyncCabinetPanelsVariables")]
+struct SyncCabinetPanelsMutation {
+    #[arguments(cabinetId: $cabinet_id, changes: $changes, deletes: $deletes)]
+    update_cabinet_panels: bool,
+}
+
+pub async fn update_panels_in_cabinet(
+    deletes: Vec<i32>,
+    changes: Vec<FlatPanelInput>,
+    cabinet_id: i32,
+    credentials: Option<OAuth2Context>,
+) -> Result<(), FrontendError> {
+    mutate::<SyncCabinetPanelsMutation, _>(
+        SyncCabinetPanelsVariables {
+            cabinet_id,
+            changes,
+            deletes,
+        },
+        credentials.as_ref(),
+    )
+    .await
+    .map(|_| ())
 }

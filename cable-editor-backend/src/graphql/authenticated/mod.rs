@@ -6,11 +6,10 @@ use crate::db::{
         Cable, Duct, InsertPanel, InsertPanelPort, PanelPortType, Schacht, SchachtTyp,
         UpdateCableChangeset,
     },
-    schema::{kabel, kabel_trasse, panel, panel_port, schacht::id},
+    schema::{kabel, kabel_trasse, panel, panel_port},
 };
 use async_graphql::{Context, EmptySubscription, Enum, InputObject, Object, Schema, Union};
 use async_recursion::async_recursion;
-use diesel::dsl::update;
 use diesel::{
     AsChangeset, ExpressionMethods, HasQuery, OptionalExtension, QueryDsl, QueryResult, dsl::max,
 };
@@ -18,6 +17,7 @@ use diesel_async::{
     AsyncConnection, AsyncPgConnection, RunQueryDsl,
     pooled_connection::deadpool::Object as DpObject,
 };
+use std::collections::HashMap;
 
 pub type AuthenticatedGraphqlSchema = Schema<Query, Mutation, EmptySubscription>;
 
@@ -40,7 +40,7 @@ impl Query {
         let mut connection = get_connection(ctx).await?;
 
         let schacht = Schacht::query()
-            .filter(id.eq(schacht_id))
+            .filter(schacht::id.eq(schacht_id))
             .first(&mut connection)
             .await
             .optional()?;
@@ -292,6 +292,87 @@ impl Mutation {
             .await?;
         Ok(true)
     }
+    async fn update_cabinet_panels(
+        &self,
+        ctx: &Context<'_>,
+        cabinet_id: i32,
+        changes: Vec<FlatPanelInput>,
+        deletes: Vec<i32>,
+    ) -> async_graphql::Result<bool> {
+        let mut connection = get_connection(ctx).await?;
+
+        connection
+            .transaction(async move |conn| {
+                // 1. Zuerst Löschungen verarbeiten
+                if !deletes.is_empty() {
+                    diesel::delete(panel::table.filter(panel::id.eq_any(&deletes)))
+                        .execute(conn)
+                        .await?;
+                }
+
+                // Mapping von temporären Frontend-UUIDs zu echten Datenbank-IDs
+                let mut temp_id_map: HashMap<String, i32> = HashMap::new();
+
+                // 2. Erstellungen und Updates verarbeiten (Reihenfolge ist dank Frontend korrekt)
+                for change in changes {
+                    // Parent-ID auflösen (entweder echte ID oder aus der Mapping-Tabelle)
+                    let resolved_parent_id = match change.parent_id {
+                        Some(p_id) => {
+                            if let Some(id) = p_id.id {
+                                Some(id)
+                            } else if let Some(temp) = p_id.temporary {
+                                Some(*temp_id_map.get(&temp).ok_or_else(|| {
+                                    async_graphql::Error::new(
+                                        "Parent temporary ID not found in mapping",
+                                    )
+                                })?)
+                            } else {
+                                None
+                            }
+                        }
+                        None => None,
+                    };
+
+                    if let Some(panel_id) = change.id.id {
+                        // UPDATE: Bestehendes Panel
+                        diesel::update(panel::table.find(panel_id))
+                            .set((
+                                panel::name.eq(change.name),
+                                panel::parent_panel.eq(resolved_parent_id),
+                                panel::parent_order.eq(change.order),
+                            ))
+                            .execute(conn)
+                            .await?;
+                    } else if let Some(temp_id) = change.id.temporary {
+                        // CREATE: Neues Panel
+                        let new_panel = InsertPanel {
+                            name: change.name,
+                            schacht_id: cabinet_id,
+                            parent_panel: resolved_parent_id,
+                            parent_order: Some(change.order), // Das Schema erwartet Option<i32>
+                        };
+
+                        let inserted_id: i32 = diesel::insert_into(panel::table)
+                            .values(new_panel)
+                            .returning(panel::id)
+                            .get_result(conn)
+                            .await?;
+
+                        // Die neue DB-ID für potenziell folgende Kinder-Panels merken
+                        temp_id_map.insert(temp_id, inserted_id);
+                    } else {
+                        return Err(async_graphql::Error::new(
+                            "Change must have either id or temporary id",
+                        ));
+                    }
+                }
+
+                Ok::<bool, async_graphql::Error>(true)
+            })
+            .await?;
+
+        Ok(true)
+    }
 }
 #[derive(AsChangeset)]
 #[diesel(table_name = panel)]
@@ -347,7 +428,7 @@ pub async fn get_connection(
 }
 
 use crate::db::entity::{FiberPathNode, InsertPlan, Plan};
-use crate::db::schema::plan;
+use crate::db::schema::{plan, schacht};
 use diesel::sql_query;
 use diesel::sql_types::Integer;
 
@@ -358,62 +439,82 @@ pub async fn trace_fiber_path(
 ) -> QueryResult<Vec<FiberPathNode>> {
     let raw_sql = r#"
     WITH RECURSIVE
-    -- Das Overlay: Ist-Zustand (0) und EINE Planung ($3) mischen
-    overlay_ports AS (
-        SELECT DISTINCT ON (panel_id, port_number)
-            panel_id, port_number,
-            f1_kabel_id, f1_buendel, f1_faser,
-            f2_kabel_id, f2_buendel, f2_faser
-        FROM panel_port
-        WHERE plan_id IN (0, $3) -- 0 für Ist-Zustand, $3 für die gewählte Planung
+    -- 1. Effektiven Zustand berechnen: Ist-Zustand (0) und EINE Planung ($3) mischen
+    effective_usage AS (
+        SELECT DISTINCT ON (port_id, side)
+            port_id, side, cable, bundle, fiber
+        FROM port_usage
+        WHERE plan_id IN (0, $3)
         -- plan_id DESC überschreibt den Ist-Zustand (0) mit der Planung (>0)
-        ORDER BY panel_id, port_number, plan_id DESC
-    ),
-    -- 1. Diese CTE ist nur ein "Makro", sie lädt NICHT die ganze Tabelle
-    endpoints AS (
-        SELECT panel_id, port_number, f1_kabel_id AS k_id, f1_buendel AS b, f1_faser AS f
-        FROM overlay_ports WHERE f1_kabel_id IS NOT NULL
+        ORDER BY port_id, side, plan_id DESC
     ),
 
+    -- 2. Hardware-Infos anfügen und Tombstones (cable IS NULL) herausfiltern
+    endpoints AS (
+        SELECT
+            eu.port_id, pp.panel_id, pp.port_order AS port_number,
+            eu.cable AS k_id, eu.bundle AS b, eu.fiber AS f
+        FROM effective_usage eu
+        JOIN panel_port pp ON eu.port_id = pp.id
+        WHERE eu.cable IS NOT NULL
+    ),
+
+    -- 3. Die eigentliche Wegfindung
     signal_path AS (
-        -- 2. Basisfall: Wir filtern DIREKT HIER am Startpunkt ($1 und $2)
+        -- Basisfall: Direkter Startpunkt (gefiltert auf $1 und $2)
         SELECT
             1 AS step,
             e1.panel_id AS from_panel, e1.port_number AS from_port,
             e2.panel_id AS to_panel, e2.port_number AS to_port,
             e1.k_id AS kabel, e1.b AS buendel, e1.f AS faser,
-            ARRAY[e1.panel_id::text || '-' || e1.port_number::text] AS visited
+            -- Array merkt sich besuchte ports anstatt panel/port kombinationen
+            ARRAY[e1.port_id] AS visited
         FROM endpoints e1
         JOIN endpoints e2
           ON e1.k_id = e2.k_id AND e1.b = e2.b AND e1.f = e2.f
-         AND (e1.panel_id != e2.panel_id OR e1.port_number != e2.port_number)
+         AND e1.port_id != e2.port_id -- Faser muss auf einen ANDEREN Port springen
         WHERE e1.panel_id = $1 AND e1.port_number = $2
 
         UNION ALL
 
-        -- 3. Rekursion: Sucht nur iterativ die exakten Folge-Ports
+        -- Rekursion: Springt iterativ die Folge-Ports ab
         SELECT
             sp.step + 1,
             e1.panel_id, e1.port_number,
             e2.panel_id, e2.port_number,
             e1.k_id, e1.b, e1.f,
-            sp.visited || (e1.panel_id::text || '-' || e1.port_number::text)
+            sp.visited || e1.port_id
         FROM signal_path sp
-        -- Vom Ziel des letzten Schritts...
+        -- Vom Ziel des letzten Schritts auf den Eingang des neuen Ports...
         JOIN endpoints e1 ON e1.panel_id = sp.to_panel AND e1.port_number = sp.to_port
         -- ...auf das andere Ende der verbundenen Faser springen
         JOIN endpoints e2 ON e1.k_id = e2.k_id AND e1.b = e2.b AND e1.f = e2.f
-         AND (e1.panel_id != e2.panel_id OR e1.port_number != e2.port_number)
-        WHERE NOT ((e2.panel_id::text || '-' || e2.port_number::text) = ANY(sp.visited))
+         AND e1.port_id != e2.port_id
+        -- Verhindern, dass wir im Kreis laufen
+        WHERE NOT (e2.port_id = ANY(sp.visited))
     )
     SELECT step, from_panel, from_port, to_panel, to_port, kabel, buendel, faser
     FROM signal_path
     ORDER BY step;
-"#;
+    "#;
 
     sql_query(raw_sql)
         .bind::<Integer, _>(start_panel_id)
         .bind::<Integer, _>(start_port_number)
         .load::<FiberPathNode>(conn)
         .await
+}
+
+#[derive(Debug, Clone, PartialEq, InputObject)]
+pub struct IdOrNewInput {
+    pub id: Option<i32>,
+    pub temporary: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, InputObject)]
+pub struct FlatPanelInput {
+    pub id: IdOrNewInput,
+    pub name: Option<String>,
+    pub parent_id: Option<IdOrNewInput>,
+    pub order: i32,
 }

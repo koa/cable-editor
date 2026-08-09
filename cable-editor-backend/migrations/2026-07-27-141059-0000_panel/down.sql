@@ -1,13 +1,21 @@
--- This file should undo anything in `up.sql`
+-- 1. Index entfernen
+drop index if exists idx_port_usage;
 
-drop index if exists idx_panel_port_f1;
-drop index if exists idx_panel_port_f2;
+-- 2. Trigger entfernen
+drop trigger if exists trg_check_kabel_update on kabel;
+drop trigger if exists trg_check_port_usage_fasern on port_usage;
 
-DROP TRIGGER IF EXISTS trg_check_kabel_update ON kabel;
+-- 3. Trigger-Funktionen entfernen
+drop function if exists check_kabel_update_limits();
+drop function if exists check_faser_limits();
 
-DROP TABLE IF EXISTS panel_port;
-DROP TYPE IF EXISTS port_type_enum;
-DROP TABLE IF EXISTS panel;
+-- 4. Tabellen in umgekehrter Reihenfolge der Abhängigkeiten entfernen
+drop table if exists port_usage;
+drop table if exists plan;
+drop table if exists panel_port;
+drop table if exists panel;
 
-DROP FUNCTION IF EXISTS check_faser_limits();
-DROP FUNCTION IF EXISTS check_kabel_update_limits();
+-- 5. Native Enums (Types) entfernen
+drop type if exists port_side_enum;
+drop type if exists plan_status_enum;
+drop type if exists port_type_enum;

@@ -1,20 +1,17 @@
 use crate::components::table::{
-    ListModel, TreeModel, TreeState, TreeTable, TreeTableColumn, TreeTableContext,
+    TreeModel, TreeState, TreeTable, TreeTableColumn, TreeTableContext,
 };
 use crate::create_simple_dialog;
 use crate::error::FrontendError;
 use crate::graphql::authenticated::cabinet_details::{
-    CreatePanelInput, PanelTreeEntry, create_panel,
+    FlatPanelInput, PanelTreeEntry, update_panels_in_cabinet,
 };
-use crate::util::{get_backdrop, get_credentials};
-use log::info;
+use crate::util::get_credentials;
 use patternfly_yew::prelude::*;
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::rc::Rc;
-use uuid::{Builder, Uuid};
+use std::collections::{HashMap, HashSet};
+use uuid::Uuid;
 use web_sys::HtmlElement;
-use yew::html::{IntoPropValue, Scope};
+use yew::html::IntoPropValue;
 use yew::platform::spawn_local;
 use yew::prelude::*;
 use yew::{Callback, Component, Context, Html, Properties, html};
@@ -60,6 +57,7 @@ pub enum Msg {
     PanelDeleted(Result<(), FrontendError>),
     Error(FrontendError),
     PanelEvent(PanelEditAction),
+    Save,
 }
 #[derive(PartialEq, Properties)]
 pub struct EditCabinetProps {
@@ -96,7 +94,12 @@ impl TreeTableColumn<IdOrNew, PanelEntry, PanelEditAction> for PanelColumn {
     fn render_cell(&self, context: TreeTableContext<IdOrNew, PanelEntry, PanelEditAction>) -> Cell {
         match self {
             PanelColumn::Name => {
-                let text = context.row.name.as_deref().unwrap_or_default();
+                let text = context
+                    .row
+                    .name
+                    .as_deref()
+                    .filter(|name| !name.is_empty())
+                    .unwrap_or("<no name>");
                 let onblur = {
                     let callback = context.callback.clone();
                     let id = *context.key;
@@ -148,7 +151,6 @@ impl TreeTableColumn<IdOrNew, PanelEntry, PanelEditAction> for PanelColumn {
 
                     buttons.push(html!(<Button icon={Icon::Trash} {onclick} variant={ButtonVariant::DangerSecondary} />))
                 }
-
 
                 Cell::new(buttons.into_iter().collect())
             }
@@ -327,7 +329,6 @@ impl Component for EditCabinet {
                 }
             }
             Msg::PanelEvent(PanelEditAction::SetName { id, text }) => {
-                info!("Set Text: {text}");
                 let mut entries = self.model.entries().clone();
                 if let Some(entry) = entries.get_mut(&id) {
                     entry.name = Some(text);
@@ -336,6 +337,79 @@ impl Component for EditCabinet {
                 let children = self.model.children().clone();
                 self.model = TreeModel::new(roots, entries, children);
                 true
+            }
+            Msg::Save => {
+                //self.loading = true;
+
+                // 1. Original-Zustand flachklopfen
+                let mut original_nodes = HashMap::new();
+                if let Some(loaded) = &self.loaded_panels {
+                    flatten_loaded(loaded, None, &mut original_nodes);
+                }
+
+                // 2. Aktuellen Zustand flachklopfen
+                let mut current_nodes = Vec::new();
+                flatten_current(&self.model, self.model.roots(), None, &mut current_nodes);
+
+                let mut to_create = Vec::new();
+                let mut to_update = Vec::new();
+                let mut to_delete = Vec::new();
+                let mut current_ids = HashSet::new();
+
+                // 3. Neue und geänderte Panels ermitteln
+                for node in current_nodes {
+                    current_ids.insert(node.id);
+
+                    match node.id {
+                        IdOrNew::Temporary(_) => {
+                            to_create.push(node);
+                        }
+                        IdOrNew::Id(_) => {
+                            if let Some(orig) = original_nodes.get(&node.id) {
+                                if &node != orig {
+                                    to_update.push(node);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 4. Gelöschte Panels ermitteln
+                for orig_id in original_nodes.keys() {
+                    if !current_ids.contains(orig_id)
+                        && let IdOrNew::Id(deleted_id) = orig_id
+                    {
+                        to_delete.push(*deleted_id);
+                    }
+                }
+
+                // -- DEBUG AUSGABE --
+                log::info!("To Create: {:?}", to_create);
+                log::info!("To Update: {:?}", to_update);
+                log::info!("To Delete: {:?}", to_delete);
+
+                let mut changes = Vec::with_capacity(to_create.len() + to_update.len());
+
+                for node in to_create.into_iter().chain(to_update.into_iter()) {
+                    changes.push(FlatPanelInput {
+                        id: node.id.into(),
+                        name: node.name.map(|s| str::into_string(s)),
+                        parent_id: node.parent_id.map(Into::into),
+                        order: node.order,
+                    });
+                }
+
+                let cabinet_id = ctx.props().cabinet_id;
+                let scope = ctx.link().clone();
+                spawn_local(async move {
+                    let credentials = get_credentials(&scope);
+                    scope.send_message(
+                        update_panels_in_cabinet(to_delete, changes, cabinet_id, credentials)
+                            .await
+                            .map_or_else(Msg::Error, |_| Msg::FetchPanels),
+                    );
+                });
+                false
             }
         }
     }
@@ -357,6 +431,7 @@ impl Component for EditCabinet {
                 .as_ref()
                 .map(IntoPropValue::<Html>::into_prop_value);
             let create_panel_callback = ctx.link().callback(|_| Msg::CreatePanel);
+            let save_callback = ctx.link().callback(|_| Msg::Save);
             let row_event = ctx.link().callback(Msg::PanelEvent);
 
             html! {
@@ -370,11 +445,18 @@ impl Component for EditCabinet {
                     {header}
                     {model}
                     />
-                 <Button
-                    label="Panel hinzufügen"
-                    variant={ButtonVariant::Primary}
-                    onclick={create_panel_callback}
-                />
+                    <ActionGroup>
+                     <Button
+                         label="Panel hinzufügen"
+                         variant={ButtonVariant::Secondary}
+                         onclick={create_panel_callback}
+                     />
+                     <Button
+                         label="Speichern"
+                         variant={ButtonVariant::Primary}
+                         onclick={save_callback}
+                     />
+                 </ActionGroup>
                 </>
             }
         }
@@ -423,3 +505,54 @@ impl EditCabinet {
 }
 
 create_simple_dialog!(NewPanel, NewPanelProps, NewPanelData, (name, "Name"),);
+
+#[derive(Debug, Clone, PartialEq)]
+struct FlatPanelNode {
+    id: IdOrNew,
+    name: Option<Box<str>>,
+    parent_id: Option<IdOrNew>,
+    order: i32,
+}
+
+// Rekursives Flachklopfen der vom Server geladenen Daten
+fn flatten_loaded(
+    panels: &[PanelTreeEntry],
+    parent_id: Option<IdOrNew>,
+    result: &mut HashMap<IdOrNew, FlatPanelNode>,
+) {
+    for (i, panel) in panels.iter().enumerate() {
+        let current_id = IdOrNew::Id(panel.id);
+        result.insert(
+            current_id,
+            FlatPanelNode {
+                id: current_id,
+                name: panel.name.clone(),
+                parent_id,
+                order: (i + 1) as i32,
+            },
+        );
+        flatten_loaded(&panel.children, Some(current_id), result);
+    }
+}
+
+fn flatten_current(
+    model: &TreeModel<IdOrNew, PanelEntry>,
+    entries: &[IdOrNew],
+    parent_id: Option<IdOrNew>,
+    result: &mut Vec<FlatPanelNode>,
+) {
+    for (i, id) in entries.iter().enumerate() {
+        if let Some(entry) = model.entries().get(id) {
+            result.push(FlatPanelNode {
+                id: *id,
+                name: entry.name.clone(),
+                parent_id,
+                order: (i + 1) as i32,
+            });
+
+            if let Some(children) = model.children().get(id) {
+                flatten_current(model, children, Some(*id), result);
+            }
+        }
+    }
+}

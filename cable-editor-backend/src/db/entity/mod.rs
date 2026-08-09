@@ -1,4 +1,5 @@
 pub mod path;
+use crate::db::schema::port_usage;
 use crate::{
     db::{
         entity::path::{
@@ -132,7 +133,7 @@ pub struct InsertPanel {
 #[diesel(table_name = panel_port)]
 pub struct InsertPanelPort {
     pub panel_id: i32,
-    pub port_number: i32,
+    pub port_order: i32,
     pub port_type: PanelPortType,
     pub label: Option<String>,
 }
@@ -147,26 +148,59 @@ pub struct InsertPlan {
 )]
 #[diesel(table_name = panel_port)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
-#[diesel(primary_key(panel_id, port_number))]
+#[diesel(primary_key(id))]
 pub struct PanelPort {
+    pub id: i32,
     pub panel_id: i32,
-    pub port_number: i32,
+    pub port_order: i32,
     pub label: Option<String>,
     pub port_type: PanelPortType,
-    pub f1_kabel_id: Option<i32>,
-    pub f1_buendel: Option<i32>,
-    pub f1_faser: Option<i32>,
-
-    pub f2_kabel_id: Option<i32>,
-    pub f2_buendel: Option<i32>,
-    pub f2_faser: Option<i32>,
 }
-
+#[derive(Debug, Clone, PartialEq, Copy, Eq, DbEnum, Enum, Hash, PartialOrd, Ord)]
+#[ExistingTypePath = "crate::db::schema::sql_types::PortSideEnum"]
+pub enum PortSide {
+    #[db_rename = "Front"]
+    Front,
+    #[db_rename = "Back"]
+    Back,
+}
 #[derive(Debug, Clone, PartialEq, Copy, Eq, DbEnum, Enum, Hash, PartialOrd, Ord)]
 #[ExistingTypePath = "PortTypeEnum"]
 pub enum PanelPortType {
     Splice,
     Connector,
+}
+
+#[derive(Identifiable, Insertable, HasQuery, Associations, Debug, Clone, PartialEq)]
+#[diesel(table_name = port_usage)]
+#[diesel(primary_key(port_id, plan_id, side))]
+#[diesel(belongs_to(PanelPort, foreign_key = port_id))]
+pub struct PortUsage {
+    pub port_id: i32,
+    pub plan_id: i32,
+    pub side: PortSide,
+    pub cable: Option<i32>,
+    pub fiber: Option<i32>,
+    pub bundle: Option<i32>,
+}
+
+#[Object]
+impl PortUsage {
+    async fn side(&self) -> PortSide {
+        self.side
+    }
+    // Löst das Kabel/die Faser auf, falls belegt (Tombstones haben hier None)
+    async fn fiber(&self) -> Option<Fiber> {
+        if let (Some(cable), Some(bundle), Some(fiber)) = (self.cable, self.bundle, self.fiber) {
+            Some(Fiber {
+                cable,
+                bundle,
+                fiber,
+            })
+        } else {
+            None
+        }
+    }
 }
 
 #[Object]
@@ -187,33 +221,27 @@ impl Plan {
             let raw_sql = r#"
 WITH RECURSIVE affected_panels AS (
     -- 1. Basisfall (Anchor):
-    -- Finde alle Panels, die direkt mindestens einen Port in dieser plan_id haben
+    -- Finde alle Panels, die in dieser plan_id Belegungen (port_usage) haben
     SELECT p.id, p.parent_panel
     FROM panel p
     WHERE EXISTS (
         SELECT 1
-        FROM panel_port pp
-        WHERE pp.panel_id = p.id AND pp.plan_id = $1 -- Hier die plan_id übergeben
+        FROM port_usage pu
+        JOIN panel_port pp ON pu.port_id = pp.id
+        WHERE pp.panel_id = p.id AND pu.plan_id = $1
     )
-
     UNION
-    -- Wichtig: UNION (ohne ALL) entfernt Duplikate, falls mehrere Kinder denselben Parent haben
-
-    -- 2. Rekursiver Schritt:
-    -- Klettere von den gefundenen Panels immer einen Parent nach oben
+    -- 2. Rekursiver Schritt: Klettere nach oben
     SELECT parent.id, parent.parent_panel
     FROM panel parent
     INNER JOIN affected_panels child ON child.parent_panel = parent.id
 )
--- 3. Finale Ausgabe:
--- Filtere aus allen berührten Panels nur jene heraus, die keinen Parent haben (Root)
--- und lade deren komplette Daten.
+-- 3. Finale Ausgabe: Root-Panels filtern
 SELECT p.id, p.name, p.schacht_id, p.parent_panel, p.parent_order
 FROM affected_panels a
-    JOIN panel p ON a.id = p.id
+JOIN panel p ON a.id = p.id
 WHERE a.parent_panel IS NULL;
-    "#;
-
+            "#;
             Ok(sql_query(raw_sql)
                 .bind::<Integer, _>(self.id)
                 .load::<Panel>(&mut connection)
@@ -299,6 +327,7 @@ impl Schacht {
                     .eq(self.id)
                     .and(panel::parent_panel.is_null()),
             )
+            .order(panel::parent_order.asc())
             .load(&mut connection)
             .await?)
     }
@@ -481,42 +510,13 @@ impl Panel {
     }
 }
 
-impl PanelPort {
-    fn fiber1(&self) -> Option<Fiber> {
-        if let (Some(cable), Some(bundle), Some(fiber)) =
-            (self.f1_faser, self.f1_buendel, self.f1_faser)
-        {
-            Some(Fiber {
-                cable,
-                bundle,
-                fiber,
-            })
-        } else {
-            None
-        }
-    }
-    fn fiber2(&self) -> Option<Fiber> {
-        if let (Some(cable), Some(bundle), Some(fiber)) =
-            (self.f2_faser, self.f2_buendel, self.f2_faser)
-        {
-            Some(Fiber {
-                cable,
-                bundle,
-                fiber,
-            })
-        } else {
-            None
-        }
-    }
-    fn fibers(&self) -> impl Iterator<Item = Fiber> {
-        self.fiber1().into_iter().chain(self.fiber2())
-    }
-}
-
 #[Object]
 impl PanelPort {
+    async fn id(&self) -> i32 {
+        self.id
+    }
     async fn order_number(&self) -> i32 {
-        self.port_number
+        self.port_order
     }
     async fn panel(&self, ctx: &Context<'_>) -> async_graphql::Result<Panel> {
         let mut connection = get_connection(ctx).await?;
@@ -528,7 +528,7 @@ impl PanelPort {
     async fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
-    async fn connected_fibers(
+    /*async fn connected_fibers(
         &self,
         ctx: &Context<'_>,
     ) -> async_graphql::Result<Vec<FiberPathSegment>> {
@@ -560,12 +560,22 @@ impl PanelPort {
                 Ok(path)
             })
             .await
-    }
+    }*/
 }
-#[derive(Clone, PartialEq, Hash, Ord, PartialOrd, Eq, Debug, SimpleObject)]
+#[derive(Clone, PartialEq, Hash, Ord, PartialOrd, Eq, Debug)]
 struct FiberPathSegment {
-    pub fiber: Fiber,
-    pub next_port: PanelPort,
+    fiber: Fiber,
+    next_port: PanelPort,
+    plan_id: i32,
+}
+#[Object]
+impl FiberPathSegment {
+    async fn fiber(&self) -> &Fiber {
+        &self.fiber
+    }
+    async fn next_port(&self) -> &PanelPort {
+        &self.next_port
+    }
 }
 
 #[derive(Copy, Clone, PartialEq, Hash, Ord, PartialOrd, Eq, Debug)]

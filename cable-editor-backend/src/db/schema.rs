@@ -2,12 +2,16 @@ pub mod sql_types {
     #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "xml", schema = "pg_catalog"))]
     pub struct Xml;
-    #[derive(diesel::sql_types::SqlType)]
+    #[derive(diesel::query_builder::QueryId, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "port_type_enum"))]
     pub struct PortTypeEnum;
-    #[derive(diesel::sql_types::SqlType)]
+    #[derive(diesel::query_builder::QueryId, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "plan_status_enum"))]
     pub struct PlanStatusEnum;
+
+    #[derive(diesel::query_builder::QueryId, diesel::sql_types::SqlType)]
+    #[diesel(postgres_type(name = "port_side_enum"))]
+    pub struct PortSideEnum;
 }
 
 diesel::table! {
@@ -42,19 +46,13 @@ diesel::table! {
     use diesel::sql_types::*;
     use super::sql_types::PortTypeEnum;
 
-    panel_port (panel_id, port_number, plan_id) {
+    panel_port (id) {
+        id -> Int4,
         panel_id -> Int4,
-        port_number -> Int4,
+        port_order -> Int4,
         #[max_length = 20]
         label -> Nullable<Varchar>,
         port_type -> PortTypeEnum,
-        f1_kabel_id -> Nullable<Int4>,
-        f1_buendel -> Nullable<Int4>,
-        f1_faser -> Nullable<Int4>,
-        f2_kabel_id -> Nullable<Int4>,
-        f2_buendel -> Nullable<Int4>,
-        f2_faser -> Nullable<Int4>,
-        plan_id -> Int4,
     }
 }
 
@@ -67,6 +65,20 @@ diesel::table! {
         #[max_length = 50]
         name -> Varchar,
         status -> PlanStatusEnum,
+    }
+}
+
+diesel::table! {
+    use diesel::sql_types::*;
+    use super::sql_types::PortSideEnum;
+
+    port_usage (port_id, plan_id, side) {
+        port_id -> Int4,
+        plan_id -> Int4,
+        side -> PortSideEnum,
+        cable -> Nullable<Int4>,
+        fiber -> Nullable<Int4>,
+        bundle -> Nullable<Int4>,
     }
 }
 
@@ -135,6 +147,9 @@ diesel::joinable!(kabel_trasse -> trassen_mit_endpunkten (trasse));
 diesel::joinable!(schacht -> schacht_typ (typ));
 diesel::joinable!(panel -> schacht (schacht_id));
 diesel::joinable!(panel_port -> panel (panel_id));
+diesel::joinable!(port_usage -> kabel (cable));
+diesel::joinable!(port_usage -> panel_port (port_id));
+diesel::joinable!(port_usage -> plan (plan_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     kabel,
@@ -142,6 +157,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     panel,
     panel_port,
     plan,
+    port_usage,
     schacht,
     schacht_typ,
     trasse,
