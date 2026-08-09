@@ -7,6 +7,7 @@ use crate::graphql::authenticated::IdOrNew;
 use crate::graphql::authenticated::cabinet_details::{
     FlatPanelInput, PanelTreeEntry, update_panels_in_cabinet,
 };
+use crate::pages::router::{AppRoute, PanelView, PlanView};
 use crate::util::get_credentials;
 use patternfly_yew::prelude::*;
 use std::collections::{HashMap, HashSet};
@@ -15,6 +16,7 @@ use yew::html::IntoPropValue;
 use yew::platform::spawn_local;
 use yew::prelude::*;
 use yew::{Callback, Component, Context, Html, Properties, html};
+use yew_nested_router::components::Link;
 
 pub struct EditCabinet {
     loading: bool,
@@ -35,9 +37,7 @@ pub enum Msg {
     PanelsFetched(Box<[PanelTreeEntry]>),
     CreatePanel,
     PanelCreated(()),
-    UpdatePanel(i32, String, i32),
     PanelUpdated(Result<(), FrontendError>),
-    DeletePanel(i32),
     PanelDeleted(Result<(), FrontendError>),
     Error(FrontendError),
     PanelEvent(PanelEditAction),
@@ -53,7 +53,7 @@ pub struct EditCabinetProps {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
 enum PanelColumn {
     Name,
-    Id,
+    Id { modified: bool, plan_id: i32 },
     Actions,
 }
 #[derive(Clone, PartialEq, Hash, Eq)]
@@ -78,25 +78,25 @@ impl TreeTableColumn<IdOrNew, PanelEntry, PanelEditAction> for PanelColumn {
     fn render_cell(&self, context: TreeTableContext<IdOrNew, PanelEntry, PanelEditAction>) -> Cell {
         match self {
             PanelColumn::Name => {
-                let text = context
-                    .row
-                    .name
-                    .as_deref()
-                    .filter(|name| !name.is_empty())
-                    .unwrap_or("<no name>");
-                let onblur = {
-                    let callback = context.callback.clone();
-                    let id = *context.key;
-                    Callback::from(move |e: FocusEvent| {
-                        if let Some(target) = e.target_dyn_into::<HtmlElement>() {
-                            callback.emit(PanelEditAction::SetName {
-                                id,
-                                text: target.inner_text().into_boxed_str(),
-                            });
-                        }
-                    })
-                };
-                Cell::new(html!(<span {onblur} contenteditable="true" key={text}>{text}</span>))
+                let text = context.row.name.as_deref().unwrap_or_default().to_string();
+                let id = *context.key;
+                let callback = context.callback.clone();
+
+                // OnChange für das TextInput
+                let onchange = Callback::from(move |val: String| {
+                    callback.emit(PanelEditAction::SetName {
+                        id,
+                        text: val.into_boxed_str(),
+                    });
+                });
+
+                // TextInput rendern
+                Cell::new(html!(
+                    <div class="pf-v6-c-table__tree-view-text" style="width: 100%; min-width: 15em;">
+                        <TextInput value={text} onchange={onchange} />
+                    </div>
+                ))
+                //Cell::new(html!(<TextInput value={text} onchange={onchange} />))
             }
             PanelColumn::Actions => {
                 let mut buttons = Vec::new();
@@ -138,7 +138,23 @@ impl TreeTableColumn<IdOrNew, PanelEntry, PanelEditAction> for PanelColumn {
 
                 Cell::new(buttons.into_iter().collect())
             }
-            PanelColumn::Id => Cell::new(format!("{:?}", context.key).into_prop_value()),
+            PanelColumn::Id { modified, plan_id } => Cell::new(match &context.key {
+                IdOrNew::Id(id) => {
+                    if *modified {
+                        id.into_prop_value()
+                    } else {
+                        let to = AppRoute::Plan {
+                            plan_id: *plan_id,
+                            view: PlanView::Panel {
+                                id: *id,
+                                view: PanelView::Edit,
+                            },
+                        };
+                        html!(<Link<AppRoute>{to}>{id}</Link<AppRoute>>)
+                    }
+                }
+                IdOrNew::Temporary(_) => String::from("neu").into_prop_value(),
+            }),
         }
     }
 }
@@ -232,15 +248,6 @@ impl Component for EditCabinet {
                 ctx.link().send_message(Msg::FetchPanels);
                 true
             }
-            Msg::UpdatePanel(id, name, position) => {
-                let link = ctx.link().clone();
-                spawn_local(async move {
-                    // TODO: Replace with actual GraphQL mutation
-                    let result = Self::update_panel(id, name, position).await;
-                    link.send_message(Msg::PanelUpdated(result));
-                });
-                false
-            }
             Msg::PanelUpdated(result) => {
                 match result {
                     Ok(_) => {
@@ -251,15 +258,6 @@ impl Component for EditCabinet {
                     }
                 }
                 true
-            }
-            Msg::DeletePanel(id) => {
-                let link = ctx.link().clone();
-                spawn_local(async move {
-                    // TODO: Replace with actual GraphQL mutation
-                    let result = Self::delete_panel(id).await;
-                    link.send_message(Msg::PanelDeleted(result));
-                });
-                false
             }
             Msg::PanelDeleted(result) => {
                 match result {
@@ -398,9 +396,11 @@ impl Component for EditCabinet {
         if self.loading {
             html!(<Spinner />)
         } else {
+            let modified = self.has_changes();
+            let plan_id = ctx.props().plan_id;
             let header = html_nested! {
                 <TableHeader<PanelColumn>>
-                    //<TableColumn<PanelColumn> label="ID" index={PanelColumn::Id} />
+                    <TableColumn<PanelColumn> label="ID" index={PanelColumn::Id{modified,plan_id}} />
                     <TableColumn<PanelColumn> label="Name" index={PanelColumn::Name} />
                     <TableColumn<PanelColumn> index={PanelColumn::Actions} />
                 </TableHeader<PanelColumn>>
@@ -427,14 +427,15 @@ impl Component for EditCabinet {
                     />
                     <ActionGroup>
                      <Button
-                         label="Panel hinzufügen"
-                         variant={ButtonVariant::Secondary}
-                         onclick={create_panel_callback}
+                        label="Panel hinzufügen"
+                        variant={ButtonVariant::Secondary}
+                        onclick={create_panel_callback}
                      />
                      <Button
-                         label="Speichern"
-                         variant={ButtonVariant::Primary}
-                         onclick={save_callback}
+                        label="Speichern"
+                        variant={ButtonVariant::Primary}
+                        onclick={save_callback}
+                        disabled={!modified}
                      />
                  </ActionGroup>
                 </>
@@ -471,16 +472,36 @@ fn append_children(
 }
 
 impl EditCabinet {
-    // TODO: Implement actual GraphQL queries/mutations
+    fn has_changes(&self) -> bool {
+        let mut original_nodes = HashMap::new();
+        if let Some(loaded) = &self.loaded_panels {
+            flatten_loaded(loaded, None, &mut original_nodes);
+        }
 
-    async fn update_panel(id: i32, name: String, position: i32) -> Result<(), FrontendError> {
-        // Placeholder implementation
-        Ok(())
-    }
+        let mut current_nodes = Vec::new();
+        flatten_current(&self.model, self.model.roots(), None, &mut current_nodes);
 
-    async fn delete_panel(id: i32) -> Result<(), FrontendError> {
-        // Placeholder implementation
-        Ok(())
+        // 1. Schneller Check: Wurden Elemente hinzugefügt oder gelöscht?
+        if original_nodes.len() != current_nodes.len() {
+            return true;
+        }
+
+        // 2. Detail-Check: Wurde etwas verschoben oder umbenannt?
+        for node in current_nodes {
+            match node.id {
+                IdOrNew::Temporary(_) => return true,
+                IdOrNew::Id(_) => {
+                    if let Some(orig) = original_nodes.get(&node.id) {
+                        if &node != orig {
+                            return true;
+                        }
+                    } else {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
     }
 }
 

@@ -7,6 +7,7 @@ use crate::{
     },
     util::get_credentials,
 };
+use log::info;
 use patternfly_yew::prelude::{
     ActionGroup, Button, ButtonVariant, Icon, Spinner, TextInput, ToggleGroup, ToggleGroupItem,
 };
@@ -48,7 +49,7 @@ pub struct PortEditor {
     loading: bool,
     error: Option<FrontendError>,
     panel_name: Option<Box<str>>,
-    cabinet_name: Option<Box<str>>
+    cabinet_name: Option<Box<str>>,
 }
 impl PortEditor {
     fn recalculate_orders(&mut self) {
@@ -122,20 +123,56 @@ impl Component for PortEditor {
                 });
                 true
             }
-            Msg::PortsFetched{ ports, panel_name, duct_name } => {
+            Msg::PortsFetched {
+                ports,
+                panel_name,
+                duct_name,
+            } => {
                 self.ports = ports;
-                self.panel_name=panel_name;
-                self.cabinet_name=duct_name;
+                self.panel_name = panel_name;
+                self.cabinet_name = duct_name;
                 self.loading = false;
                 true
             }
             Msg::AddPort => {
                 let next_order = self.ports.iter().map(|p| p.order_number).max().unwrap_or(0) + 1;
+                let (label, port_type) = self
+                    .ports
+                    .last()
+                    .map(|last| {
+                        let text = last.label.trim();
+                        (
+                            text.rfind(|ch: char| !ch.is_numeric())
+                                .and_then(|digit_pos| {
+                                    let (prefix, number) = text.split_at(digit_pos + 1);
+                                    number.parse::<usize>().ok().map(|n| {
+                                        let new_number_str = (n + 1).to_string();
+                                        (String::from(prefix)
+                                            + &if number.starts_with('0') {
+                                                "0".repeat(number.len() - new_number_str.len())
+                                                    + new_number_str.as_ref()
+                                            } else {
+                                                new_number_str
+                                            })
+                                            .into_boxed_str()
+                                    })
+                                })
+                                .unwrap_or_else(|| format!("Port {next_order}").into_boxed_str()),
+                            last.port_type,
+                        )
+                    })
+                    .unwrap_or_else(|| {
+                        (
+                            format!("Port {next_order}").into_boxed_str(),
+                            PortType::Splice,
+                        )
+                    });
+
                 self.ports.push(EditablePort {
                     id: IdOrNew::default(),
                     order_number: next_order,
-                    label: format!("Port {}", next_order).into_boxed_str(),
-                    port_type: PortType::Splice,
+                    label,
+                    port_type,
                     deleted: false,
                 });
                 self.recalculate_orders();
@@ -310,7 +347,11 @@ impl Component for PortEditor {
                     <div class="pf-v6-c-panel__main-body">
                         <h2 class="pf-v6-c-title pf-m-xl pf-v6-u-mb-md">{title_text}</h2>
                         {error}
-                        <table class="pf-v6-c-table pf-m-grid-md" role="grid">
+                        <ActionGroup>
+                            <Button label="Port hinzufügen" variant={ButtonVariant::Secondary} onclick={ctx.link().callback(|_| Msg::AddPort)} />
+                            <Button label="Speichern" variant={ButtonVariant::Primary} onclick={ctx.link().callback(|_| Msg::Save)} />
+                        </ActionGroup>
+                        <table class="pf-v6-c-table pf-m-grid-md pf-m-compact" role="grid">
                             <thead>
                                 <tr class="pf-v6-c-table__tr">
                                     //<th class="pf-v6-c-table__th">{"Nr."}</th>
@@ -323,11 +364,6 @@ impl Component for PortEditor {
                                 { for rows }
                             </tbody>
                         </table>
-
-                        <ActionGroup>
-                            <Button label="Port hinzufügen" variant={ButtonVariant::Secondary} onclick={ctx.link().callback(|_| Msg::AddPort)} />
-                            <Button label="Speichern" variant={ButtonVariant::Primary} onclick={ctx.link().callback(|_| Msg::Save)} />
-                        </ActionGroup>
                     </div>
                 </div>
             </div>
