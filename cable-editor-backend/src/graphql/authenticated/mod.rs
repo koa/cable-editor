@@ -1,17 +1,24 @@
 pub mod planned;
 
-use crate::db::{
-    DB,
-    entity::{
-        Cable, Duct, InsertPanel, InsertPanelPort, PanelPortType, Schacht, SchachtTyp,
-        UpdateCableChangeset,
+use crate::db::entity::Panel;
+use crate::{
+    db::entity::{FiberPathNode, InsertPlan, Plan},
+    db::schema::{plan, schacht},
+    db::{
+        DB,
+        entity::{
+            Cable, Duct, InsertPanel, InsertPanelPort, PanelPortType, Schacht, SchachtTyp,
+            UpdateCableChangeset,
+        },
+        schema::{kabel, kabel_trasse, panel, panel_port},
     },
-    schema::{kabel, kabel_trasse, panel, panel_port},
 };
 use async_graphql::{Context, EmptySubscription, Enum, InputObject, Object, Schema, Union};
 use async_recursion::async_recursion;
+use diesel::BoolExpressionMethods;
 use diesel::{
     AsChangeset, ExpressionMethods, HasQuery, OptionalExtension, QueryDsl, QueryResult, dsl::max,
+    sql_query, sql_types::Integer,
 };
 use diesel_async::{
     AsyncConnection, AsyncPgConnection, RunQueryDsl,
@@ -84,6 +91,18 @@ impl Query {
         Ok(plan::table
             .find(plan_id)
             .first::<Plan>(&mut connection)
+            .await
+            .optional()?)
+    }
+    async fn panel(
+        &self,
+        ctx: &Context<'_>,
+        panel_id: i32,
+    ) -> async_graphql::Result<Option<Panel>> {
+        let mut connection = get_connection(ctx).await?;
+        Ok(panel::table
+            .find(panel_id)
+            .first(&mut connection)
             .await
             .optional()?)
     }
@@ -373,6 +392,76 @@ impl Mutation {
 
         Ok(true)
     }
+    async fn update_panel_ports(
+        &self,
+        ctx: &Context<'_>,
+        panel_id: i32,
+        changes: Vec<FlatPortInput>,
+        deletes: Vec<i32>,
+    ) -> async_graphql::Result<bool> {
+        let mut connection = get_connection(ctx).await?;
+
+        connection
+            .transaction(async move |conn| {
+                // 1. Zuerst Löschungen verarbeiten
+                if !deletes.is_empty() {
+                    diesel::delete(panel_port::table.filter(panel_port::id.eq_any(&deletes)))
+                        .execute(conn)
+                        .await?;
+                }
+
+                // 2. Erstellungen und Updates verarbeiten
+                for change in changes {
+                    // Leere Strings aus dem UI in echte SQL-NULL Werte umwandeln
+                    let label_opt = if change.label.trim().is_empty() {
+                        None
+                    } else {
+                        Some(change.label)
+                    };
+
+                    if let Some(port_id) = change.id.id {
+                        // UPDATE: Bestehender Port
+                        // Wir prüfen zur Sicherheit panel_id mit, damit niemand fremde Ports manipuliert
+                        diesel::update(
+                            panel_port::table.filter(
+                                panel_port::id
+                                    .eq(port_id)
+                                    .and(panel_port::panel_id.eq(panel_id)),
+                            ),
+                        )
+                        .set((
+                            panel_port::port_order.eq(change.order),
+                            panel_port::label.eq(label_opt),
+                            panel_port::port_type.eq(change.port_type),
+                        ))
+                        .execute(conn)
+                        .await?;
+                    } else if change.id.temporary.is_some() {
+                        // CREATE: Neuer Port
+                        let new_port = InsertPanelPort {
+                            panel_id,
+                            port_order: change.order,
+                            port_type: change.port_type,
+                            label: label_opt,
+                        };
+
+                        diesel::insert_into(panel_port::table)
+                            .values(new_port)
+                            .execute(conn)
+                            .await?;
+                    } else {
+                        return Err(async_graphql::Error::new(
+                            "Change must have either id or temporary id",
+                        ));
+                    }
+                }
+
+                Ok::<bool, async_graphql::Error>(true)
+            })
+            .await?;
+
+        Ok(true)
+    }
 }
 #[derive(AsChangeset)]
 #[diesel(table_name = panel)]
@@ -426,11 +515,6 @@ pub async fn get_connection(
     let db = ctx.data::<DB>()?;
     Ok(db.get().await?)
 }
-
-use crate::db::entity::{FiberPathNode, InsertPlan, Plan};
-use crate::db::schema::{plan, schacht};
-use diesel::sql_query;
-use diesel::sql_types::Integer;
 
 pub async fn trace_fiber_path(
     conn: &mut AsyncPgConnection,
@@ -517,4 +601,12 @@ pub struct FlatPanelInput {
     pub name: Option<String>,
     pub parent_id: Option<IdOrNewInput>,
     pub order: i32,
+}
+
+#[derive(Debug, Clone, PartialEq, InputObject)]
+pub struct FlatPortInput {
+    pub id: IdOrNewInput,
+    pub order: i32,
+    pub label: String,
+    pub port_type: PanelPortType,
 }

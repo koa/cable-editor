@@ -24,7 +24,6 @@ pub enum FrontendError {
 
 impl IntoPropValue<Html> for &FrontendError {
     fn into_prop_value(self) -> Html {
-        html!(<Alert inline=true title={""} r#type={AlertType::Danger} />);
         match self {
             FrontendError::ErrorQueryingAnonymousConnect(e) => {
                 html!(<Alert inline=true title={format!("Fehler beim anyonymen Verbindungsaufbau: {e}")} r#type={AlertType::Danger} />)

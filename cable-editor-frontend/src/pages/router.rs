@@ -3,6 +3,7 @@ use crate::graphql::authenticated::plan_details::PlanDetails;
 use crate::pages::cabinet::list::ListOfCabinets;
 use crate::pages::cable::edit::EditCable;
 use crate::pages::list_of_cables::ListOfCables;
+use crate::pages::panel::EditPanel;
 use crate::pages::planning::list::ListOfPlannings;
 use crate::util::get_credentials;
 use patternfly_yew::prelude::{Nav, NavList, NavRouterItem, Spinner};
@@ -170,6 +171,21 @@ pub enum CabinetView {
     Edit,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Target)]
+pub enum PanelView {
+    Edit,
+}
+
+impl PanelView {
+    pub fn content(&self, plan_id: i32, panel_id: i32) -> Html {
+        match self {
+            PanelView::Edit => {
+                html!(<EditPanel {plan_id} {panel_id}/>)
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Target)]
 pub enum PlanView {
     Edit,
     ListOfCabinets,
@@ -183,6 +199,11 @@ pub enum PlanView {
         id: i32,
         #[target(nested)]
         view: CableView,
+    },
+    Panel {
+        id: i32,
+        #[target(nested)]
+        view: PanelView,
     },
 }
 
@@ -209,6 +230,7 @@ impl PlanView {
             PlanView::Cabinet { id, view } => view.content(plan_id, id),
             PlanView::ListOfCables => html! {<ListOfCables/>},
             PlanView::Cable { id, view } => view.content(plan_id, id),
+            PlanView::Panel { id, view } => view.content(plan_id, id),
         }
     }
 }

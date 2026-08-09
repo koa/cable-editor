@@ -3,34 +3,18 @@ use crate::components::table::{
 };
 use crate::create_simple_dialog;
 use crate::error::FrontendError;
+use crate::graphql::authenticated::IdOrNew;
 use crate::graphql::authenticated::cabinet_details::{
     FlatPanelInput, PanelTreeEntry, update_panels_in_cabinet,
 };
 use crate::util::get_credentials;
 use patternfly_yew::prelude::*;
 use std::collections::{HashMap, HashSet};
-use uuid::Uuid;
 use web_sys::HtmlElement;
 use yew::html::IntoPropValue;
 use yew::platform::spawn_local;
 use yew::prelude::*;
 use yew::{Callback, Component, Context, Html, Properties, html};
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Ord, PartialOrd)]
-pub enum IdOrNew {
-    Id(i32),
-    Temporary(Uuid),
-}
-impl From<i32> for IdOrNew {
-    fn from(value: i32) -> Self {
-        IdOrNew::Id(value)
-    }
-}
-impl Default for IdOrNew {
-    fn default() -> Self {
-        IdOrNew::Temporary(Uuid::new_v4())
-    }
-}
 
 pub struct EditCabinet {
     loading: bool,
@@ -290,6 +274,7 @@ impl Component for EditCabinet {
             }
             Msg::Error(error) => {
                 self.error = Some(error);
+                self.loading = false;
                 true
             }
             Msg::PanelEvent(PanelEditAction::Remove(id)) => {
@@ -339,7 +324,7 @@ impl Component for EditCabinet {
                 true
             }
             Msg::Save => {
-                //self.loading = true;
+                self.loading = true;
 
                 // 1. Original-Zustand flachklopfen
                 let mut original_nodes = HashMap::new();
@@ -365,10 +350,10 @@ impl Component for EditCabinet {
                             to_create.push(node);
                         }
                         IdOrNew::Id(_) => {
-                            if let Some(orig) = original_nodes.get(&node.id) {
-                                if &node != orig {
-                                    to_update.push(node);
-                                }
+                            if let Some(orig) = original_nodes.get(&node.id)
+                                && &node != orig
+                            {
+                                to_update.push(node);
                             }
                         }
                     }
@@ -383,17 +368,12 @@ impl Component for EditCabinet {
                     }
                 }
 
-                // -- DEBUG AUSGABE --
-                log::info!("To Create: {:?}", to_create);
-                log::info!("To Update: {:?}", to_update);
-                log::info!("To Delete: {:?}", to_delete);
-
                 let mut changes = Vec::with_capacity(to_create.len() + to_update.len());
 
-                for node in to_create.into_iter().chain(to_update.into_iter()) {
+                for node in to_create.into_iter().chain(to_update) {
                     changes.push(FlatPanelInput {
                         id: node.id.into(),
-                        name: node.name.map(|s| str::into_string(s)),
+                        name: node.name.map(str::into_string),
                         parent_id: node.parent_id.map(Into::into),
                         order: node.order,
                     });
@@ -409,7 +389,7 @@ impl Component for EditCabinet {
                             .map_or_else(Msg::Error, |_| Msg::FetchPanels),
                     );
                 });
-                false
+                true
             }
         }
     }

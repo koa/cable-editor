@@ -1,7 +1,6 @@
-use crate::components::cabinet::edit::IdOrNew;
 use crate::error::FrontendError;
 use crate::graphql::authenticated::cable_details::CableDetails;
-use crate::graphql::authenticated::schema;
+use crate::graphql::authenticated::{IdOrNew, IdOrNewInput, schema};
 use crate::graphql::{mutate, query};
 use cynic::GraphQlResponse;
 use log::info;
@@ -159,30 +158,6 @@ pub async fn create_panel(
     }
 }
 
-#[derive(cynic::InputObject, Debug, Clone)]
-#[cynic(graphql_type = "IdOrNewInput")]
-pub struct IdOrNewInput {
-    pub id: Option<i32>,
-    pub temporary: Option<String>,
-}
-
-// Praktischer Helfer für die Konvertierung
-impl From<IdOrNew> for IdOrNewInput {
-    fn from(val: IdOrNew) -> Self {
-        match val {
-            IdOrNew::Id(id) => IdOrNewInput {
-                id: Some(id),
-                temporary: None,
-            },
-            IdOrNew::Temporary(uuid) => IdOrNewInput {
-                id: None,
-                temporary: Some(uuid.to_string()),
-            },
-        }
-    }
-}
-
-// Ein einziges Input-Struct für Create UND Update
 #[derive(cynic::InputObject, Debug, Clone)]
 #[cynic(graphql_type = "FlatPanelInput")]
 pub struct FlatPanelInput {

@@ -7,19 +7,18 @@ use crate::{
         },
         schema::{
             kabel, kabel_trasse, panel, panel_port, plan, schacht, schacht_typ,
-            sql_types::{PlanStatusEnum, PortTypeEnum, Xml},
+            sql_types::{PortTypeEnum, Xml},
             trasse, trassen_mit_endpunkten,
         },
     },
     graphql::authenticated::planned::PlannedPanel,
     graphql::{authenticated::get_connection, model},
 };
-use async_graphql::{Context, Enum, Object, SimpleObject};
+use async_graphql::{Context, Enum, Object};
 use diesel::{
     AsChangeset, AsExpression, Associations, BoolExpressionMethods, ExpressionMethods, FromSqlRow,
     HasQuery, Identifiable, Insertable, QueryDsl, QueryableByName, deserialize,
     deserialize::FromSql,
-    dsl::not,
     dsl::sum,
     pg::{Pg, PgValue},
     serialize,
@@ -28,7 +27,7 @@ use diesel::{
     sql_types::Integer,
     sql_types::Nullable,
 };
-use diesel_async::{AsyncConnection, RunQueryDsl};
+use diesel_async::RunQueryDsl;
 use diesel_derive_enum::DbEnum;
 use log::info;
 use postgis_diesel::{
@@ -167,8 +166,12 @@ pub enum PortSide {
 #[derive(Debug, Clone, PartialEq, Copy, Eq, DbEnum, Enum, Hash, PartialOrd, Ord)]
 #[ExistingTypePath = "PortTypeEnum"]
 pub enum PanelPortType {
+    #[db_rename = "Splice"]
     Splice,
+    #[db_rename = "Connector"]
     Connector,
+    #[db_rename = "Loop"]
+    Loop,
 }
 
 #[derive(Identifiable, Insertable, HasQuery, Associations, Debug, Clone, PartialEq)]
@@ -508,6 +511,14 @@ impl Panel {
             .load::<Panel>(&mut connection)
             .await?)
     }
+    async fn ports(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<PanelPort>> {
+        let mut connection = get_connection(ctx).await?;
+        Ok(PanelPort::query()
+            .filter(panel_port::panel_id.eq(self.id))
+            .order_by(panel_port::port_order.asc())
+            .load(&mut connection)
+            .await?)
+    }
 }
 
 #[Object]
@@ -561,6 +572,10 @@ impl PanelPort {
             })
             .await
     }*/
+    async fn port_type(&self) -> PanelPortType {
+        info!("type: {:?}", self.port_type);
+        self.port_type
+    }
 }
 #[derive(Clone, PartialEq, Hash, Ord, PartialOrd, Eq, Debug)]
 struct FiberPathSegment {
