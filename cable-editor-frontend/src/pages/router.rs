@@ -1,3 +1,4 @@
+use crate::components::panel::loop_editor::LoopPortEditor;
 use crate::error::FrontendError;
 use crate::graphql::authenticated::plan_details::PlanDetails;
 use crate::pages::cabinet::list::ListOfCabinets;
@@ -173,6 +174,7 @@ pub enum CabinetView {
 #[derive(Debug, Clone, PartialEq, Eq, Target)]
 pub enum PanelView {
     Edit,
+    Loop,
 }
 
 impl PanelView {
@@ -180,6 +182,9 @@ impl PanelView {
         match self {
             PanelView::Edit => {
                 html!(<EditPanel {plan_id} {panel_id}/>)
+            }
+            PanelView::Loop => {
+                html!(<LoopPortEditor  {plan_id} {panel_id}/>)
             }
         }
     }
