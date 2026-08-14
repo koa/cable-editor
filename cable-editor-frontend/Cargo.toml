@@ -19,7 +19,7 @@ wasm-logger = "0.2"
 web-sys = "0.3"
 thiserror = "2.0"
 
-yew-oauth2 = "0.14"
+yew-oauth2 = { version = "0.14",features = ["openid"] }
 lazy_static = "1.5"
 console_error_panic_hook = "0.1"
 

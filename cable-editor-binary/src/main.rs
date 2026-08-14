@@ -153,6 +153,7 @@ async fn main() -> Result<(), BackendError> {
     info!("Issuer: {issuer}");
     let oidc = Oidc::new(OidcConfig::Issuer(issuer.clone().into())).await?;
 
+
     let biscuit_validator = OidcBiscuitValidator {
         options: ValidationOptions {
             issuer: Validation::Validate(issuer),
