@@ -6,11 +6,31 @@ pub enum DuctDirection {
     Forward,
     Backward,
 }
+
+impl DuctDirection {
+    fn reverse(self) -> DuctDirection {
+        match self {
+            DuctDirection::Forward => DuctDirection::Backward,
+            DuctDirection::Backward => DuctDirection::Forward,
+        }
+    }
+}
+
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub struct DirectedDuct<SI: UnalignedDuct<S>, S: PartialEq> {
     pub direction: DuctDirection,
     pub duct: SI,
     phantom: PhantomData<S>,
+}
+
+impl<SI: UnalignedDuct<S>, S: PartialEq> DirectedDuct<SI, S> {
+    pub fn reverse(self) -> Self {
+        Self {
+            direction: self.direction.reverse(),
+            duct: self.duct,
+            phantom: self.phantom,
+        }
+    }
 }
 
 impl<SI: UnalignedDuct<S>, S: PartialEq> DirectedDuct<SI, S> {

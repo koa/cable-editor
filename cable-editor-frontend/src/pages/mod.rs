@@ -25,9 +25,11 @@ use yew::{
     platform::spawn_local,
 };
 use yew_nested_router::{Router, Switch};
+use yew_oauth2::hook::openid::use_auth_agent;
+use yew_oauth2::openid::OAuth2;
 use yew_oauth2::{
     agent::OAuth2Operations,
-    oauth2::{OAuth2, use_auth_agent},
+    //oauth2::{OAuth2, use_auth_agent},
     prelude::{Authenticated, NotAuthenticated},
 };
 
@@ -112,8 +114,13 @@ pub fn main_oauth2(props: &MainOAuth2Props) -> Html {
             </div>
         </MastheadBrand>
     );
+    let scopes = vec![
+        "openid".to_string(),
+        "profile".to_string(),
+        "groups".to_string(),
+    ];
     html! {
-     <OAuth2 config={oauth2_config.clone()}>
+     <OAuth2 config={oauth2_config.clone()} {scopes}>
         <BackdropViewer>
             <ToastViewer>
                 <Authenticated>

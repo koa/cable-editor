@@ -10,8 +10,7 @@ pub fn create_anonymous_schema() -> AnonymousGraphqlSchema {
 #[derive(SimpleObject)]
 struct AuthenticationData {
     client_id: &'static str,
-    token_url: String,
-    auth_url: String,
+    issuer_url: &'static str,
 }
 
 #[Object]
@@ -20,8 +19,7 @@ impl Query {
     async fn authentication(&self) -> AuthenticationData {
         AuthenticationData {
             client_id: CONFIG.auth_client_id(),
-            auth_url: CONFIG.auth_url(),
-            token_url: CONFIG.auth_token_url(),
+            issuer_url: CONFIG.auth_issuer(),
         }
     }
 }

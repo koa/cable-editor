@@ -1,19 +1,19 @@
 pub mod planned;
 
 use crate::db::entity::Panel;
+use crate::db::entity::cable::Cable;
+use crate::db::entity::schacht::{Schacht, SchachtTyp};
+use crate::graphql::context::UserInfo;
 use crate::{
     db::entity::{FiberPathNode, InsertPlan, Plan},
     db::schema::{plan, schacht},
     db::{
         DB,
-        entity::{
-            Cable, Duct, InsertPanel, InsertPanelPort, PanelPortType, Schacht, SchachtTyp,
-            UpdateCableChangeset,
-        },
+        entity::{Duct, InsertPanel, InsertPanelPort, PanelPortType, UpdateCableChangeset},
         schema::{kabel, kabel_trasse, panel, panel_port},
     },
 };
-use async_graphql::{Context, EmptySubscription, Enum, InputObject, Object, Schema, Union};
+use async_graphql::{Context, EmptySubscription, InputObject, Object, Schema};
 use async_recursion::async_recursion;
 use diesel::BoolExpressionMethods;
 use diesel::{
@@ -32,6 +32,12 @@ pub struct Query;
 
 #[Object]
 impl Query {
+    async fn current_user<'a>(
+        &self,
+        ctx: &Context<'a>,
+    ) -> Result<&'a UserInfo, async_graphql::Error> {
+        ctx.data::<UserInfo>()
+    }
     async fn list_schacht(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Schacht>> {
         //let mut connection = pool.get().await?;
         let mut connection = get_connection(ctx).await?;

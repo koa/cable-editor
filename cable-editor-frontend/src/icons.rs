@@ -17,3 +17,23 @@ pub fn icon_unlink() -> Html {
         </svg>
     }
 }
+
+#[function_component(IconFiberConnected)]
+pub fn icon_fiber_connected() -> Html {
+    html! {
+        <svg style="vertical-align: -0.125em;" fill="currentColor" height="1em" width="1em" viewBox="0 0 512 512" aria-hidden="true" role="img">
+            // Eine dicke, durchgehende horizontale Linie
+            <path d="M64 224h384v64H64z"></path>
+        </svg>
+    }
+}
+
+#[function_component(IconFiberCut)]
+pub fn icon_fiber_cut() -> Html {
+    html! {
+        <svg style="vertical-align: -0.125em;" fill="currentColor" height="1em" width="1em" viewBox="0 0 512 512" aria-hidden="true" role="img">
+            // Zwei Liniensegmente mit einem deutlichen Schnitt (Lücke) in der Mitte
+            <path d="M64 224h160v64H64zm224 0h160v64H288z"></path>
+        </svg>
+    }
+}

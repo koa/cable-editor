@@ -1,7 +1,9 @@
 use crate::components::table::ListModel;
 use crate::error::FrontendError;
-use crate::icons::IconLink;
+use crate::graphql::authenticated::connections::{CableEndInfo, CableInfo, CablePathInfo};
+use crate::icons::{IconFiberConnected, IconFiberCut, IconLink};
 use crate::icons::IconUnlink;
+use crate::util::get_credentials;
 use patternfly_yew::prelude::{
     ActionGroup, Alert, AlertType, Button, ButtonVariant, Cell, CellContext, ExpansionState,
     FormGroup, Grid, GridItem, Icon, MemoizedTableModel, SelectItemRenderer, SimpleSelect, Spinner,
@@ -10,6 +12,7 @@ use patternfly_yew::prelude::{
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::thread::scope;
 use yew::platform::spawn_local;
 use yew::{Callback, Component, Context, Html, Properties, html, html_nested};
 
@@ -20,29 +23,16 @@ enum LoopColumn {
     Actions,
 }
 
-#[derive(Clone, PartialEq, Debug, Hash, Eq)]
-pub struct CableInfo {
-    pub id: i32,
-    pub name: String,
-    pub bundle_count: i32,
-    pub fiber_count: i32,
-}
-impl SelectItemRenderer for CableInfo {
+impl SelectItemRenderer for CableEndInfo {
     type Item = i32;
 
     fn label(&self) -> String {
-        format!("{} ({}x{})", self.name, self.bundle_count, self.fiber_count)
-    }
-}
-/*impl std::fmt::Display for CableInfo {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{} ({}x{})",
-            self.name, self.bundle_count, self.fiber_count
+        format!(
+            "{} ({}x{}) -> {}",
+            self.cable.name, self.cable.bundle_count, self.cable.fiber_count, self.path.far_schacht.name
         )
     }
-}*/
+}
 
 #[derive(Clone, PartialEq, Debug, Copy)]
 pub enum FiberStatus {
@@ -67,12 +57,12 @@ impl TableEntryRenderer<LoopColumn> for FiberLoopEntry {
             LoopColumn::Status => {
                 let (icon, text, variant) = match &self.status {
                     FiberStatus::Free => (
-                        Icon::CheckCircle.as_html(),
+                        html!(<IconFiberCut/>),
                         "Frei".to_string(),
                         "var(--pf-v6-global--success-color--100)",
                     ),
                     FiberStatus::Looped => (
-                        html!(<IconLink/>),
+                        html!(<IconFiberConnected/>),
                         "Verbunden".to_string(),
                         "var(--pf-v6-global--info-color--100)",
                     ),
@@ -134,9 +124,9 @@ pub struct LoopPortEditorProps {
 }
 
 pub struct LoopPortEditor {
-    available_cables: Rc<Vec<CableInfo>>,
-    cable_a: Option<CableInfo>,
-    cable_b: Option<CableInfo>,
+    available_cables: Rc<Vec<CableEndInfo>>,
+    cable_a: Option<CableEndInfo>,
+    cable_b: Option<CableEndInfo>,
 
     // Status der Fasern (Key: (Bundle, Fiber))
     fiber_states: HashMap<(i32, i32), FiberStatus>,
@@ -148,18 +138,14 @@ pub struct LoopPortEditor {
 
 pub enum Msg {
     FetchData,
-    DataFetched {
-        cables: Vec<CableInfo>,
-        active_a: Option<i32>,
-        active_b: Option<i32>,
-        states: HashMap<(i32, i32), FiberStatus>,
-    },
+    CablesFetched(Vec<CableEndInfo>),
     SelectCableA(Option<i32>),
     SelectCableB(Option<i32>),
     ToggleFiber(i32, i32, bool),
     Save,
     Saved,
     Error(FrontendError),
+    FetchLoopStates,
 }
 
 impl Component for LoopPortEditor {
@@ -183,64 +169,42 @@ impl Component for LoopPortEditor {
             Msg::FetchData => {
                 self.loading = true;
                 let _plan_id = ctx.props().plan_id;
-                let _panel_id = ctx.props().panel_id;
+                let panel_id = ctx.props().panel_id;
                 let scope = ctx.link().clone();
 
                 spawn_local(async move {
-                    // TODO: GraphQL: Lade verfügbare Kabel im Schacht und die existierenden Loop-Belegungen des Panels für diesen Plan
-                    // Dummy-Daten:
-                    let dummy_cables = vec![
-                        CableInfo {
-                            id: 101,
-                            name: "Trunk Nord".to_string(),
-                            bundle_count: 6,
-                            fiber_count: 12,
-                        },
-                        CableInfo {
-                            id: 102,
-                            name: "Trunk Süd".to_string(),
-                            bundle_count: 6,
-                            fiber_count: 12,
-                        },
-                    ];
-
-                    let mut states = HashMap::new();
-                    states.insert((1, 1), FiberStatus::Looped); // Faser 1 ist geloopt
-                    states.insert((1, 2), FiberStatus::UsedElsewhere); // Faser 2 ist blockiert
-
-                    scope.send_message(Msg::DataFetched {
-                        cables: dummy_cables,
-                        active_a: Some(101), // Simulieren: Paar ist schon definiert
-                        active_b: Some(102),
-                        states,
-                    });
+                    scope.send_message(
+                        CableEndInfo::list_candidate_by_panel(
+                            get_credentials(&scope).as_ref(),
+                            panel_id,
+                        )
+                        .await
+                        .map_or_else(Msg::Error, Msg::CablesFetched),
+                    );
                 });
                 true
             }
-            Msg::DataFetched {
-                cables,
-                active_a,
-                active_b,
-                states,
-            } => {
-                self.available_cables = Rc::new(cables.clone());
-                self.cable_a = active_a.and_then(|id| cables.iter().find(|c| c.id == id).cloned());
-                self.cable_b = active_b.and_then(|id| cables.iter().find(|c| c.id == id).cloned());
-                self.fiber_states = states;
-                self.loading = false;
-                true
-            }
             Msg::SelectCableA(cable_id) => {
-                self.cable_a = cable_id
-                    .and_then(|id| self.available_cables.iter().find(|c| c.id == id).cloned());
+                self.cable_a = cable_id.and_then(|id| {
+                    self.available_cables
+                        .iter()
+                        .find(|c| c.cable.id == id)
+                        .cloned()
+                });
                 self.cable_b = None; // Reset B, falls A sich ändert
                 true
             }
             Msg::SelectCableB(cable_id) => {
-                self.cable_b = cable_id
-                    .and_then(|id| self.available_cables.iter().find(|c| c.id == id).cloned());
+                self.cable_b = cable_id.and_then(|id| {
+                    self.available_cables
+                        .iter()
+                        .find(|c| c.cable.id == id)
+                        .cloned()
+                });
                 // Wenn beide gewählt wurden, initialisieren wir die leeren States
                 if self.cable_a.is_some() && self.cable_b.is_some() {
+                    self.loading=true;
+                    ctx.link().send_message(Msg::FetchLoopStates);
                     self.fiber_states.clear();
                 }
                 true
@@ -286,6 +250,16 @@ impl Component for LoopPortEditor {
             Msg::Error(error) => {
                 self.error = Some(error);
                 self.loading = false;
+                true
+            }
+            Msg::CablesFetched(cables) => {
+                self.available_cables = Rc::new(cables);
+                self.loading = false;
+                self.error = None;
+                true
+            }
+            Msg::FetchLoopStates => {
+                todo!();
                 true
             }
         }
@@ -340,54 +314,60 @@ impl Component for LoopPortEditor {
 
 impl LoopPortEditor {
     fn render_cable_selection(&self, ctx: &Context<Self>) -> Html {
-        // SimpleSelect gibt uns direkt das ausgewählte CableInfo-Objekt zurück
-        let on_a_select = ctx
-            .link()
-            .callback(|c: CableInfo| Msg::SelectCableA(Some(c.id)));
-        let on_b_select = ctx
-            .link()
-            .callback(|c: CableInfo| Msg::SelectCableB(Some(c.id)));
+        let select_cable_a = {
+            let entries = (*self.available_cables).clone();
+            let onselect = ctx
+                .link()
+                .callback(|c: CableEndInfo| Msg::SelectCableA(Some(c.cable.id)));
 
-        // PatternFly erwartet die Optionen als Vec<T>
-        let options_a = (*self.available_cables).clone();
+            html! {
+                <FormGroup label="Zulauf-Kabel (A)">
+                    <SimpleSelect<CableEndInfo>
+                        {entries}
+                        selected={self.cable_a.clone()}
+                        {onselect}
+                        placeholder="- Kabel A wählen -"
+                    />
+                </FormGroup>
+            }
+        };
+        let select_cable_b = if let Some(cable_a) = &self.cable_a {
+            let entries: Vec<CableEndInfo> = self
+                .available_cables
+                .iter()
+                .filter(|c| {
+                    c.cable.id != cable_a.cable.id
+                        && c.cable.bundle_count == cable_a.cable.bundle_count
+                        && c.cable.fiber_count == cable_a.cable.fiber_count
+                })
+                .cloned()
+                .collect();
 
-        let options_b: Vec<CableInfo> = self
-            .available_cables
-            .iter()
-            .filter(|c| {
-                if let Some(a) = &self.cable_a {
-                    c.id != a.id
-                        && c.bundle_count == a.bundle_count
-                        && c.fiber_count == a.fiber_count
-                } else {
-                    true
-                }
-            })
-            .cloned()
-            .collect();
+            let onselect = ctx
+                .link()
+                .callback(|c: CableEndInfo| Msg::SelectCableB(Some(c.cable.id)));
+
+            html! {
+                <FormGroup label="Ablauf-Kabel (B)">
+                    <SimpleSelect<CableEndInfo>
+                        entries={entries}
+                        selected={self.cable_b.clone()}
+                        {onselect}
+                        placeholder="- Zugehöriges Kabel B wählen -"
+                    />
+                </FormGroup>
+            }
+        } else {
+            Html::default()
+        };
 
         html! {
             <Grid gutter=true>
                 <GridItem cols={[6]}>
-                    <FormGroup label="Zulauf-Kabel (A)">
-                        <SimpleSelect<CableInfo>
-                            entries={options_a}
-                            selected={self.cable_a.clone()}
-                            onselect={on_a_select}
-                            placeholder="- Kabel A wählen -"
-                        />
-                    </FormGroup>
+                    {select_cable_a}
                 </GridItem>
                 <GridItem cols={[6]}>
-                    <FormGroup label="Ablauf-Kabel (B)">
-                        <SimpleSelect<CableInfo>
-                            entries={options_b}
-                            selected={self.cable_b.clone()}
-                            onselect={on_b_select}
-                            //disabled={self.cable_a.is_none()}
-                            placeholder="- Zugehöriges Kabel B wählen -"
-                        />
-                    </FormGroup>
+                    {select_cable_b}
                 </GridItem>
             </Grid>
         }
@@ -397,7 +377,7 @@ impl LoopPortEditor {
         let b = self.cable_b.as_ref().unwrap();
         html! {
             <Alert title="Loop-Paar aktiv" r#type={AlertType::Info} inline=true>
-                <p>{ format!("Verbinde Fasern von '{}' direkt mit '{}' ({} Bündel à {} Fasern).", a.name, b.name, a.bundle_count, a.fiber_count) }</p>
+                <p>{ format!("Verbinde Fasern von '{}' direkt mit '{}' ({} Bündel à {} Fasern).", a.cable.name, b.cable.name, a.cable.bundle_count, a.cable.fiber_count) }</p>
             </Alert>
         }
     }
@@ -407,8 +387,8 @@ impl LoopPortEditor {
         let mut entries = Vec::new();
         let scope = ctx.link().clone();
 
-        for bundle in 1..=a.bundle_count {
-            for fiber in 1..=a.fiber_count {
+        for bundle in 1..=a.cable.bundle_count {
+            for fiber in 1..=a.cable.fiber_count {
                 let status = self
                     .fiber_states
                     .get(&(bundle, fiber))

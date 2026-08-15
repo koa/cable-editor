@@ -1,31 +1,28 @@
+pub mod cable;
 pub mod path;
-use crate::db::schema::port_usage;
+pub mod schacht;
+
 use crate::{
     db::{
         entity::path::{
             DirectedDuct, DuctAlignmentError, DuctDirection, UnalignedDuct, align_ducts,
         },
-        schema::{
-            kabel, kabel_trasse, panel, panel_port, plan, schacht, schacht_typ,
-            sql_types::{PortTypeEnum, Xml},
-            trasse, trassen_mit_endpunkten,
-        },
+        schema,
     },
-    graphql::authenticated::planned::PlannedPanel,
-    graphql::{authenticated::get_connection, model},
+    graphql::authenticated::{get_connection, planned::PlannedPanel},
 };
 use async_graphql::{Context, Enum, Object};
+use cable::Cable;
 use diesel::{
-    AsChangeset, AsExpression, Associations, BoolExpressionMethods, ExpressionMethods, FromSqlRow,
-    HasQuery, Identifiable, Insertable, QueryDsl, QueryableByName, deserialize,
+    AsChangeset, AsExpression, Associations, ExpressionMethods, FromSqlRow, HasQuery, Identifiable,
+    Insertable, QueryDsl, QueryableByName, deserialize,
     deserialize::FromSql,
     dsl::sum,
     pg::{Pg, PgValue},
     serialize,
     serialize::{IsNull, Output, ToSql},
     sql_query,
-    sql_types::Integer,
-    sql_types::Nullable,
+    sql_types::{Integer, Nullable},
 };
 use diesel_async::RunQueryDsl;
 use diesel_derive_enum::DbEnum;
@@ -34,39 +31,11 @@ use postgis_diesel::{
     sql_types::Geometry,
     types::{GeometryContainer, Point},
 };
+use schacht::Schacht;
 use std::io::Write;
 
 #[derive(Identifiable, Insertable, HasQuery, Debug, Clone, PartialEq)]
-#[diesel(table_name = schacht)]
-#[diesel(check_for_backend(diesel::pg::Pg))]
-pub struct Schacht {
-    pub id: i32,
-    pub name: Option<String>,
-    pub typ: Option<i32>,
-    pub geom: Option<Point>,
-}
-
-#[derive(HasQuery, Identifiable, Insertable, Associations, Debug, PartialEq)]
-#[diesel(belongs_to(Schacht, foreign_key = id))]
-#[diesel(table_name = schacht_typ)]
-pub struct SchachtTyp {
-    pub id: i32,
-    pub name: Option<String>,
-    pub icon: XmlDocument,
-}
-
-#[derive(Identifiable, Insertable, HasQuery, Debug, Clone, PartialEq)]
-#[diesel(table_name = kabel)]
-#[diesel(check_for_backend(diesel::pg::Pg))]
-pub struct Cable {
-    pub id: i32,
-    pub name: String,
-    pub buendel_anz: i32,
-    pub faser_anz: i32,
-}
-
-#[derive(Identifiable, Insertable, HasQuery, Debug, Clone, PartialEq)]
-#[diesel(table_name = trasse)]
+#[diesel(table_name = schema::trasse)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct Duct {
     pub id: i32,
@@ -77,17 +46,8 @@ pub struct Duct {
     pub eigenleistung: bool,
 }
 
-#[derive(Insertable, HasQuery, Debug, Clone, PartialEq)]
-#[diesel(table_name = kabel_trasse)]
-#[diesel(check_for_backend(diesel::pg::Pg))]
-pub struct CableDuct {
-    pub kabel: i32,
-    pub trasse: i32,
-    pub sequenz: i32,
-}
-
 #[derive(QueryableByName, Identifiable, Insertable, HasQuery, Debug, Clone, PartialEq)]
-#[diesel(table_name = panel)]
+#[diesel(table_name = schema::panel)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct Panel {
     pub id: i32,
@@ -98,7 +58,7 @@ pub struct Panel {
 }
 
 #[derive(QueryableByName, Identifiable, Insertable, HasQuery, Debug, Clone, PartialEq)]
-#[diesel(table_name = plan)]
+#[diesel(table_name = schema::plan)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct Plan {
     pub id: i32,
@@ -120,7 +80,7 @@ pub enum PlanStatusType {
 }
 
 #[derive(Insertable)]
-#[diesel(table_name = panel)]
+#[diesel(table_name = schema::panel)]
 pub struct InsertPanel {
     pub name: Option<String>,
     pub schacht_id: i32,
@@ -129,7 +89,7 @@ pub struct InsertPanel {
 }
 
 #[derive(Insertable)]
-#[diesel(table_name = panel_port)]
+#[diesel(table_name = schema::panel_port)]
 pub struct InsertPanelPort {
     pub panel_id: i32,
     pub port_order: i32,
@@ -138,14 +98,14 @@ pub struct InsertPanelPort {
 }
 
 #[derive(Insertable)]
-#[diesel(table_name = plan)]
+#[diesel(table_name = schema::plan)]
 pub struct InsertPlan {
     pub name: String,
 }
 #[derive(
     Identifiable, Insertable, HasQuery, Debug, Clone, PartialEq, Hash, PartialOrd, Ord, Eq,
 )]
-#[diesel(table_name = panel_port)]
+#[diesel(table_name = schema::panel_port)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 #[diesel(primary_key(id))]
 pub struct PanelPort {
@@ -164,7 +124,7 @@ pub enum PortSide {
     Back,
 }
 #[derive(Debug, Clone, PartialEq, Copy, Eq, DbEnum, Enum, Hash, PartialOrd, Ord)]
-#[ExistingTypePath = "PortTypeEnum"]
+#[ExistingTypePath = "crate::db::schema::sql_types::PortTypeEnum"]
 pub enum PanelPortType {
     #[db_rename = "Splice"]
     Splice,
@@ -175,7 +135,7 @@ pub enum PanelPortType {
 }
 
 #[derive(Identifiable, Insertable, HasQuery, Associations, Debug, Clone, PartialEq)]
-#[diesel(table_name = port_usage)]
+#[diesel(table_name = schema::port_usage)]
 #[diesel(primary_key(port_id, plan_id, side))]
 #[diesel(belongs_to(PanelPort, foreign_key = port_id))]
 pub struct PortUsage {
@@ -262,80 +222,6 @@ WHERE a.parent_panel IS NULL;
     }
 }
 
-#[Object]
-impl Schacht {
-    async fn name(&self) -> &str {
-        self.name.as_deref().unwrap_or_default()
-    }
-
-    async fn id(&self) -> i32 {
-        self.id
-    }
-    async fn typ(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<SchachtTyp>> {
-        if let Some(typ) = self.typ {
-            let mut connection = get_connection(ctx).await?;
-            Ok(Some(
-                SchachtTyp::query()
-                    .filter(schacht_typ::id.eq(typ))
-                    .get_result(&mut connection)
-                    .await?,
-            ))
-        } else {
-            Ok(None)
-        }
-    }
-    async fn position(&self) -> Option<model::Point> {
-        self.geom.map(Point::into)
-    }
-    async fn connecting_duct(
-        &self,
-        ctx: &Context<'_>,
-    ) -> async_graphql::Result<Vec<PotentialPathSegment>> {
-        let mut connection = get_connection(ctx).await?;
-
-        let ducts: Vec<Duct> = Duct::query()
-            .filter(
-                trasse::schacht_a
-                    .eq(self.id)
-                    .or(trasse::schacht_z.eq(self.id)),
-            )
-            .load(&mut connection)
-            .await?;
-
-        let mut results = Vec::new();
-        for duct in ducts {
-            let other_schacht_id = if duct.schacht_a == self.id {
-                duct.schacht_z
-            } else {
-                duct.schacht_a
-            };
-
-            let other_schacht = Schacht::query()
-                .filter(schacht::id.eq(other_schacht_id))
-                .get_result(&mut connection)
-                .await?;
-            results.push(PotentialPathSegment {
-                duct,
-                schacht: other_schacht,
-            });
-        }
-
-        Ok(results)
-    }
-    async fn root_panels(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Panel>> {
-        let mut connection = get_connection(ctx).await?;
-        Ok(Panel::query()
-            .filter(
-                panel::schacht_id
-                    .eq(self.id)
-                    .and(panel::parent_panel.is_null()),
-            )
-            .order(panel::parent_order.asc())
-            .load(&mut connection)
-            .await?)
-    }
-}
-
 struct PotentialPathSegment {
     duct: Duct,
     schacht: Schacht,
@@ -352,94 +238,6 @@ impl PotentialPathSegment {
 }
 
 #[Object]
-impl SchachtTyp {
-    async fn name(&self) -> Option<&str> {
-        self.name.as_deref()
-    }
-
-    async fn id(&self) -> i32 {
-        self.id
-    }
-    async fn icon(&self) -> &str {
-        self.icon.0.as_ref()
-    }
-    async fn list_schacht(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Schacht>> {
-        let mut connection = get_connection(ctx).await?;
-        Ok(Schacht::query()
-            .filter(schacht::typ.eq(self.id))
-            .load(&mut connection)
-            .await?)
-    }
-}
-
-#[Object]
-impl Cable {
-    async fn id(&self) -> i32 {
-        self.id
-    }
-    async fn name(&self) -> &str {
-        self.name.as_str()
-    }
-    async fn bundle_count(&self) -> u32 {
-        self.buendel_anz as u32
-    }
-    async fn fiber_count(&self) -> u32 {
-        self.faser_anz as u32
-    }
-    async fn length(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<f64>> {
-        let mut connection = get_connection(ctx).await?;
-        Ok(trassen_mit_endpunkten::table
-            .inner_join(kabel_trasse::table)
-            .filter(kabel_trasse::kabel.eq(self.id))
-            .select(sum(st_length(trassen_mit_endpunkten::geom)))
-            .first(&mut connection)
-            .await?)
-    }
-
-    async fn path(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<CablePath>> {
-        let mut connection = get_connection(ctx).await?;
-        let vec = trasse::table
-            .inner_join(kabel_trasse::table)
-            .filter(kabel_trasse::kabel.eq(self.id))
-            .order(kabel_trasse::sequenz.asc())
-            .select((trasse::all_columns, kabel_trasse::sequenz))
-            .load::<(Duct, i32)>(&mut connection)
-            .await?;
-
-        let segments = align_ducts(vec.into_iter())
-            .map(|r| {
-                r.map(|segment| CablePathSegment {
-                    far_schacht: segment.schacht_z(),
-                    segment,
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|error| match error {
-                DuctAlignmentError::NoConnectionFoundOnPair { first, second } => {
-                    async_graphql::Error::new(format!(
-                        "Duct {} and {} are not connected",
-                        first.0.id, second.0.id
-                    ))
-                }
-                DuctAlignmentError::NoConnectionFoundForSchacht { last_schacht, duct } => {
-                    async_graphql::Error::new(format!(
-                        "Duct {} don't contain schacht {}",
-                        duct.0.id, last_schacht
-                    ))
-                }
-            })?;
-        Ok(segments
-            .as_slice()
-            .first()
-            .map(|s| s.segment.schacht_a())
-            .map(|first| CablePath {
-                near_schacht: first,
-                segments,
-            }))
-    }
-}
-
-#[Object]
 impl Panel {
     async fn id(&self) -> i32 {
         self.id
@@ -450,7 +248,7 @@ impl Panel {
     async fn schacht(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
         let mut connection = get_connection(ctx).await?;
         let schacht = Schacht::query()
-            .filter(schacht::id.eq(self.schacht_id))
+            .filter(schema::schacht::id.eq(self.schacht_id))
             .first(&mut connection)
             .await?;
         Ok(schacht)
@@ -466,7 +264,7 @@ impl Panel {
             let mut connection = get_connection(ctx).await?;
             Ok(Some(
                 Panel::query()
-                    .filter(panel::id.eq(parent_panel_id))
+                    .filter(schema::panel::id.eq(parent_panel_id))
                     .first(&mut connection)
                     .await?,
             ))
@@ -477,8 +275,8 @@ impl Panel {
     async fn children(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Panel>> {
         let mut connection = get_connection(ctx).await?;
         Ok(Panel::query()
-            .filter(panel::parent_panel.eq(self.id))
-            .order(panel::parent_order.asc())
+            .filter(schema::panel::parent_panel.eq(self.id))
+            .order(schema::panel::parent_order.asc())
             .load(&mut connection)
             .await?)
     }
@@ -514,8 +312,8 @@ impl Panel {
     async fn ports(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<PanelPort>> {
         let mut connection = get_connection(ctx).await?;
         Ok(PanelPort::query()
-            .filter(panel_port::panel_id.eq(self.id))
-            .order_by(panel_port::port_order.asc())
+            .filter(schema::panel_port::panel_id.eq(self.id))
+            .order_by(schema::panel_port::port_order.asc())
             .load(&mut connection)
             .await?)
     }
@@ -532,7 +330,7 @@ impl PanelPort {
     async fn panel(&self, ctx: &Context<'_>) -> async_graphql::Result<Panel> {
         let mut connection = get_connection(ctx).await?;
         Ok(Panel::query()
-            .filter(panel::id.eq(self.panel_id))
+            .filter(schema::panel::id.eq(self.panel_id))
             .first(&mut connection)
             .await?)
     }
@@ -610,7 +408,7 @@ impl Fiber {
     async fn cable(&self, ctx: &Context<'_>) -> async_graphql::Result<Cable> {
         let mut connection = get_connection(ctx).await?;
         Ok(Cable::query()
-            .filter(kabel::id.eq(self.cable))
+            .filter(schema::kabel::id.eq(self.cable))
             .first(&mut connection)
             .await?)
     }
@@ -624,10 +422,34 @@ pub struct CablePath {
     near_schacht: i32,
     segments: Vec<CablePathSegment>,
 }
+
+impl CablePath {
+    fn reverse(self) -> CablePath {
+        if self.segments.is_empty() {
+            self
+        } else {
+            let mut next_schacht = self.near_schacht;
+            let mut new_segments = Vec::with_capacity(self.segments.len());
+            for path_segment in self.segments.into_iter() {
+                new_segments.push(CablePathSegment {
+                    segment: path_segment.segment.reverse(),
+                    far_schacht: next_schacht,
+                });
+                next_schacht = path_segment.far_schacht;
+            }
+            new_segments.reverse();
+            CablePath {
+                near_schacht: next_schacht,
+                segments: new_segments,
+            }
+        }
+    }
+}
+
 #[Object]
 impl CablePath {
     async fn near_schacht(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
-        fetch_schacht(ctx, self.near_schacht).await
+        schacht::fetch_schacht(ctx, self.near_schacht).await
     }
     async fn segments(&self) -> &[CablePathSegment] {
         self.segments.as_ref()
@@ -636,9 +458,9 @@ impl CablePath {
         let schacht_id = self
             .segments
             .last()
-            .expect("Empty path is invalid")
+            .ok_or_else(|| async_graphql::Error::new("Empty path is invalid"))?
             .far_schacht;
-        fetch_schacht(ctx, schacht_id).await
+        schacht::fetch_schacht(ctx, schacht_id).await
     }
 }
 struct CablePathSegment {
@@ -651,7 +473,7 @@ impl CablePathSegment {
         &self.segment.duct.0
     }
     async fn far_schacht(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
-        fetch_schacht(ctx, self.far_schacht).await
+        schacht::fetch_schacht(ctx, self.far_schacht).await
     }
     async fn sequence(&self) -> i32 {
         self.segment.duct.1
@@ -660,10 +482,10 @@ impl CablePathSegment {
 #[Object]
 impl DirectedDuct<Duct, i32> {
     async fn begin_schacht(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
-        fetch_schacht(ctx, self.schacht_a()).await
+        schacht::fetch_schacht(ctx, self.schacht_a()).await
     }
     async fn end_schacht(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
-        fetch_schacht(ctx, self.schacht_z()).await
+        schacht::fetch_schacht(ctx, self.schacht_z()).await
     }
     async fn begin_schacht_id(&self) -> i32 {
         self.schacht_a()
@@ -679,7 +501,7 @@ impl DirectedDuct<Duct, i32> {
     }
 }
 #[derive(AsChangeset)]
-#[diesel(table_name = kabel)]
+#[diesel(table_name = schema::kabel)]
 pub struct UpdateCableChangeset {
     pub name: Option<String>,
     pub buendel_anz: Option<i32>,
@@ -701,27 +523,20 @@ impl Duct {
         self.description.as_deref()
     }
     async fn schacht_a(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
-        fetch_schacht(ctx, self.schacht_a).await
+        schacht::fetch_schacht(ctx, self.schacht_a).await
     }
 
     async fn schacht_z(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
-        fetch_schacht(ctx, self.schacht_z).await
+        schacht::fetch_schacht(ctx, self.schacht_z).await
     }
     async fn length(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<f64>> {
         let mut connection = get_connection(ctx).await?;
-        Ok(trassen_mit_endpunkten::table
+        Ok(schema::trassen_mit_endpunkten::table
             .find(self.id)
-            .select(sum(st_length(trassen_mit_endpunkten::geom)))
+            .select(sum(st_length(schema::trassen_mit_endpunkten::geom)))
             .first(&mut connection)
             .await?)
     }
-}
-async fn fetch_schacht(ctx: &Context<'_>, id: i32) -> async_graphql::Result<Schacht> {
-    let mut connection = get_connection(ctx).await?;
-    Ok(Schacht::query()
-        .filter(schacht::id.eq(id))
-        .get_result(&mut connection)
-        .await?)
 }
 
 impl UnalignedDuct<i32> for Duct {
@@ -767,17 +582,17 @@ pub struct FiberPathNode {
 }
 
 #[derive(Debug, Clone, FromSqlRow, AsExpression, PartialOrd, PartialEq, Hash)]
-#[diesel(sql_type = Xml)]
+#[diesel(sql_type = schema::sql_types::Xml)]
 pub struct XmlDocument(pub Box<str>);
 
-impl FromSql<Xml, Pg> for XmlDocument {
+impl FromSql<schema::sql_types::Xml, Pg> for XmlDocument {
     fn from_sql(bytes: PgValue<'_>) -> deserialize::Result<Self> {
         let xml_string = std::str::from_utf8(bytes.as_bytes())?;
         Ok(XmlDocument(Box::from(xml_string)))
     }
 }
 
-impl ToSql<Xml, Pg> for XmlDocument {
+impl ToSql<schema::sql_types::Xml, Pg> for XmlDocument {
     fn to_sql<'b>(&'b self, out: &mut Output<'b, '_, Pg>) -> serialize::Result {
         out.write_all(self.0.as_bytes())?;
         Ok(IsNull::No)

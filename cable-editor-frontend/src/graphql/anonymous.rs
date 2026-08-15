@@ -1,5 +1,5 @@
 use yew::html::IntoPropValue;
-use yew_oauth2::oauth2::Config;
+use yew_oauth2::openid::Config;
 
 #[cynic::schema("anonymous")]
 mod schema {}
@@ -8,8 +8,7 @@ mod schema {}
 #[cynic(schema = "anonymous")]
 pub struct AuthenticationData {
     pub client_id: String,
-    pub token_url: String,
-    pub auth_url: String,
+    pub issuer_url: String,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
@@ -19,6 +18,6 @@ pub struct AuthenticationQuery {
 }
 impl IntoPropValue<Config> for AuthenticationData {
     fn into_prop_value(self) -> Config {
-        Config::new(self.client_id, self.auth_url, self.token_url)
+        Config::new(self.client_id, self.issuer_url)
     }
 }

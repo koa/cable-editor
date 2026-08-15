@@ -8,6 +8,7 @@ pub struct Settings {
     auth_client_id: String,
     auth_issuer: String,
     auth_token_url: Option<String>,
+    user_info_url: Option<String>,
     auth_url: Option<String>,
 
     server_port: Option<u16>,
@@ -21,16 +22,7 @@ impl Settings {
     pub fn auth_issuer(&self) -> &str {
         &self.auth_issuer
     }
-    pub fn auth_token_url(&self) -> String {
-        self.auth_token_url
-            .clone()
-            .unwrap_or_else(|| format!("{}/protocol/openid-connect/token", self.auth_issuer))
-    }
-    pub fn auth_url(&self) -> String {
-        self.auth_url
-            .clone()
-            .unwrap_or_else(|| format!("{}/protocol/openid-connect/auth", self.auth_issuer))
-    }
+
     pub fn server_port(&self) -> u16 {
         self.server_port.unwrap_or(8080)
     }

@@ -13,6 +13,7 @@ use actix_web::{
 use actix_web_prometheus::PrometheusMetricsBuilder;
 use actix_web_static_files::ResourceFiles;
 use async_graphql::futures_util::future::join_all;
+use async_graphql::{Response, ServerError};
 use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse};
 use cable_editor_backend::db::{DB, run_sync_migrations};
 use cable_editor_backend::{
@@ -24,9 +25,12 @@ use cable_editor_backend::{
         context::UserInfo,
     },
 };
+use cached::cached;
 use env_logger::Env;
 use log::{error, info, trace};
 use prometheus::{HistogramVec, histogram_opts};
+use reqwest::Client;
+use serde_json::Value;
 use static_files::Resource;
 use thiserror::Error;
 use tracing_actix_web::TracingLogger;
@@ -42,36 +46,43 @@ async fn graphql(
     let schema = &context.schema;
     let histogram = context.graphql_request_histogram.clone();
     let request = request.into_inner().data(context.pool.clone());
-    let found_user = if let Some(DecodedInfo { jwt: _jwt, payload }) = user {
-        match serde_json::from_value::<UserInfo>(payload.private.clone()) {
-            Ok(user) => Some(user),
+    let found_user = if let Some(DecodedInfo { jwt, payload: _ }) = user {
+        match fetch_user_info(jwt).await {
+            Ok(info) => info,
             Err(error) => {
-                error!("Cannot decode user info: {:#?}: {error}", payload.private);
-                None
+                return Response::from_errors(vec![ServerError::new(error.to_string(), None)])
+                    .into();
             }
         }
     } else {
-        None
+        return Response::from_errors(vec![ServerError::new("No user token found", None)]).into();
     };
     let timer = histogram
         .with_label_values(&[
             request.operation_name.as_deref().unwrap_or_default(),
-            found_user
-                .as_ref()
-                .map(|u| u.name.as_str())
-                .unwrap_or_default(),
+            found_user.preferred_username.as_ref(),
         ])
         .start_timer();
-    let request = if let Some(user) = found_user {
-        request.data(user)
-    } else {
-        request
-    };
+    let request = request.data(found_user);
 
     let response = schema.execute(request).await;
     timer.stop_and_record();
     response.into()
 }
+
+#[cached(ttl = 30)]
+async fn fetch_user_info(access_token_str: String) -> Result<UserInfo, BackendError> {
+    let client = Client::new();
+    let issuer = CONFIG.auth_issuer();
+    let response = client
+        .get(format!("{issuer}/api/oidc/userinfo"))
+        .bearer_auth(access_token_str)
+        .send()
+        .await?;
+
+    Ok(response.json().await?)
+}
+
 async fn graphql_anonymous(
     context: Data<ApplicationContext>,
     request: GraphQLRequest,
@@ -113,6 +124,8 @@ enum BackendError {
     OidcValidationError(#[from] OIDCValidationError),
     #[error("Error from backend {0:?}")]
     Backend(#[from] cable_editor_backend::error::BackendError),
+    #[error("Cannot fetch http data {0}")]
+    Reqwest(#[from] reqwest::Error),
 }
 
 #[actix_web::main]
@@ -152,7 +165,6 @@ async fn main() -> Result<(), BackendError> {
     let issuer = CONFIG.auth_issuer().to_string();
     info!("Issuer: {issuer}");
     let oidc = Oidc::new(OidcConfig::Issuer(issuer.clone().into())).await?;
-
 
     let biscuit_validator = OidcBiscuitValidator {
         options: ValidationOptions {
