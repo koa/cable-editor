@@ -1,8 +1,12 @@
+use crate::components::panel::loop_editor::LoopColumn::Fiber;
 use crate::components::table::ListModel;
 use crate::error::FrontendError;
-use crate::graphql::authenticated::connections::{CableEndInfo, CableInfo, CablePathInfo};
-use crate::icons::{IconFiberConnected, IconFiberCut, IconLink};
+use crate::graphql::authenticated::PortType;
+use crate::graphql::authenticated::connections::{
+    CableEndInfo, CableInfo, CablePathInfo, OtherSidePortUsage, PortUsage, PortUsageFiber,
+};
 use crate::icons::IconUnlink;
+use crate::icons::{IconFiberConnected, IconFiberCut, IconLink};
 use crate::util::get_credentials;
 use patternfly_yew::prelude::{
     ActionGroup, Alert, AlertType, Button, ButtonVariant, Cell, CellContext, ExpansionState,
@@ -29,7 +33,10 @@ impl SelectItemRenderer for CableEndInfo {
     fn label(&self) -> String {
         format!(
             "{} ({}x{}) -> {}",
-            self.cable.name, self.cable.bundle_count, self.cable.fiber_count, self.path.far_schacht.name
+            self.cable.name,
+            self.cable.bundle_count,
+            self.cable.fiber_count,
+            self.path.far_schacht.name
         )
     }
 }
@@ -134,18 +141,22 @@ pub struct LoopPortEditor {
     table_state: Rc<RefCell<HashMap<usize, ExpansionState<LoopColumn>>>>,
     loading: bool,
     error: Option<FrontendError>,
+    cable_a_usage: Option<Rc<HashMap<(i32, i32), PortUsage>>>,
+    cable_b_usage: Option<Rc<HashMap<(i32, i32), PortUsage>>>,
 }
 
 pub enum Msg {
     FetchData,
     CablesFetched(Vec<CableEndInfo>),
-    SelectCableA(Option<i32>),
-    SelectCableB(Option<i32>),
+    SelectCableA(i32),
+    SelectCableB(i32),
     ToggleFiber(i32, i32, bool),
     Save,
     Saved,
     Error(FrontendError),
-    FetchLoopStates,
+    PrepareLoopStates,
+    CableAUsage(Box<[PortUsage]>),
+    CableBUsage(Box<[PortUsage]>),
 }
 
 impl Component for LoopPortEditor {
@@ -161,6 +172,8 @@ impl Component for LoopPortEditor {
             table_state: Rc::default(),
             loading: true,
             error: None,
+            cable_a_usage: None,
+            cable_b_usage: None,
         }
     }
 
@@ -168,45 +181,92 @@ impl Component for LoopPortEditor {
         match msg {
             Msg::FetchData => {
                 self.loading = true;
-                let _plan_id = ctx.props().plan_id;
+                let plan_id = ctx.props().plan_id;
                 let panel_id = ctx.props().panel_id;
                 let scope = ctx.link().clone();
 
                 spawn_local(async move {
+                    let credentials = get_credentials(&scope);
                     scope.send_message(
-                        CableEndInfo::list_candidate_by_panel(
-                            get_credentials(&scope).as_ref(),
-                            panel_id,
-                        )
-                        .await
-                        .map_or_else(Msg::Error, Msg::CablesFetched),
+                        CableEndInfo::list_candidate_by_panel(credentials.as_ref(), panel_id)
+                            .await
+                            .map_or_else(Msg::Error, Msg::CablesFetched),
                     );
                 });
                 true
             }
             Msg::SelectCableA(cable_id) => {
-                self.cable_a = cable_id.and_then(|id| {
-                    self.available_cables
-                        .iter()
-                        .find(|c| c.cable.id == id)
-                        .cloned()
+                self.cable_a = self
+                    .available_cables
+                    .iter()
+                    .find(|c| c.cable.id == cable_id)
+                    .cloned();
+                let plan_id = ctx.props().plan_id;
+                let panel_id = ctx.props().panel_id;
+
+                let scope = ctx.link().clone();
+
+                spawn_local(async move {
+                    scope.send_message(
+                        PortUsage::list_usage_of_cable(
+                            get_credentials(&scope).as_ref(),
+                            plan_id,
+                            panel_id,
+                            cable_id,
+                        )
+                        .await
+                        .map(Vec::into_boxed_slice)
+                        .map_or_else(Msg::Error, Msg::CableAUsage),
+                    );
                 });
-                self.cable_b = None; // Reset B, falls A sich ändert
+                self.cable_b = None;
+                if let Some(cable_a) = &self.cable_a {
+                    let CableInfo {
+                        id,
+                        bundle_count,
+                        fiber_count,
+                        ..
+                    } = &cable_a.cable;
+                    let other_available_cables = self
+                        .available_cables
+                        .iter()
+                        .filter(|c| {
+                            c.cable.id != *id
+                                && c.cable.bundle_count == *bundle_count
+                                && c.cable.fiber_count == *fiber_count
+                        })
+                        .collect::<Vec<_>>();
+                    if let [single_remaining_cable] = other_available_cables.as_slice() {
+                        self.cable_b = Some((*single_remaining_cable).clone());
+                    }
+                }
                 true
             }
             Msg::SelectCableB(cable_id) => {
-                self.cable_b = cable_id.and_then(|id| {
-                    self.available_cables
-                        .iter()
-                        .find(|c| c.cable.id == id)
-                        .cloned()
-                });
+                self.cable_b = self
+                    .available_cables
+                    .iter()
+                    .find(|c| c.cable.id == cable_id)
+                    .cloned();
                 // Wenn beide gewählt wurden, initialisieren wir die leeren States
-                if self.cable_a.is_some() && self.cable_b.is_some() {
-                    self.loading=true;
-                    ctx.link().send_message(Msg::FetchLoopStates);
-                    self.fiber_states.clear();
-                }
+                let plan_id = ctx.props().plan_id;
+                let panel_id = ctx.props().panel_id;
+
+                let scope = ctx.link().clone();
+
+                spawn_local(async move {
+                    scope.send_message(
+                        PortUsage::list_usage_of_cable(
+                            get_credentials(&scope).as_ref(),
+                            plan_id,
+                            panel_id,
+                            cable_id,
+                        )
+                        .await
+                        .map(Vec::into_boxed_slice)
+                        .map_or_else(Msg::Error, Msg::CableBUsage),
+                    );
+                });
                 true
             }
             Msg::ToggleFiber(bundle, fiber, should_loop) => {
@@ -258,8 +318,49 @@ impl Component for LoopPortEditor {
                 self.error = None;
                 true
             }
-            Msg::FetchLoopStates => {
-                todo!();
+            Msg::PrepareLoopStates => {
+                let states = self.calculate_current_states();
+                self.fiber_states = states;
+                true
+            }
+            Msg::CableAUsage(usage) => {
+                if let Some(other_cable_id) = usage
+                    .iter()
+                    .filter(|u| u.port.port_type == PortType::Loop)
+                    .filter_map(|u| u.other_side.as_ref())
+                    .filter_map(|u| u.fiber.as_ref())
+                    .map(|c| c.cable.id)
+                    .next()
+                {
+                    ctx.link().send_message(Msg::SelectCableB(other_cable_id));
+                }
+
+                self.cable_a_usage = Some(Rc::new(
+                    usage
+                        .into_iter()
+                        .filter_map(|u| {
+                            u.fiber
+                                .as_ref()
+                                .map(|f| (f.bundle, f.fiber))
+                                .map(|k| (k, u))
+                        })
+                        .collect(),
+                ));
+                true
+            }
+            Msg::CableBUsage(usage) => {
+                self.cable_b_usage = Some(Rc::new(
+                    usage
+                        .into_iter()
+                        .filter_map(|u| {
+                            u.fiber
+                                .as_ref()
+                                .map(|f| (f.bundle, f.fiber))
+                                .map(|k| (k, u))
+                        })
+                        .collect(),
+                ));
+                ctx.link().send_message(Msg::PrepareLoopStates);
                 true
             }
         }
@@ -318,7 +419,7 @@ impl LoopPortEditor {
             let entries = (*self.available_cables).clone();
             let onselect = ctx
                 .link()
-                .callback(|c: CableEndInfo| Msg::SelectCableA(Some(c.cable.id)));
+                .callback(|c: CableEndInfo| Msg::SelectCableA(c.cable.id));
 
             html! {
                 <FormGroup label="Zulauf-Kabel (A)">
@@ -345,7 +446,7 @@ impl LoopPortEditor {
 
             let onselect = ctx
                 .link()
-                .callback(|c: CableEndInfo| Msg::SelectCableB(Some(c.cable.id)));
+                .callback(|c: CableEndInfo| Msg::SelectCableB(c.cable.id));
 
             html! {
                 <FormGroup label="Ablauf-Kabel (B)">
@@ -425,5 +526,59 @@ impl LoopPortEditor {
                 entries={table_model}
             />
         }
+    }
+
+    fn calculate_current_states(&self) -> HashMap<(i32, i32), FiberStatus> {
+        let mut states = HashMap::new();
+        if let (
+            Some(CableEndInfo {
+                cable:
+                    CableInfo {
+                        id: cable_a_id,
+                        bundle_count,
+                        fiber_count,
+                        ..
+                    },
+                ..
+            }),
+            Some(CableEndInfo {
+                cable: CableInfo { id: cable_b_id, .. },
+                ..
+            }),
+            Some(cable_a_usage),
+            Some(cable_b_usage),
+        ) = (
+            &self.cable_a,
+            &self.cable_b,
+            &self.cable_a_usage,
+            &self.cable_b_usage,
+        ) {
+            for bundle in 1..=*bundle_count {
+                for fiber in 1..=*fiber_count {
+                    let bundle_key = (bundle, fiber);
+                    let status = cable_a_usage
+                        .get(&bundle_key)
+                        .map(|c| match &c.other_side {
+                            None => FiberStatus::UsedElsewhere,
+                            Some(other) => match &other.fiber {
+                                None => FiberStatus::Free,
+                                Some(other_fiber) => {
+                                    if other_fiber.cable.id == *cable_b_id {
+                                        FiberStatus::Looped
+                                    } else {
+                                        FiberStatus::UsedElsewhere
+                                    }
+                                }
+                            },
+                        })
+                        .unwrap_or_else(|| match cable_b_usage.get(&bundle_key) {
+                            None => FiberStatus::Free,
+                            Some(_) => FiberStatus::UsedElsewhere,
+                        });
+                    states.insert(bundle_key, status);
+                }
+            }
+        }
+        states
     }
 }

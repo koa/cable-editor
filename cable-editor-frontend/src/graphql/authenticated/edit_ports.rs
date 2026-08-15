@@ -1,9 +1,7 @@
 use crate::error::FrontendError;
-use crate::graphql::authenticated::IdOrNewInput;
 use crate::graphql::authenticated::schema;
+use crate::graphql::authenticated::{IdOrNewInput, PortType};
 use crate::graphql::{mutate, query};
-use crate::util::get_credentials;
-use std::str::FromStr;
 use yew_oauth2::context::OAuth2Context;
 // Import für mutate nicht vergessen
 
@@ -29,38 +27,6 @@ struct SyncPanelPortsMutation {
     #[arguments(panelId: $panel_id, changes: $changes, deletes: $deletes)]
     pub update_panel_ports: bool,
 }
-
-// Das Enum für den Typ
-#[derive(Clone, Copy, PartialEq, Eq, Debug, strum::Display, cynic::Enum)]
-#[cynic(graphql_type = "PanelPortType")]
-pub enum PortType {
-    Splice,
-    Connector,
-    Loop,
-}
-
-/*impl PortType {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            PortType::Splice => "Splice",
-            PortType::Connector => "Connector",
-            PortType::Loop => "Loop",
-        }
-    }
-}
-
-impl FromStr for PortType {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "Splice" => Ok(PortType::Splice),
-            "Connector" => Ok(PortType::Connector),
-            "Loop" => Ok(PortType::Loop),
-            _ => Err(()),
-        }
-    }
-}*/
 
 #[derive(cynic::QueryVariables, Debug)]
 struct FetchPanelPortsVariables {

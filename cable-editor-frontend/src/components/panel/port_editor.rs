@@ -1,13 +1,13 @@
+use crate::graphql::authenticated::PortType;
 use crate::graphql::authenticated::edit_ports::FetchedPanelWithPorts;
 use crate::{
     error::FrontendError,
     graphql::authenticated::{
         IdOrNew,
-        edit_ports::{FlatPortInput, PanelPortEntry, PortType, update_panel_ports},
+        edit_ports::{FlatPortInput, update_panel_ports},
     },
     util::get_credentials,
 };
-use log::info;
 use patternfly_yew::prelude::{
     ActionGroup, Button, ButtonVariant, Icon, Spinner, TextInput, ToggleGroup, ToggleGroupItem,
 };

@@ -1,15 +1,16 @@
 pub mod planned;
 
-use crate::db::entity::Panel;
-use crate::db::entity::cable::Cable;
+use crate::db::entity::cable::{Cable, UpdateCableChangeset};
+use crate::db::entity::panel::{InsertPanel, InsertPanelPort, Panel, PanelPortType};
+use crate::db::entity::plan::{InsertPlan, Plan};
 use crate::db::entity::schacht::{Schacht, SchachtTyp};
 use crate::graphql::context::UserInfo;
 use crate::{
-    db::entity::{FiberPathNode, InsertPlan, Plan},
+    db::entity::FiberPathNode,
     db::schema::{plan, schacht},
     db::{
         DB,
-        entity::{Duct, InsertPanel, InsertPanelPort, PanelPortType, UpdateCableChangeset},
+        entity::Duct,
         schema::{kabel, kabel_trasse, panel, panel_port},
     },
 };

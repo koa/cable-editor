@@ -61,3 +61,18 @@ impl From<IdOrNew> for IdOrNewInput {
         }
     }
 }
+
+// Das Enum für den Typ
+#[derive(Clone, Copy, PartialEq, Eq, Debug, strum::Display, cynic::Enum, Hash, Ord, PartialOrd)]
+#[cynic(graphql_type = "PanelPortType")]
+pub enum PortType {
+    Splice,
+    Connector,
+    Loop,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Debug, strum::Display, cynic::Enum, Hash, Ord, PartialOrd)]
+#[cynic(graphql_type = "PortSide")]
+pub enum PortSide {
+    FRONT,
+    BACK,
+}

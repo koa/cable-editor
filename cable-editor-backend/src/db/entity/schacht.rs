@@ -1,6 +1,6 @@
 use crate::{
     db::{
-        entity::{Duct, Panel, PotentialPathSegment, XmlDocument},
+        entity::{Duct, XmlDocument},
         schema::{panel, schacht, schacht_typ, trasse},
     },
     graphql::{authenticated::get_connection, model},
@@ -8,11 +8,12 @@ use crate::{
 use async_graphql::{Context, Object};
 use diesel::{
     Associations, BoolExpressionMethods, ExpressionMethods, HasQuery, Identifiable, Insertable,
-    QueryDsl,
+    OptionalExtension, QueryDsl,
 };
 use diesel_async::RunQueryDsl;
 
-use crate::db::entity::cable::{Cable, CableEnd};
+use crate::db::entity::cable::{Cable, CableEnd, PotentialPathSegment};
+use crate::db::entity::panel::Panel;
 use crate::db::schema;
 use crate::db::schema::{kabel, kabel_trasse};
 use postgis_diesel::types::Point;
@@ -107,6 +108,22 @@ impl Schacht {
             .order(panel::parent_order.asc())
             .load(&mut connection)
             .await?)
+    }
+    async fn cable(
+        &self,
+        ctx: &Context<'_>,
+        cable_id: i32,
+    ) -> async_graphql::Result<Option<CableEnd>> {
+        let mut connection = get_connection(ctx).await?;
+        Ok(kabel::table
+            .find(cable_id)
+            .first::<Cable>(&mut connection)
+            .await
+            .optional()?
+            .map(|cable| CableEnd {
+                cable,
+                schacht: self.clone(),
+            }))
     }
     async fn cables(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<CableEnd>> {
         let mut connection = get_connection(ctx).await?;

@@ -1,4 +1,5 @@
-use crate::db::entity::{Panel, PanelPort, PanelPortType, Plan, PortSide, PortUsage};
+use crate::db::entity::panel::{Panel, PanelPort, PanelPortType, PortSide, PortUsage};
+use crate::db::entity::plan::Plan;
 use crate::db::schema::{panel, panel_port, port_usage};
 use crate::graphql::authenticated::get_connection;
 use async_graphql::{Context, Object};
@@ -8,6 +9,7 @@ use diesel::QueryDsl;
 use diesel::sql_types::Integer;
 use diesel::{ExpressionMethods, sql_query};
 use diesel_async::RunQueryDsl;
+
 pub struct PlannedPanel {
     pub panel: Panel,
     pub plan: Plan,
