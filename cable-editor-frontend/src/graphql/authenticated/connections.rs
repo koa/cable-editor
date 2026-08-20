@@ -45,6 +45,12 @@ struct ListCablesByPanelQuery {
 #[cynic(graphql_type = "Panel")]
 struct PanelData {
     pub schacht: SchachtData,
+    pub ports: Vec<PanelPortData>,
+}
+#[derive(cynic::QueryFragment, Clone, PartialEq, Debug, Hash, Eq)]
+#[cynic(graphql_type = "PanelPort")]
+struct PanelPortData {
+    id: i32
 }
 
 #[derive(cynic::QueryFragment, Clone, PartialEq, Debug, Hash, Eq)]
@@ -85,9 +91,7 @@ impl CableEndInfo {
         } else {
             Ok(response
                 .data
-                .and_then(|p| p.panel)
-                .map(|l| l.schacht)
-                .map(|cabinet| cabinet.cables)
+                .and_then(|p| p.panel.map(|l| l.schacht).map(|cabinet| cabinet.cables))
                 .unwrap_or_default())
         }
     }

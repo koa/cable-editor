@@ -1,4 +1,4 @@
-use crate::components::panel::loop_editor::LoopColumn::Fiber;
+use crate::components::fiber::FiberLabel;
 use crate::components::table::ListModel;
 use crate::error::FrontendError;
 use crate::graphql::authenticated::PortType;
@@ -17,6 +17,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::thread::scope;
+use yew::html::IntoPropValue;
 use yew::platform::spawn_local;
 use yew::{Callback, Component, Context, Html, Properties, html, html_nested};
 
@@ -60,30 +61,26 @@ struct FiberLoopEntry {
 impl TableEntryRenderer<LoopColumn> for FiberLoopEntry {
     fn render_cell(&self, context: CellContext<'_, LoopColumn>) -> Cell {
         match context.column {
-            LoopColumn::Fiber => Cell::new(format!("{}-{}", self.bundle, self.fiber).into()),
+            LoopColumn::Fiber => {
+                //Cell::new(format!("{}-{}", self.bundle, self.fiber).into_prop_value())
+                Cell::new(
+                    html!(<FiberLabel fiber={self.fiber as u8}>{format!("{}-{}", self.bundle, self.fiber)}</FiberLabel>),
+                )
+            }
             LoopColumn::Status => {
-                let (icon, text, variant) = match &self.status {
-                    FiberStatus::Free => (
-                        html!(<IconFiberCut/>),
-                        "Frei".to_string(),
-                        "var(--pf-v6-global--success-color--100)",
-                    ),
-                    FiberStatus::Looped => (
-                        html!(<IconFiberConnected/>),
-                        "Verbunden".to_string(),
-                        "var(--pf-v6-global--info-color--100)",
-                    ),
-                    FiberStatus::UsedElsewhere => (
-                        Icon::ExclamationTriangle.as_html(),
-                        "Benutzt".to_string(),
-                        "var(--pf-v6-global--warning-color--100)",
-                    ),
+                let (icon, text) = match &self.status {
+                    FiberStatus::Free => (html!(<IconFiberCut/>), "Frei".to_string()),
+                    FiberStatus::Looped => (html!(<IconFiberConnected/>), "Verbunden".to_string()),
+                    FiberStatus::UsedElsewhere => {
+                        (Icon::ExclamationTriangle.as_html(), "Benutzt".to_string())
+                    }
                 };
-                Cell::new(html! {
-                    <span style={format!("color: {}", variant)}>
+                let node = html! {
+                    <>
                         {icon} <span class="pf-v6-u-ml-sm">{text}</span>
-                    </span>
-                })
+                    </>
+                };
+                Cell::new(node)
             }
             LoopColumn::Actions => {
                 let bundle = self.bundle;
@@ -274,7 +271,8 @@ impl Component for LoopPortEditor {
                     self.fiber_states
                         .insert((bundle, fiber), FiberStatus::Looped);
                 } else {
-                    self.fiber_states.insert((bundle, fiber), FiberStatus::Free);
+                    self.fiber_states.remove(&(bundle, fiber));
+                    //self.fiber_states.insert((bundle, fiber), FiberStatus::Free);
                 }
                 true
             }
@@ -319,8 +317,7 @@ impl Component for LoopPortEditor {
                 true
             }
             Msg::PrepareLoopStates => {
-                let states = self.calculate_current_states();
-                self.fiber_states = states;
+                self.fiber_states = self.calculate_current_states();
                 true
             }
             Msg::CableAUsage(usage) => {
@@ -372,15 +369,14 @@ impl Component for LoopPortEditor {
         }
 
         let is_pair_defined = self.cable_a.is_some() && self.cable_b.is_some();
+        let unmodified = self.calculate_current_states() == self.fiber_states;
         let scope = ctx.link().clone();
 
         html! {
             <div class="pf-v6-c-panel">
                 <div class="pf-v6-c-panel__main">
                     <div class="pf-v6-c-panel__main-body">
-                        <Title size={patternfly_yew::prelude::Size::XLarge}>{"Loop-Verbindungen (Durchschaltungen)"}</Title>
-                        <p class="pf-v6-u-mb-md">{"Loopen Sie Fasern eines Kabels direkt auf ein anderes Kabel mit derselben Kapazität."}</p>
-
+                        <Title size={patternfly_yew::prelude::Size::XLarge}>{"Direktverbindungen"}</Title>
                         if let Some(err) = &self.error {
                             <Alert title={err.to_string()} r#type={AlertType::Danger} inline=true />
                         }
@@ -397,7 +393,7 @@ impl Component for LoopPortEditor {
                             </div>
                             // class="pf-v6-u-mt-md"
                             <ActionGroup>
-                                <Button label="Änderungen Speichern" variant={ButtonVariant::Primary} onclick={ctx.link().callback(|_| Msg::Save)} />
+                                <Button label="Änderungen Speichern" disabled={unmodified} variant={ButtonVariant::Primary} onclick={ctx.link().callback(|_| Msg::Save)} />
                             </ActionGroup>
                         }
                     </div>
@@ -476,9 +472,18 @@ impl LoopPortEditor {
     fn render_active_pair(&self, _ctx: &Context<Self>) -> Html {
         let a = self.cable_a.as_ref().unwrap();
         let b = self.cable_b.as_ref().unwrap();
+        let connection_description = format!(
+            "{}({})->{}({}) ({}x{}).",
+            a.path.far_schacht.name,
+            a.cable.name,
+            b.path.far_schacht.name,
+            b.cable.name,
+            a.cable.bundle_count,
+            a.cable.fiber_count
+        );
         html! {
-            <Alert title="Loop-Paar aktiv" r#type={AlertType::Info} inline=true>
-                <p>{ format!("Verbinde Fasern von '{}' direkt mit '{}' ({} Bündel à {} Fasern).", a.cable.name, b.cable.name, a.cable.bundle_count, a.cable.fiber_count) }</p>
+            <Alert title="Verbindung" r#type={AlertType::Info} inline=true>
+                <p>{connection_description}</p>
             </Alert>
         }
     }
@@ -534,25 +539,17 @@ impl LoopPortEditor {
             Some(CableEndInfo {
                 cable:
                     CableInfo {
-                        id: cable_a_id,
+                        id: cable_b_id,
                         bundle_count,
                         fiber_count,
                         ..
                     },
                 ..
             }),
-            Some(CableEndInfo {
-                cable: CableInfo { id: cable_b_id, .. },
-                ..
-            }),
             Some(cable_a_usage),
             Some(cable_b_usage),
-        ) = (
-            &self.cable_a,
-            &self.cable_b,
-            &self.cable_a_usage,
-            &self.cable_b_usage,
-        ) {
+        ) = (&self.cable_b, &self.cable_a_usage, &self.cable_b_usage)
+        {
             for bundle in 1..=*bundle_count {
                 for fiber in 1..=*fiber_count {
                     let bundle_key = (bundle, fiber);

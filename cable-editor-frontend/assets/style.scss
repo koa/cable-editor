@@ -40,3 +40,57 @@ div.pf-v6-c-page__main-container {
     margin: 0.5em;
   }
 }
+
+/* Swisscom Glasfaser CSS Variables */
+:root {
+  --swisscom-fiber-1:  #E50000;
+  --swisscom-fiber-2:  #009900;
+  --swisscom-fiber-3:  #FFCC00;
+  --swisscom-fiber-4:  #0066CC;
+  --swisscom-fiber-5:  #FFFFFF;
+  --swisscom-fiber-6:  #800080;
+  --swisscom-fiber-7:  #FF6600;
+  --swisscom-fiber-8:  #000000;
+  --swisscom-fiber-9:  #888888;
+  --swisscom-fiber-10: #8B4513;
+  --swisscom-fiber-11: #FF99CC;
+  --swisscom-fiber-12: #00CCCC;
+}
+
+/* Basis-Klasse für PatternFly 6 Integration */
+.swisscom-fiber-label {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  padding: 0.5em;
+  padding-inline: 1.5em;
+}
+
+/* Fasern 1-12 Zuweisungen (PatternFly 6 Variable Overrides) */
+.swisscom-fiber-1  { --pf-v6-c-label--BackgroundColor: var(--swisscom-fiber-1);  --pf-v6-c-label--Color: #ffffff; }
+.swisscom-fiber-2  { --pf-v6-c-label--BackgroundColor: var(--swisscom-fiber-2);  --pf-v6-c-label--Color: #ffffff; }
+.swisscom-fiber-3  { --pf-v6-c-label--BackgroundColor: var(--swisscom-fiber-3);  --pf-v6-c-label--Color: #000000; }
+.swisscom-fiber-4  { --pf-v6-c-label--BackgroundColor: var(--swisscom-fiber-4);  --pf-v6-c-label--Color: #ffffff; }
+.swisscom-fiber-5  { --pf-v6-c-label--BackgroundColor: var(--swisscom-fiber-5);  --pf-v6-c-label--Color: #000000; border-color: #cccccc; }
+.swisscom-fiber-6  { --pf-v6-c-label--BackgroundColor: var(--swisscom-fiber-6);  --pf-v6-c-label--Color: #ffffff; }
+.swisscom-fiber-7  { --pf-v6-c-label--BackgroundColor: var(--swisscom-fiber-7);  --pf-v6-c-label--Color: #ffffff; }
+.swisscom-fiber-8  { --pf-v6-c-label--BackgroundColor: var(--swisscom-fiber-8);  --pf-v6-c-label--Color: #ffffff; }
+.swisscom-fiber-9  { --pf-v6-c-label--BackgroundColor: var(--swisscom-fiber-9);  --pf-v6-c-label--Color: #ffffff; }
+.swisscom-fiber-10 { --pf-v6-c-label--BackgroundColor: var(--swisscom-fiber-10); --pf-v6-c-label--Color: #ffffff; }
+.swisscom-fiber-11 { --pf-v6-c-label--BackgroundColor: var(--swisscom-fiber-11); --pf-v6-c-label--Color: #000000; }
+.swisscom-fiber-12 { --pf-v6-c-label--BackgroundColor: var(--swisscom-fiber-12); --pf-v6-c-label--Color: #000000; }
+
+/* Ringsignierung für Fasern 13–24 */
+.swisscom-fiber-ring::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+          45deg,
+          transparent,
+          transparent 4px,
+          rgba(0, 0, 0, 0.5) 4px,
+          rgba(0, 0, 0, 0.5) 7px
+  );
+  pointer-events: none;
+}
