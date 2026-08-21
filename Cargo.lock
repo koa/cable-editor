@@ -869,6 +869,7 @@ dependencies = [
  "cynic-codegen",
  "futures",
  "gloo-utils 0.2.0",
+ "itertools 0.15.0",
  "lazy_static",
  "leaflet",
  "log",
@@ -2820,6 +2821,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b4baf93f58d4425749ca49a51c50ebab072c5df6994d08fed93541c331481dc"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3352,7 +3362,7 @@ dependencies = [
  "ed25519-dalek",
  "hmac 0.12.1",
  "http 1.5.0",
- "itertools",
+ "itertools 0.10.5",
  "log",
  "oauth2",
  "p256",

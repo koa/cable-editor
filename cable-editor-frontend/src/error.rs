@@ -20,6 +20,8 @@ pub enum FrontendError {
     Graphql(Vec<cynic::GraphQlError>),
     #[error("Plan not found: {0}")]
     PlanNotFound(i32),
+    #[error("Expected data not found")]
+    NotFound,
 }
 
 impl IntoPropValue<Html> for &FrontendError {
@@ -67,6 +69,9 @@ impl IntoPropValue<Html> for &FrontendError {
                 .collect(),
             FrontendError::PlanNotFound(id) => {
                 html!(<Alert inline=true title={format!("Plan {id} existiert nicht")} r#type={AlertType::Danger} />)
+            }
+            FrontendError::NotFound => {
+                html!(<Alert inline=true title={"Daten nicht gefunden".to_string()} r#type={AlertType::Danger} />)
             }
         }
     }

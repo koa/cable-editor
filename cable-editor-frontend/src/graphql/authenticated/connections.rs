@@ -1,196 +1,181 @@
 use crate::graphql::authenticated::{PortSide, PortType};
+use crate::graphql::mutate;
 use crate::{
     error::FrontendError,
     graphql::{authenticated::schema, query},
 };
 use yew_oauth2::context::OAuth2Context;
 
-#[derive(cynic::QueryFragment, Clone, PartialEq, Debug, Hash, Eq)]
-#[cynic(graphql_type = "Cable")]
-pub struct CableInfo {
+#[derive(cynic::QueryVariables, Debug)]
+pub struct FetchPanelUsageVariables {
+    pub plan_id: i32,
+    pub panel_id: i32,
+}
+
+#[derive(cynic::QueryFragment, Debug)]
+#[cynic(graphql_type = "Query", variables = "FetchPanelUsageVariables")]
+pub struct FetchPanelUsage {
+    #[arguments(planId: $plan_id)]
+    pub plan: Option<Plan>,
+}
+
+#[derive(cynic::QueryFragment, Debug)]
+#[cynic(variables = "FetchPanelUsageVariables")]
+pub struct Plan {
+    pub id: i32,
+    #[arguments(panelId: $panel_id)]
+    pub panel: Option<PlannedPanel>,
+}
+
+#[derive(cynic::QueryFragment, Debug, Clone)]
+#[cynic(variables = "FetchPanelUsageVariables")]
+pub struct PlannedPanel {
+    pub panel: Panel,
+    pub ports: Vec<PlannedPort>,
+}
+impl PlannedPanel {
+    pub async fn fetch_situation(
+        credentials: Option<&OAuth2Context>,
+        plan_id: i32,
+        panel_id: i32,
+    ) -> Result<Option<PlannedPanel>, FrontendError> {
+        let response = query::<FetchPanelUsage, _>(
+            FetchPanelUsageVariables { plan_id, panel_id },
+            credentials,
+        )
+        .await?;
+        if let Some(errors) = response.errors {
+            Err(FrontendError::Graphql(errors))
+        } else {
+            Ok(response.data.and_then(|p| p.plan).and_then(|p| p.panel))
+        }
+    }
+}
+
+#[derive(cynic::QueryFragment, Debug, Clone)]
+pub struct PlannedPort {
+    pub id: i32,
+    pub label: Option<String>,
+    pub order_number: i32,
+    pub port_type: PortType,
+    #[arguments(side: "FRONT")]
+    #[cynic(rename = "usage")]
+    pub front_usage: Option<PortUsageFragment>,
+    #[arguments(side: "BACK")]
+    #[cynic(rename = "usage")]
+    pub back_usage: Option<PortUsageFragment>,
+}
+
+#[derive(cynic::QueryFragment, Debug, Clone)]
+#[cynic(variables = "FetchPanelUsageVariables")]
+pub struct Panel {
+    pub schacht: Schacht,
+}
+
+#[derive(cynic::QueryFragment, Debug, Clone)]
+#[cynic(variables = "FetchPanelUsageVariables")]
+pub struct Schacht {
+    pub cables: Vec<CableEnd>,
+}
+
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
+#[cynic(variables = "FetchPanelUsageVariables")]
+pub struct CableEnd {
+    pub cable: Cable,
+    pub path: CablePath,
+    #[arguments(planId: $plan_id)]
+    pub used_ports: Vec<CableUsedPort>,
+}
+#[derive(cynic::QueryFragment, Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[cynic(graphql_type = "PortUsage")]
+pub struct CableUsedPort {
+    pub port: PortPanelId,
+    pub fiber: Option<Fiber>,
+}
+
+#[derive(cynic::QueryFragment, Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[cynic(graphql_type = "PanelPort")]
+pub struct PortPanelId {
+    pub panel: PanelId,
+}
+#[derive(cynic::QueryFragment, Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[cynic(graphql_type = "Panel")]
+pub struct PanelId {
+    pub id: i32,
+}
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct CablePath {
+    pub far_schacht: RemoteSchacht,
+}
+
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
+#[cynic(graphql_type = "Schacht")]
+pub struct RemoteSchacht {
+    pub name: String,
+}
+
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Cable {
     pub id: i32,
     pub name: String,
     pub bundle_count: i32,
     pub fiber_count: i32,
 }
-#[derive(cynic::QueryFragment, Clone, PartialEq, Debug, Hash, Eq)]
-#[cynic(graphql_type = "CableEnd")]
-pub struct CableEndInfo {
-    pub cable: CableInfo,
-    pub path: CablePathInfo,
-}
-#[derive(cynic::QueryFragment, Clone, PartialEq, Debug, Hash, Eq)]
-#[cynic(graphql_type = "CablePath")]
-pub struct CablePathInfo {
-    pub far_schacht: FarSchachtInfo,
-}
-#[derive(cynic::QueryFragment, Clone, PartialEq, Debug, Hash, Eq)]
-#[cynic(graphql_type = "Schacht")]
-pub struct FarSchachtInfo {
-    pub name: String,
-}
-#[derive(cynic::QueryFragment, Debug)]
-#[cynic(graphql_type = "Query", variables = "Variables")]
-struct ListCablesByCabinetQuery {
-    #[arguments(schachtId: $id)]
-    pub schacht: Option<SchachtData>,
-}
-#[derive(cynic::QueryFragment, Debug)]
-#[cynic(graphql_type = "Query", variables = "Variables")]
-struct ListCablesByPanelQuery {
-    #[arguments(panelId: $id)]
-    pub panel: Option<PanelData>,
-}
-#[derive(cynic::QueryFragment, Clone, PartialEq, Debug, Hash, Eq)]
-#[cynic(graphql_type = "Panel")]
-struct PanelData {
-    pub schacht: SchachtData,
-    pub ports: Vec<PanelPortData>,
-}
-#[derive(cynic::QueryFragment, Clone, PartialEq, Debug, Hash, Eq)]
-#[cynic(graphql_type = "PanelPort")]
-struct PanelPortData {
-    id: i32
-}
 
-#[derive(cynic::QueryFragment, Clone, PartialEq, Debug, Hash, Eq)]
-#[cynic(graphql_type = "Schacht")]
-struct SchachtData {
-    pub cables: Vec<CableEndInfo>,
-}
-
-#[derive(cynic::QueryVariables)]
-struct Variables {
-    id: i32,
-}
-
-impl CableEndInfo {
-    pub async fn list_by_cabinet(
-        credentials: Option<&OAuth2Context>,
-        id: i32,
-    ) -> Result<Vec<CableEndInfo>, FrontendError> {
-        let response = query::<ListCablesByCabinetQuery, _>(Variables { id }, credentials).await?;
-        if let Some(errors) = response.errors {
-            Err(FrontendError::Graphql(errors))
-        } else {
-            Ok(response
-                .data
-                .and_then(|l| l.schacht)
-                .map(|cabinet| cabinet.cables)
-                .unwrap_or_default())
-        }
-    }
-
-    pub async fn list_candidate_by_panel(
-        credentials: Option<&OAuth2Context>,
-        id: i32,
-    ) -> Result<Vec<CableEndInfo>, FrontendError> {
-        let response = query::<ListCablesByPanelQuery, _>(Variables { id }, credentials).await?;
-        if let Some(errors) = response.errors {
-            Err(FrontendError::Graphql(errors))
-        } else {
-            Ok(response
-                .data
-                .and_then(|p| p.panel.map(|l| l.schacht).map(|cabinet| cabinet.cables))
-                .unwrap_or_default())
-        }
-    }
-}
-
-#[derive(cynic::QueryFragment, Clone, PartialEq, Debug, Hash, Eq)]
+#[derive(cynic::QueryFragment, Debug, Clone)]
 #[cynic(graphql_type = "PortUsage")]
-pub struct PortUsage {
-    pub side: PortSide,
-    pub port: PortUsagePort,
-    pub fiber: Option<PortUsageFiber>,
-    pub other_side: Option<OtherSidePortUsage>,
+pub struct PortUsageFragment {
+    pub fiber: Option<Fiber>,
 }
-#[derive(cynic::QueryFragment, Clone, PartialEq, Debug, Hash, Eq)]
-#[cynic(graphql_type = "PortUsage")]
-pub struct OtherSidePortUsage {
-    pub fiber: Option<PortUsageFiber>,
-}
-#[derive(cynic::QueryFragment, Clone, PartialEq, Debug, Hash, Eq)]
-#[cynic(graphql_type = "Fiber")]
-pub struct PortUsageFiber {
-    pub cable: CableInfo,
+
+#[derive(cynic::QueryFragment, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Fiber {
     pub bundle: i32,
     pub fiber: i32,
+    pub cable: CableId,
 }
-#[derive(cynic::QueryFragment, Clone, PartialEq, Debug, Hash, Eq)]
+
+#[derive(cynic::QueryFragment, Debug, Copy, Clone, PartialEq, Eq, Hash)]
 #[cynic(graphql_type = "Cable")]
-pub struct PortUsageCable {
+pub struct CableId {
     pub id: i32,
-}
-#[derive(cynic::QueryFragment, Clone, PartialEq, Debug, Hash, Eq)]
-#[cynic(graphql_type = "PanelPort")]
-pub struct PortUsagePort {
-    pub id: i32,
-    pub port_type: PortType,
-    pub panel: PanelWithId,
-}
-#[derive(cynic::QueryFragment, Clone, PartialEq, Debug, Hash, Eq)]
-#[cynic(graphql_type = "Panel")]
-pub struct PanelWithId {
-    pub id: i32,
-}
-#[derive(cynic::QueryVariables)]
-struct PortUsageOfCableVariables {
-    plan_id: i32,
-    panel_id: i32,
-    cable_id: i32,
 }
 
-#[derive(cynic::QueryFragment, Debug)]
-#[cynic(graphql_type = "Query", variables = "PortUsageOfCableVariables")]
-struct PortUsageOfCableQuery {
-    #[arguments(panelId: $panel_id)]
-    panel: Option<PortUsagePanelQuery>,
-}
-#[derive(cynic::QueryFragment, Debug)]
-#[cynic(graphql_type = "Panel", variables = "PortUsageOfCableVariables")]
-struct PortUsagePanelQuery {
-    schacht: PortUsageSchachtQuery,
-}
-#[derive(cynic::QueryFragment, Debug)]
-#[cynic(graphql_type = "Schacht", variables = "PortUsageOfCableVariables")]
-struct PortUsageSchachtQuery {
-    #[arguments(cableId: $cable_id)]
-    cable: Option<CableEndQuery>,
-}
-#[derive(cynic::QueryFragment, Debug)]
-#[cynic(graphql_type = "CableEnd", variables = "PortUsageOfCableVariables")]
-struct CableEndQuery {
-    #[arguments(planId: $plan_id)]
-    used_ports: Vec<PortUsage>,
+#[derive(cynic::QueryVariables, Debug)]
+pub struct UpdatePortUsage {
+    pub plan_id: i32,
+    pub usages: Vec<PortUsageInput>,
 }
 
-impl PortUsage {
-    pub async fn list_usage_of_cable(
-        credentials: Option<&OAuth2Context>,
-        plan_id: i32,
-        panel_id: i32,
-        cable_id: i32,
-    ) -> Result<Vec<PortUsage>, FrontendError> {
-        let response = query::<PortUsageOfCableQuery, _>(
-            PortUsageOfCableVariables {
-                plan_id,
-                cable_id,
-                panel_id,
-            },
-            credentials,
-        )
-        .await?;
-        Ok(response
-            .data
-            .and_then(|r| r.panel)
-            .and_then(|p| p.schacht.cable)
-            .map(|c| {
-                c.used_ports
-                    .into_iter()
-                    .filter(|p| p.port.panel.id == panel_id)
-                    .collect()
-            })
-            .unwrap_or_default())
+impl UpdatePortUsage {
+    pub async fn store(self, credentials: Option<&OAuth2Context>) -> Result<(), FrontendError> {
+        let response = mutate::<UpdatePortUsageQuery, _>(self, credentials).await?;
+        if let Some(errors) = response.errors {
+            Err(FrontendError::Graphql(errors))
+        } else {
+            Ok(())
+        }
     }
+}
+
+#[derive(cynic::QueryFragment, Debug)]
+#[cynic(graphql_type = "Mutation", variables = "UpdatePortUsage")]
+struct UpdatePortUsageQuery {
+    #[arguments(changes: $usages, planId: $plan_id)]
+    #[allow(unused)]
+    set_port_usage: bool,
+}
+
+#[derive(cynic::InputObject, Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct PortUsageInput {
+    pub port_id: i32,
+    pub side: PortSide,
+    pub fiber: Option<FiberKeyInput>,
+}
+
+#[derive(cynic::InputObject, Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct FiberKeyInput {
+    pub cable_id: i32,
+    pub bundle: i32,
+    pub fiber: i32,
 }

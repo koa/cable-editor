@@ -30,7 +30,6 @@ use env_logger::Env;
 use log::{error, info, trace};
 use prometheus::{HistogramVec, histogram_opts};
 use reqwest::Client;
-use serde_json::Value;
 use static_files::Resource;
 use thiserror::Error;
 use tracing_actix_web::TracingLogger;

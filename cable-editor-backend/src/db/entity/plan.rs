@@ -1,11 +1,13 @@
-use crate::db::entity::cable::Cable;
-use crate::db::entity::panel::{Panel, PanelPort, PortSide};
+use crate::db::entity::panel::Panel;
 use crate::db::schema;
 use crate::graphql::authenticated::get_connection;
 use crate::graphql::authenticated::planned::PlannedPanel;
-use async_graphql::{Context, Enum, Object, SimpleObject};
+use async_graphql::{Context, Enum, Object};
 use diesel::sql_types::Integer;
-use diesel::{HasQuery, Identifiable, Insertable, QueryableByName, sql_query};
+use diesel::{
+    ExpressionMethods, HasQuery, Identifiable, Insertable, OptionalExtension, QueryDsl,
+    QueryableByName, sql_query,
+};
 use diesel_async::RunQueryDsl;
 use diesel_derive_enum::DbEnum;
 
@@ -50,9 +52,8 @@ impl Plan {
     }
 
     async fn root_panels(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<PlannedPanel>> {
-        {
-            let mut connection = get_connection(ctx).await?;
-            let raw_sql = r#"
+        let mut connection = get_connection(ctx).await?;
+        let raw_sql = r#"
 WITH RECURSIVE affected_panels AS (
     -- 1. Basisfall (Anchor):
     -- Finde alle Panels, die in dieser plan_id Belegungen (port_usage) haben
@@ -76,19 +77,36 @@ FROM affected_panels a
 JOIN panel p ON a.id = p.id
 WHERE a.parent_panel IS NULL;
             "#;
-            Ok(sql_query(raw_sql)
-                .bind::<Integer, _>(self.id)
-                .load::<Panel>(&mut connection)
+        Ok(sql_query(raw_sql)
+            .bind::<Integer, _>(self.id)
+            .load::<Panel>(&mut connection)
+            .await
+            .map(|panels| {
+                panels
+                    .into_iter()
+                    .map(|panel| PlannedPanel {
+                        panel,
+                        plan: self.clone(),
+                    })
+                    .collect()
+            })?)
+    }
+    async fn panel(
+        &self,
+        ctx: &Context<'_>,
+        panel_id: i32,
+    ) -> async_graphql::Result<Option<PlannedPanel>> {
+        {
+            let mut connection = get_connection(ctx).await?;
+            Ok(Panel::query()
+                .filter(schema::panel::id.eq(panel_id))
+                .first(&mut connection)
                 .await
-                .map(|panels| {
-                    panels
-                        .into_iter()
-                        .map(|panel| PlannedPanel {
-                            panel,
-                            plan: self.clone(),
-                        })
-                        .collect()
-                })?)
+                .optional()?
+                .map(|panel| PlannedPanel {
+                    panel,
+                    plan: self.clone(),
+                }))
         }
     }
 }

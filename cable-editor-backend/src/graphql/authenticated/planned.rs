@@ -2,7 +2,7 @@ use crate::db::entity::panel::{Panel, PanelPort, PanelPortType, PortSide, PortUs
 use crate::db::entity::plan::Plan;
 use crate::db::schema::{panel, panel_port, port_usage};
 use crate::graphql::authenticated::get_connection;
-use async_graphql::{Context, Object};
+use async_graphql::{Context, Object, SimpleObject};
 use diesel::HasQuery;
 use diesel::OptionalExtension;
 use diesel::QueryDsl;
@@ -21,6 +21,12 @@ pub struct PlannedPort {
 
 #[Object]
 impl PlannedPanel {
+    async fn panel(&self) -> &Panel {
+        &self.panel
+    }
+    async fn plan(&self) -> &Plan {
+        &self.plan
+    }
     async fn parent(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<PlannedPanel>> {
         if let Some(parent_panel_id) = self.panel.parent_panel {
             let mut connection = get_connection(ctx).await?;
