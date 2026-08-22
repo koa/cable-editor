@@ -1,22 +1,27 @@
-use crate::components::cabinet::edit::EditCabinet;
-use crate::components::table::ListModel;
-use crate::error::FrontendError;
-use crate::graphql::authenticated::list_schacht::{SchachtListEntry, fetch_schacht_list};
-use crate::util::get_credentials;
+use crate::{
+    components::{cabinet::edit::EditCabinet, table::ListModel},
+    error::FrontendError,
+    graphql::authenticated::list_schacht::{SchachtListEntry, fetch_schacht_list},
+    util::get_credentials,
+};
 use patternfly_yew::prelude::{
     Cell, CellContext, ExpansionState, MemoizedTableModel, Span, Spinner, Table, TableColumn,
     TableEntryRenderer, TableGridMode, TableHeader, TableHeaderSortBy, TableMode,
 };
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::collections::hash_map::Entry;
-use std::rc::Rc;
-use yew::html::{IntoPropValue, Scope};
-use yew::platform::spawn_local;
-use yew::{Component, Context, Html, Properties, html, html_nested};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, hash_map::Entry},
+    rc::Rc,
+};
+use yew::{
+    Component, Context, Html, Properties, html,
+    html::{IntoPropValue, Scope},
+    html_nested,
+    platform::spawn_local,
+};
 
 pub struct ListOfCabinets {
-    data: Option<Rc<Vec<SchachtListEntry>>>,
+    data: Option<Rc<Vec<(SchachtListEntry, i32)>>>,
     error: Option<FrontendError>,
     sort: Option<TableHeaderSortBy<Columns>>,
     table_state: Rc<RefCell<HashMap<usize, ExpansionState<Columns>>>>,
@@ -55,7 +60,8 @@ impl Component for ListOfCabinets {
         match msg {
             Msg::Data(data) => {
                 self.error = None;
-                self.data = Some(Rc::new(data.into_vec()));
+                let plan_id = ctx.props().plan_id;
+                self.data = Some(Rc::new(data.into_iter().map(|e| (e, plan_id)).collect()));
                 true
             }
             Msg::Error(error) => {
@@ -97,15 +103,15 @@ impl Component for ListOfCabinets {
 
             let header = html_nested! {
                 <TableHeader<Columns>>
-                    <TableColumn<Columns> label="Name" index={Columns::Name} onsort={onsort.clone()} sortby={(self.sort.clone())}/>
-                    <TableColumn<Columns> label="Panels" expandable=true index={Columns::Cabinets} onsort={onsort.clone()} sortby={(self.sort.clone())}/>
+                    <TableColumn<Columns> label="Name" index={Columns::Name} onsort={onsort.clone()} sortby={self.sort}/>
+                    <TableColumn<Columns> label="Panels" expandable=true index={Columns::Cabinets} onsort={onsort.clone()} sortby={self.sort}/>
                 </TableHeader<Columns>>
             };
             let onexpand = ctx
                 .link()
                 .callback(|(row, state)| Msg::SetExpandState { row, state });
             html! {
-                <Table<Columns, ListModel<Columns, MemoizedTableModel<SchachtListEntry>>>
+                <Table<Columns, ListModel<Columns, MemoizedTableModel<(SchachtListEntry,i32)>>>
                     mode={TableMode::Expandable}
                     grid={TableGridMode::Medium}
                     caption="Schächte"
@@ -142,11 +148,11 @@ enum Columns {
     Cabinets,
 }
 
-impl TableEntryRenderer<Columns> for SchachtListEntry {
+impl TableEntryRenderer<Columns> for (SchachtListEntry, i32) {
     fn render_cell(&self, context: CellContext<'_, Columns>) -> Cell {
         match context.column {
-            Columns::Name => Cell::new(self.name.as_str().into_prop_value()),
-            Columns::Cabinets => Cell::new(self.root_panels.len().into_prop_value()),
+            Columns::Name => Cell::new(self.0.name.as_str().into_prop_value()),
+            Columns::Cabinets => Cell::new(self.0.root_panels.len().into_prop_value()),
         }
     }
 
@@ -156,7 +162,9 @@ impl TableEntryRenderer<Columns> for SchachtListEntry {
                 vec![Span::max(html!("Can't expand"))]
             }
             Columns::Cabinets => {
-                vec![Span::max(html!(<EditCabinet cabinet_id={self.id}/>))]
+                vec![Span::max(
+                    html!(<EditCabinet cabinet_id={self.0.id} plan_id={self.1}/>),
+                )]
             }
         }
     }

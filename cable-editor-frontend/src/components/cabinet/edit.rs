@@ -36,6 +36,8 @@ pub struct EditCabinet {
 pub struct PanelEntry {
     pub id: IdOrNew,
     pub name: Option<Box<str>>,
+    pub has_loop: bool,
+    pub port_count: usize,
 }
 
 pub enum Msg {
@@ -48,7 +50,6 @@ pub enum Msg {
 }
 #[derive(PartialEq, Properties)]
 pub struct EditCabinetProps {
-    #[prop_or_default]
     pub plan_id: i32,
     pub cabinet_id: i32,
 }
@@ -147,16 +148,20 @@ impl TreeTableColumn<IdOrNew, PanelEntry, PanelEditAction> for PanelColumn {
                         },
                     };
                     buttons.push(
-                        html!(<Link<AppRoute>{to} class={class.clone()}>{"Ports"}</Link<AppRoute>>),
+                        html!(<Link<AppRoute>{to} class={class.clone()}>{format!("{} Ports ändern",context.row.port_count)}</Link<AppRoute>>),
                     );
-                    let to = AppRoute::Plan {
-                        plan_id: *plan_id,
-                        view: PlanView::Panel {
-                            id: *id,
-                            view: PanelView::Loop,
-                        },
-                    };
-                    buttons.push(html!(<Link<AppRoute>{to} {class}>{"Loop"}</Link<AppRoute>>));
+                    if *plan_id > 0 {
+                        if context.row.has_loop {
+                            let to = AppRoute::Plan {
+                                plan_id: *plan_id,
+                                view: PlanView::Panel {
+                                    id: *id,
+                                    view: PanelView::Loop,
+                                },
+                            };
+                            buttons.push(html!(<Link<AppRoute>{to} {class}>{"Loops Verbinden"}</Link<AppRoute>>));
+                        }
+                    }
                 }
 
                 Cell::new(buttons.into_iter().collect()).text_modifier(TextModifier::NoWrap)
@@ -219,13 +224,22 @@ impl Component for EditCabinet {
                 let mut entries = HashMap::new();
                 let mut child_rels = HashMap::new();
                 let mut roots = Vec::with_capacity(panel_entries.len());
-                for PanelTreeEntry { id, name, children } in panel_entries.iter().cloned() {
+                for PanelTreeEntry {
+                    id,
+                    name,
+                    children,
+                    has_loop,
+                    port_count,
+                } in panel_entries.iter().cloned()
+                {
                     roots.push(id.into());
                     entries.insert(
                         id.into(),
                         PanelEntry {
                             id: id.into(),
                             name,
+                            has_loop,
+                            port_count,
                         },
                     );
                     append_children(&mut entries, &mut child_rels, id.into(), children);
@@ -253,6 +267,8 @@ impl Component for EditCabinet {
                         PanelEntry {
                             id: new_id,
                             name: None,
+                            has_loop: false,
+                            port_count: 0,
                         },
                     )))
                     .collect();
@@ -454,13 +470,22 @@ fn append_children(
     children: Box<[PanelTreeEntry]>,
 ) {
     let mut child_ids = Vec::with_capacity(children.len());
-    for PanelTreeEntry { id, name, children } in children {
+    for PanelTreeEntry {
+        id,
+        name,
+        children,
+        has_loop,
+        port_count,
+    } in children
+    {
         child_ids.push(id.into());
         entries.insert(
             id.into(),
             PanelEntry {
                 id: id.into(),
                 name,
+                has_loop,
+                port_count,
             },
         );
         append_children(entries, child_rels, id.into(), children);

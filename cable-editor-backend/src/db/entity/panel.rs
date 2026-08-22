@@ -1,6 +1,5 @@
-use crate::db::connect;
-use crate::db::entity::plan::Plan;
 use crate::{
+    db::entity::plan::Plan,
     db::{
         entity::{cable::Fiber, schacht::Schacht},
         schema,
@@ -8,6 +7,7 @@ use crate::{
     graphql::authenticated::get_connection,
 };
 use async_graphql::{Context, Enum, Object};
+use diesel::pg::Pg;
 use diesel::{
     Associations, BoolExpressionMethods, ExpressionMethods, HasQuery, Identifiable, Insertable,
     OptionalExtension, QueryDsl, QueryableByName, sql_query, sql_types::Integer,
@@ -224,13 +224,44 @@ impl Panel {
             .load::<Panel>(&mut connection)
             .await?)
     }
-    async fn ports(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<PanelPort>> {
+    async fn ports(
+        &self,
+        ctx: &Context<'_>,
+        port_type: Option<PanelPortType>,
+    ) -> async_graphql::Result<Vec<PanelPort>> {
         let mut connection = get_connection(ctx).await?;
-        Ok(PanelPort::query()
-            .filter(schema::panel_port::panel_id.eq(self.id))
-            .order_by(schema::panel_port::port_order.asc())
-            .load(&mut connection)
-            .await?)
+        let filter = schema::panel_port::panel_id.eq(self.id);
+        Ok(if let Some(pt) = port_type {
+            PanelPort::query()
+                .filter(filter.and(schema::panel_port::port_type.eq(pt)))
+                .order_by(schema::panel_port::port_order.asc())
+                .load(&mut connection)
+                .await?
+        } else {
+            PanelPort::query()
+                .filter(filter)
+                .order_by(schema::panel_port::port_order.asc())
+                .load(&mut connection)
+                .await?
+        })
+    }
+    async fn count_ports(
+        &self,
+        ctx: &Context<'_>,
+        port_type: Option<PanelPortType>,
+    ) -> async_graphql::Result<i64> {
+        let mut connection = get_connection(ctx).await?;
+        let statement =
+            <PanelPort as HasQuery<Pg>>::query().filter(schema::panel_port::panel_id.eq(self.id));
+        Ok(if let Some(pt) = port_type {
+            statement
+                .filter(schema::panel_port::port_type.eq(pt))
+                .count()
+                .get_result(&mut connection)
+                .await?
+        } else {
+            statement.count().get_result(&mut connection).await?
+        })
     }
 }
 

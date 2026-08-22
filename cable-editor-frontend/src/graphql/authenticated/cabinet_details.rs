@@ -30,6 +30,10 @@ struct RootPanelEntry {
     id: i32,
     name: Option<String>,
     all_children_recursive: Vec<ChildPanelEntry>,
+    count_ports: i32,
+    #[arguments(portType: "LOOP")]
+    #[cynic(rename = "countPorts", alias)]
+    count_loop_ports: i32,
 }
 #[derive(cynic::QueryFragment, Debug)]
 #[cynic(graphql_type = "Panel")]
@@ -38,6 +42,10 @@ struct ChildPanelEntry {
     name: Option<String>,
     parent_id: Option<i32>,
     parent_order: Option<i32>,
+    count_ports: i32,
+    #[arguments(portType: "LOOP")]
+    #[cynic(rename = "countPorts", alias)]
+    count_loop_ports: i32,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -45,6 +53,13 @@ pub struct PanelTreeEntry {
     pub id: i32,
     pub name: Option<Box<str>>,
     pub children: Box<[PanelTreeEntry]>,
+    pub has_loop: bool,
+    pub port_count: usize,
+}
+struct PanelEntryData {
+    name: Option<Box<str>>,
+    has_loop: bool,
+    port_count: usize,
 }
 
 impl PanelTreeEntry {
@@ -56,7 +71,7 @@ impl PanelTreeEntry {
         if let Some(errors) = response.errors {
             Err(FrontendError::Graphql(errors))
         } else {
-            let mut names = HashMap::<i32, Option<Box<str>>>::new();
+            let mut panel_data = HashMap::new();
             let mut children = HashMap::<i32, BTreeMap<i32, i32>>::new();
             let mut is_child = HashSet::new();
             for root_entry in response
@@ -65,9 +80,7 @@ impl PanelTreeEntry {
                 .map(|s| s.root_panels)
                 .unwrap_or_default()
             {
-                names.insert(root_entry.id, root_entry.name.map(String::into_boxed_str));
                 for child in root_entry.all_children_recursive {
-                    names.insert(child.id, child.name.map(String::into_boxed_str));
                     if let ChildPanelEntry {
                         id,
                         parent_id: Some(parent_id),
@@ -81,9 +94,25 @@ impl PanelTreeEntry {
                             .or_default()
                             .insert(parent_order, id);
                     }
+                    panel_data.insert(
+                        child.id,
+                        PanelEntryData {
+                            name: child.name.map(|v| v.into_boxed_str()),
+                            has_loop: child.count_loop_ports > 0,
+                            port_count: child.count_ports as usize,
+                        },
+                    );
                 }
+                panel_data.insert(
+                    root_entry.id,
+                    PanelEntryData {
+                        name: root_entry.name.map(|v| v.into_boxed_str()),
+                        has_loop: root_entry.count_loop_ports > 0,
+                        port_count: root_entry.count_ports as usize,
+                    },
+                );
             }
-            let roots = names
+            let roots = panel_data
                 .keys()
                 .copied()
                 .filter(|id| !is_child.contains(id))
@@ -91,12 +120,12 @@ impl PanelTreeEntry {
             info!("Roots: {roots:?}");
             let data = roots
                 .into_iter()
-                .map(|root_id| collect_children(root_id, &mut children, &mut names))
+                .map(|root_id| collect_children(root_id, &mut children, &mut panel_data))
                 .collect();
             info!("Data: {data:?}");
             info!("Children: {children:?}");
             assert!(children.is_empty());
-            assert!(names.is_empty());
+            assert!(panel_data.is_empty());
             Ok(data)
         }
     }
@@ -105,18 +134,29 @@ impl PanelTreeEntry {
 fn collect_children(
     entry_id: i32,
     children: &mut HashMap<i32, BTreeMap<i32, i32>>,
-    names: &mut HashMap<i32, Option<Box<str>>>,
+    panel_data: &mut HashMap<i32, PanelEntryData>,
 ) -> PanelTreeEntry {
     let child_map = children.remove(&entry_id).unwrap_or_default();
-    let name = names.remove(&entry_id).flatten();
     let mut child_results = Vec::with_capacity(child_map.len());
     for child_id in child_map.into_values() {
-        child_results.push(collect_children(child_id, children, names));
+        child_results.push(collect_children(child_id, children, panel_data));
     }
-    PanelTreeEntry {
-        id: entry_id,
-        name,
-        children: child_results.into_boxed_slice(),
+    if let Some(entry_data) = panel_data.remove(&entry_id) {
+        PanelTreeEntry {
+            id: entry_id,
+            name: entry_data.name,
+            children: child_results.into_boxed_slice(),
+            has_loop: entry_data.has_loop,
+            port_count: entry_data.port_count,
+        }
+    } else {
+        PanelTreeEntry {
+            id: entry_id,
+            name: None,
+            children: child_results.into_boxed_slice(),
+            has_loop: false,
+            port_count: 0,
+        }
     }
 }
 #[derive(cynic::InputObject, Debug)]
