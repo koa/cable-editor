@@ -64,6 +64,12 @@ pub struct PlannedPort {
     #[arguments(side: "BACK")]
     #[cynic(rename = "usage")]
     pub back_usage: Option<PortUsageFragment>,
+    #[arguments(side: "FRONT")]
+    #[cynic(rename = "currentUsage")]
+    pub current_front_usage: Option<PortUsageFragment>,
+    #[arguments(side: "BACK")]
+    #[cynic(rename = "currentUsage")]
+    pub current_back_usage: Option<PortUsageFragment>,
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone)]
@@ -91,6 +97,7 @@ pub struct CableEnd {
 pub struct CableUsedPort {
     pub port: PortPanelId,
     pub fiber: Option<Fiber>,
+    pub modified_in_plan: bool,
 }
 
 #[derive(cynic::QueryFragment, Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -126,6 +133,7 @@ pub struct Cable {
 #[cynic(graphql_type = "PortUsage")]
 pub struct PortUsageFragment {
     pub fiber: Option<Fiber>,
+    pub modified_in_plan: bool,
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -170,7 +178,14 @@ struct UpdatePortUsageQuery {
 pub struct PortUsageInput {
     pub port_id: i32,
     pub side: PortSide,
-    pub fiber: Option<FiberKeyInput>,
+    pub fiber: PortUsageUpdateAction,
+}
+
+#[derive(cynic::InputObject, Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum PortUsageUpdateAction {
+    Remove(bool),
+    Reset(bool),
+    Attach(FiberKeyInput),
 }
 
 #[derive(cynic::InputObject, Debug, Copy, Clone, PartialEq, Eq, Hash)]

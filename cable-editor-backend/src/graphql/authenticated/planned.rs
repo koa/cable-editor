@@ -158,13 +158,22 @@ impl PlannedPort {
 
         // Wenn ein Eintrag existiert, prüfen wir, ob es ein "Tombstone" (Löschung) ist.
         // Falls cable == None ist, wurde die Faser in diesem Plan absichtlich entfernt.
-        if let Some(u) = usage {
-            if u.cable.is_none() {
-                return Ok(None);
-            }
-            return Ok(Some(u));
-        }
+        Ok(usage.filter(|u| u.fiber.is_some()))
+    }
+    async fn current_usage(
+        &self,
+        ctx: &Context<'_>,
+        side: PortSide,
+    ) -> async_graphql::Result<Option<PortUsage>> {
+        let mut connection = get_connection(ctx).await?;
 
-        Ok(None)
+        let usage = port_usage::table
+            .filter(port_usage::port_id.eq(self.port.id))
+            .filter(port_usage::side.eq(side))
+            .filter(port_usage::plan_id.eq(0))
+            .first::<PortUsage>(&mut connection)
+            .await
+            .optional()?;
+        Ok(usage.filter(|u| u.fiber.is_some()))
     }
 }

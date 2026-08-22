@@ -10,6 +10,7 @@ use crate::{
     util::get_credentials,
 };
 
+use crate::graphql::authenticated::connections::PortUsageUpdateAction;
 use itertools::Itertools;
 use patternfly_yew::prelude::{
     ActionGroup, Alert, AlertType, Button, ButtonVariant, Cell, CellContext, ExpansionState,
@@ -18,7 +19,7 @@ use patternfly_yew::prelude::{
 };
 use std::{
     cell::RefCell,
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{HashMap, HashSet},
     rc::Rc,
 };
 use yew::{
@@ -52,36 +53,43 @@ pub enum FiberStatus {
     Looped,        // Ist aktuell als Loop durchgeschaltet
     UsedElsewhere, // Z.B. "Gepatcht auf Splice-Port 12"
 }
+#[derive(Clone, PartialEq, Debug, Copy)]
+struct FiberData {
+    status: FiberStatus,
+    modified_in_plan: bool,
+    reset: bool,
+}
 
 // Repräsentiert eine Zeile (eine Faser) in der Matrix
 #[derive(Clone, PartialEq)]
 struct FiberLoopEntry {
     pub bundle: i32,
     pub fiber: i32,
-    pub status: FiberStatus,
-    pub on_toggle: Callback<(i32, i32, bool)>, // (bundle, fiber, should_loop)
+    pub data: FiberData,
+    pub on_toggle: Callback<(i32, i32, bool)>,
+    pub reset: Callback<(i32, i32)>,
 }
 
 impl TableEntryRenderer<LoopColumn> for FiberLoopEntry {
     fn render_cell(&self, context: CellContext<'_, LoopColumn>) -> Cell {
         match context.column {
-            LoopColumn::Fiber => {
-                //Cell::new(format!("{}-{}", self.bundle, self.fiber).into_prop_value())
-                Cell::new(
-                    html!(<FiberLabel fiber={self.fiber as u8}>{format!("{}-{}", self.bundle, self.fiber)}</FiberLabel>),
-                )
-            }
+            LoopColumn::Fiber => Cell::new(
+                html!(<FiberLabel fiber={self.fiber as u8}>{format!("{}-{}", self.bundle, self.fiber)}</FiberLabel>),
+            ),
             LoopColumn::Status => {
-                let (icon, text) = match &self.status {
-                    FiberStatus::Free => (html!(<IconFiberCut/>), "Frei".to_string()),
-                    FiberStatus::Looped => (html!(<IconFiberConnected/>), "Verbunden".to_string()),
-                    FiberStatus::UsedElsewhere => {
-                        (Icon::ExclamationTriangle.as_html(), "Benutzt".to_string())
-                    }
+                let (icon, text) = match &self.data.status {
+                    FiberStatus::Free => (html!(<IconFiberCut/>), "Frei "),
+                    FiberStatus::Looped => (html!(<IconFiberConnected/>), "Verbunden "),
+                    FiberStatus::UsedElsewhere => (Icon::ExclamationTriangle.as_html(), "Benutzt "),
+                };
+                let marker = if self.data.modified_in_plan && !self.data.reset {
+                    Some(Icon::InProgress)
+                } else {
+                    None
                 };
                 let node = html! {
                     <>
-                        {icon} <span class="pf-v6-u-ml-sm">{text}</span>
+                        {icon} <span class="pf-v6-u-ml-sm">{text}</span> {marker}
                     </>
                 };
                 Cell::new(node)
@@ -89,17 +97,31 @@ impl TableEntryRenderer<LoopColumn> for FiberLoopEntry {
             LoopColumn::Actions => {
                 let bundle = self.bundle;
                 let fiber = self.fiber;
+                let reset_button = if self.data.modified_in_plan && !self.data.reset {
+                    let cb = self.reset.clone();
+                    let onclick = Callback::from(move |_| cb.emit((bundle, fiber)));
+                    Some(html! {
+                            <Button variant={ButtonVariant::DangerSecondary} {onclick} icon={Icon::Redo}>
+                                {"Planung zurücksetzen"}
+                            </Button>
+                    })
+                } else {
+                    None
+                };
 
-                match self.status {
+                match self.data.status {
                     FiberStatus::Free => {
                         let on_loop = {
                             let cb = self.on_toggle.clone();
                             Callback::from(move |_| cb.emit((bundle, fiber, true)))
                         };
                         Cell::new(html!(
+                            <>
                             <Button variant={ButtonVariant::Secondary} onclick={on_loop}>
                                 <IconLink/> <span class="pf-v6-u-ml-sm">{"Verbinden"}</span>
                             </Button>
+                            {reset_button}
+                            </>
                         ))
                     }
                     FiberStatus::Looped => {
@@ -108,9 +130,12 @@ impl TableEntryRenderer<LoopColumn> for FiberLoopEntry {
                             Callback::from(move |_| cb.emit((bundle, fiber, false)))
                         };
                         Cell::new(html!(
+                            <>
                             <Button variant={ButtonVariant::DangerSecondary} onclick={on_unloop}>
                                 <IconUnlink/> <span class="pf-v6-u-ml-sm">{"Auftrennen"}</span>
                             </Button>
+                            {reset_button}
+                            </>
                         ))
                     }
                     FiberStatus::UsedElsewhere => {
@@ -137,7 +162,7 @@ pub struct LoopPortEditor {
     cable_b: Option<CableEnd>,
 
     // Status der Fasern (Key: (Bundle, Fiber))
-    fiber_states: HashMap<(i32, i32), FiberStatus>,
+    fiber_states: HashMap<(i32, i32), FiberData>,
 
     table_state: Rc<RefCell<HashMap<usize, ExpansionState<LoopColumn>>>>,
     loading: bool,
@@ -155,6 +180,7 @@ pub enum Msg {
     Saved,
     Error(FrontendError),
     PrepareLoopStates,
+    ResetFiber(i32, i32),
 }
 
 impl Component for LoopPortEditor {
@@ -237,13 +263,40 @@ impl Component for LoopPortEditor {
                 }
                 true
             }
+            Msg::ResetFiber(bundle, fiber) => {
+                if let (Some(data), Some(global_data)) = (
+                    self.fiber_states.get_mut(&(bundle, fiber)),
+                    &self.current_situation,
+                ) {
+                    let mut state = FiberStatus::Free;
+                    for port in &global_data.ports {
+                        for port_fiber in port
+                            .current_front_usage
+                            .iter()
+                            .chain(&port.current_back_usage)
+                            .filter_map(|p| p.fiber.as_ref())
+                        {
+                            if port_fiber.bundle == bundle && port_fiber.fiber == fiber {
+                                state = FiberStatus::Looped;
+                            }
+                        }
+                    }
+                    data.status = state;
+                    data.reset = true;
+                }
+                true
+            }
             Msg::ToggleFiber(bundle, fiber, should_loop) => {
                 self.fiber_states.insert(
                     (bundle, fiber),
-                    if should_loop {
-                        FiberStatus::Looped
-                    } else {
-                        FiberStatus::Free
+                    FiberData {
+                        status: if should_loop {
+                            FiberStatus::Looped
+                        } else {
+                            FiberStatus::Free
+                        },
+                        modified_in_plan: true,
+                        reset: false,
                     },
                 );
                 true
@@ -269,7 +322,7 @@ impl Component for LoopPortEditor {
                         .fiber_states
                         .iter()
                         .filter_map(|(&(b, f), status)| {
-                            if matches!(status, FiberStatus::Looped) {
+                            if matches!(status.status, FiberStatus::Looped) {
                                 Some((b, f))
                             } else {
                                 None
@@ -292,7 +345,7 @@ impl Component for LoopPortEditor {
                                 updates.push(PortUsageInput {
                                     port_id: port.id,
                                     side: PortSide::FRONT,
-                                    fiber: Some(FiberKeyInput {
+                                    fiber: PortUsageUpdateAction::Attach(FiberKeyInput {
                                         cable_id: *cable_a_id,
                                         bundle,
                                         fiber,
@@ -309,7 +362,7 @@ impl Component for LoopPortEditor {
                                 updates.push(PortUsageInput {
                                     port_id: port.id,
                                     side: PortSide::BACK,
-                                    fiber: Some(FiberKeyInput {
+                                    fiber: PortUsageUpdateAction::Attach(FiberKeyInput {
                                         cable_id: *cable_b_id,
                                         bundle,
                                         fiber,
@@ -326,14 +379,14 @@ impl Component for LoopPortEditor {
                             updates.push(PortUsageInput {
                                 port_id: remaining_port.id,
                                 side: PortSide::FRONT,
-                                fiber: None,
+                                fiber: PortUsageUpdateAction::Remove(true),
                             });
                         }
                         if remaining_port.back_usage.is_some() {
                             updates.push(PortUsageInput {
                                 port_id: remaining_port.id,
                                 side: PortSide::BACK,
-                                fiber: None,
+                                fiber: PortUsageUpdateAction::Remove(true),
                             });
                         }
                     }
@@ -551,17 +604,22 @@ impl LoopPortEditor {
 
         for bundle in 1..=a.cable.bundle_count {
             for fiber in 1..=a.cable.fiber_count {
-                let status = self
+                let data = self
                     .fiber_states
                     .get(&(bundle, fiber))
                     .cloned()
-                    .unwrap_or(FiberStatus::Free);
+                    .unwrap_or(FiberData {
+                        status: FiberStatus::Free,
+                        modified_in_plan: false,
+                        reset: false,
+                    });
                 entries.push(FiberLoopEntry {
                     bundle,
                     fiber,
-                    status,
+                    data,
                     on_toggle: scope
                         .callback(|(b, f, should_loop)| Msg::ToggleFiber(b, f, should_loop)),
+                    reset: scope.callback(|(b, f)| Msg::ResetFiber(b, f)),
                 });
             }
         }
@@ -589,7 +647,7 @@ impl LoopPortEditor {
         }
     }
 
-    fn calculate_current_states(&self, panel_id: i32) -> HashMap<(i32, i32), FiberStatus> {
+    fn calculate_current_states(&self, panel_id: i32) -> HashMap<(i32, i32), FiberData> {
         let mut states = HashMap::new();
         if let (
             Some(CableEnd {
@@ -617,7 +675,14 @@ impl LoopPortEditor {
             for bundle in 1..=*bundle_count {
                 for fiber in 1..=*fiber_count {
                     let bundle_key = (bundle, fiber);
-                    states.insert(bundle_key, FiberStatus::Free);
+                    states.insert(
+                        bundle_key,
+                        FiberData {
+                            status: FiberStatus::Free,
+                            modified_in_plan: false,
+                            reset: false,
+                        },
+                    );
                 }
             }
 
@@ -629,12 +694,18 @@ impl LoopPortEditor {
                     if let Some(fiber) = port.fiber.as_ref() {
                         let bundle_key = (fiber.bundle, fiber.fiber);
                         let my_panel = port.port.panel.id == panel_id;
+                        let modified_in_plan = port.modified_in_plan;
+
                         states.insert(
                             bundle_key,
-                            if my_panel {
-                                FiberStatus::Looped
-                            } else {
-                                FiberStatus::UsedElsewhere
+                            FiberData {
+                                status: if my_panel {
+                                    FiberStatus::Looped
+                                } else {
+                                    FiberStatus::UsedElsewhere
+                                },
+                                modified_in_plan,
+                                reset: false,
                             },
                         );
                     }

@@ -150,6 +150,9 @@ impl PortUsage {
             .optional()?
             .filter(|pu| pu.cable.is_some() && pu.bundle.is_some() && pu.fiber.is_some()))
     }
+    async fn modified_in_plan(&self) -> bool {
+        self.plan_id > 0
+    }
 }
 
 #[Object]

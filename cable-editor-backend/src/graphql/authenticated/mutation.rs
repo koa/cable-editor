@@ -9,7 +9,7 @@ use crate::{
     },
     graphql::authenticated,
 };
-use async_graphql::{Context, InputObject, Object};
+use async_graphql::{Context, InputObject, Object, OneofObject};
 use async_recursion::async_recursion;
 use diesel::{
     AsChangeset, BoolExpressionMethods, ExpressionMethods, OptionalExtension, QueryDsl,
@@ -335,6 +335,9 @@ impl Mutation {
         plan_id: i32,
         changes: Vec<PortUsageInput>,
     ) -> async_graphql::Result<bool> {
+        if plan_id <= 0 {
+            return Err(format!("Cannot manipulate plan {plan_id} directly").into());
+        }
         let mut connection = authenticated::get_connection(ctx).await?;
         connection
             .transaction(async move |conn| {
@@ -344,30 +347,60 @@ impl Mutation {
                     fiber,
                 } in changes
                 {
-                    let usage = PortUsage {
-                        port_id,
-                        plan_id,
-                        side,
-                        cable: fiber.map(|f| f.cable_id),
-                        fiber: fiber.map(|f| f.fiber),
-                        bundle: fiber.map(|f| f.bundle),
+                    let (port_update, remove_plan) = match fiber {
+                        PortUsageUpdateAction::Remove(_) => (
+                            Some(PortUsage {
+                                port_id,
+                                plan_id,
+                                side,
+                                cable: None,
+                                fiber: None,
+                                bundle: None,
+                            }),
+                            false,
+                        ),
+                        PortUsageUpdateAction::Reset(_) => (None, true),
+                        PortUsageUpdateAction::Attach(FiberKeyInput {
+                            cable_id,
+                            bundle,
+                            fiber,
+                        }) => (
+                            Some(PortUsage {
+                                port_id,
+                                plan_id,
+                                side,
+                                cable: Some(cable_id),
+                                fiber: Some(fiber),
+                                bundle: Some(bundle),
+                            }),
+                            false,
+                        ),
                     };
-
-                    diesel::insert_into(port_usage::table())
-                        .values(&usage)
-                        .on_conflict((
-                            schema::port_usage::port_id,
-                            schema::port_usage::plan_id,
-                            schema::port_usage::side,
-                        ))
-                        .do_update()
-                        .set((
-                            schema::port_usage::cable.eq(usage.cable),
-                            schema::port_usage::fiber.eq(usage.fiber),
-                            schema::port_usage::bundle.eq(usage.bundle),
-                        ))
-                        .execute(conn)
-                        .await?;
+                    if let Some(usage) = port_update {
+                        diesel::insert_into(port_usage::table())
+                            .values(&usage)
+                            .on_conflict((
+                                schema::port_usage::port_id,
+                                schema::port_usage::plan_id,
+                                schema::port_usage::side,
+                            ))
+                            .do_update()
+                            .set((
+                                schema::port_usage::cable.eq(usage.cable),
+                                schema::port_usage::fiber.eq(usage.fiber),
+                                schema::port_usage::bundle.eq(usage.bundle),
+                            ))
+                            .execute(conn)
+                            .await?;
+                    }
+                    if remove_plan {
+                        diesel::delete(port_usage::table())
+                            .filter(schema::port_usage::port_id.eq(port_id))
+                            .filter(schema::port_usage::plan_id.eq(plan_id))
+                            .filter(schema::port_usage::side.eq(side))
+                            .execute(conn)
+                            .await?;
+                    }
                 }
 
                 Ok::<bool, async_graphql::Error>(true)
@@ -380,8 +413,15 @@ impl Mutation {
 struct PortUsageInput {
     port_id: i32,
     side: PortSide,
-    fiber: Option<FiberKeyInput>,
+    fiber: PortUsageUpdateAction,
 }
+#[derive(Debug, Clone, PartialEq, OneofObject, Copy)]
+enum PortUsageUpdateAction {
+    Remove(bool),
+    Reset(bool),
+    Attach(FiberKeyInput),
+}
+
 #[derive(Debug, Clone, PartialEq, InputObject, Copy)]
 pub struct FiberKeyInput {
     cable_id: i32,
