@@ -1,26 +1,29 @@
-use crate::components::fiber::FiberLabel;
-use crate::components::table::ListModel;
-use crate::error::FrontendError;
-use crate::graphql::authenticated::connections::{
-    Cable, CableEnd, CableId, Fiber, FiberKeyInput, Panel, PlannedPanel, PortUsageInput, Schacht,
-    UpdatePortUsage,
+use crate::{
+    components::{fiber::FiberLabel, table::ListModel},
+    error::FrontendError,
+    graphql::authenticated::connections::{
+        Cable, CableEnd, CableId, Fiber, FiberKeyInput, Panel, PlannedPanel, PortUsageInput,
+        Schacht, UpdatePortUsage,
+    },
+    graphql::authenticated::{PortSide, PortType},
+    icons::{IconFiberConnected, IconFiberCut, IconLink, IconUnlink},
+    util::get_credentials,
 };
 
-use crate::graphql::authenticated::{PortSide, PortType};
-use crate::icons::IconUnlink;
-use crate::icons::{IconFiberConnected, IconFiberCut, IconLink};
-use crate::util::get_credentials;
 use itertools::Itertools;
 use patternfly_yew::prelude::{
     ActionGroup, Alert, AlertType, Button, ButtonVariant, Cell, CellContext, ExpansionState,
     FormGroup, Grid, GridItem, Icon, MemoizedTableModel, SelectItemRenderer, SimpleSelect, Spinner,
     Table, TableColumn, TableEntryRenderer, TableGridMode, TableHeader, TableMode, Title,
 };
-use std::cell::RefCell;
-use std::collections::{BTreeSet, HashMap, HashSet};
-use std::rc::Rc;
-use yew::platform::spawn_local;
-use yew::{Callback, Component, Context, Html, Properties, html, html_nested};
+use std::{
+    cell::RefCell,
+    collections::{BTreeSet, HashMap, HashSet},
+    rc::Rc,
+};
+use yew::{
+    Callback, Component, Context, Html, Properties, html, html_nested, platform::spawn_local,
+};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 enum LoopColumn {
@@ -390,7 +393,7 @@ impl Component for LoopPortEditor {
                     .cloned();
                 self.cable_a = mapped_cables.next();
                 self.cable_b = mapped_cables.next();
-                if self.cable_b.is_some(){
+                if self.cable_b.is_some() {
                     ctx.link().send_message(Msg::PrepareLoopStates);
                 }
 

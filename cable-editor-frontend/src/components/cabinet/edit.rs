@@ -1,21 +1,27 @@
-use crate::components::table::{
-    TreeModel, TreeState, TreeTable, TreeTableColumn, TreeTableContext,
+use crate::{
+    components::table::{TreeModel, TreeState, TreeTable, TreeTableColumn, TreeTableContext},
+    create_simple_dialog,
+    error::FrontendError,
+    graphql::authenticated::{
+        IdOrNew,
+        cabinet_details::{FlatPanelInput, PanelTreeEntry, update_panels_in_cabinet},
+    },
+    pages::router::{AppRoute, PanelView, PlanView},
+    util::get_credentials,
 };
-use crate::create_simple_dialog;
-use crate::error::FrontendError;
-use crate::graphql::authenticated::IdOrNew;
-use crate::graphql::authenticated::cabinet_details::{
-    FlatPanelInput, PanelTreeEntry, update_panels_in_cabinet,
+
+use patternfly_yew::prelude::{
+    ActionGroup, Button, ButtonType, ButtonVariant, Cell, Form, FormGroup, Icon, Modal, Spinner,
+    TableColumn, TableHeader, TableMode, TextInput, TextModifier, Title,
 };
-use crate::pages::router::{AppRoute, PanelView, PlanView};
-use crate::util::get_credentials;
-use patternfly_yew::prelude::*;
 use std::collections::{HashMap, HashSet};
-use web_sys::HtmlElement;
-use yew::html::IntoPropValue;
-use yew::platform::spawn_local;
-use yew::prelude::*;
-use yew::{Callback, Component, Context, Html, Properties, html};
+use yew::{
+    Callback, Component, Context, Html, Properties, classes, html,
+    html::IntoPropValue,
+    html_nested,
+    platform::spawn_local,
+    prelude::{SubmitEvent, function_component, use_state},
+};
 use yew_nested_router::components::Link;
 
 pub struct EditCabinet {
@@ -36,9 +42,6 @@ pub enum Msg {
     FetchPanels,
     PanelsFetched(Box<[PanelTreeEntry]>),
     CreatePanel,
-    PanelCreated(()),
-    PanelUpdated(Result<(), FrontendError>),
-    PanelDeleted(Result<(), FrontendError>),
     Error(FrontendError),
     PanelEvent(PanelEditAction),
     Save,
@@ -54,7 +57,7 @@ pub struct EditCabinetProps {
 enum PanelColumn {
     Name,
     Id { modified: bool, plan_id: i32 },
-    Actions,
+    Actions { modified: bool, plan_id: i32 },
 }
 #[derive(Clone, PartialEq, Hash, Eq)]
 enum PanelEditAction {
@@ -96,9 +99,8 @@ impl TreeTableColumn<IdOrNew, PanelEntry, PanelEditAction> for PanelColumn {
                         <TextInput value={text} onchange={onchange} />
                     </div>
                 ))
-                //Cell::new(html!(<TextInput value={text} onchange={onchange} />))
             }
-            PanelColumn::Actions => {
+            PanelColumn::Actions { modified, plan_id } => {
                 let mut buttons = Vec::new();
                 if context.parent.is_some() {
                     let key = *context.key;
@@ -135,8 +137,29 @@ impl TreeTableColumn<IdOrNew, PanelEntry, PanelEditAction> for PanelColumn {
 
                     buttons.push(html!(<Button icon={Icon::Trash} {onclick} variant={ButtonVariant::DangerSecondary} />))
                 }
+                if !*modified && let IdOrNew::Id(id) = &context.key {
+                    let class = classes!("pf-v6-c-button", "pf-m-secondary");
+                    let to = AppRoute::Plan {
+                        plan_id: *plan_id,
+                        view: PlanView::Panel {
+                            id: *id,
+                            view: PanelView::Edit,
+                        },
+                    };
+                    buttons.push(
+                        html!(<Link<AppRoute>{to} class={class.clone()}>{"Ports"}</Link<AppRoute>>),
+                    );
+                    let to = AppRoute::Plan {
+                        plan_id: *plan_id,
+                        view: PlanView::Panel {
+                            id: *id,
+                            view: PanelView::Loop,
+                        },
+                    };
+                    buttons.push(html!(<Link<AppRoute>{to} {class}>{"Loop"}</Link<AppRoute>>));
+                }
 
-                Cell::new(buttons.into_iter().collect())
+                Cell::new(buttons.into_iter().collect()).text_modifier(TextModifier::NoWrap)
             }
             PanelColumn::Id { modified, plan_id } => Cell::new(match &context.key {
                 IdOrNew::Id(id) => {
@@ -162,7 +185,7 @@ impl Component for EditCabinet {
     type Message = Msg;
     type Properties = EditCabinetProps;
 
-    fn create(ctx: &Context<Self>) -> Self {
+    fn create(_ctx: &Context<Self>) -> Self {
         Self {
             loading: true,
             error: None,
@@ -242,32 +265,6 @@ impl Component for EditCabinet {
                         .map(|(k, v)| (*k, v.clone()))
                         .collect(),
                 );
-                true
-            }
-            Msg::PanelCreated(result) => {
-                ctx.link().send_message(Msg::FetchPanels);
-                true
-            }
-            Msg::PanelUpdated(result) => {
-                match result {
-                    Ok(_) => {
-                        ctx.link().send_message(Msg::FetchPanels);
-                    }
-                    Err(e) => {
-                        //self.error = Some(format!("Failed to update panel: {:?}", e));
-                    }
-                }
-                true
-            }
-            Msg::PanelDeleted(result) => {
-                match result {
-                    Ok(_) => {
-                        ctx.link().send_message(Msg::FetchPanels);
-                    }
-                    Err(e) => {
-                        //self.error = Some(format!("Failed to delete panel: {:?}", e));
-                    }
-                }
                 true
             }
             Msg::Error(error) => {
@@ -400,9 +397,9 @@ impl Component for EditCabinet {
             let plan_id = ctx.props().plan_id;
             let header = html_nested! {
                 <TableHeader<PanelColumn>>
-                    <TableColumn<PanelColumn> label="ID" index={PanelColumn::Id{modified,plan_id}} />
+                    //<TableColumn<PanelColumn> label="ID" index={PanelColumn::Id{modified,plan_id}} />
                     <TableColumn<PanelColumn> label="Name" index={PanelColumn::Name} />
-                    <TableColumn<PanelColumn> index={PanelColumn::Actions} />
+                    <TableColumn<PanelColumn> index={PanelColumn::Actions{modified,plan_id}} />
                 </TableHeader<PanelColumn>>
             };
             let model = self.model.clone();
