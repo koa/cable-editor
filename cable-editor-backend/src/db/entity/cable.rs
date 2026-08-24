@@ -1,12 +1,10 @@
-use crate::db::entity::panel::{Panel, PanelPort, PortUsage};
-use crate::db::entity::path::DirectedDuct;
-use crate::db::entity::schacht;
-use crate::db::entity::schacht::Schacht;
 use crate::{
     db::{
         entity::{
             Duct,
-            path::{DuctAlignmentError, align_ducts},
+            panel::{PanelPort, PortUsage},
+            path::{DirectedDuct, DuctAlignmentError, align_ducts},
+            schacht::{Schacht, fetch_schacht},
             st_length,
         },
         schema,
@@ -15,11 +13,12 @@ use crate::{
 };
 use async_graphql::{Context, Object};
 use diesel::{
-    AsChangeset, ExpressionMethods, HasQuery, Identifiable, Insertable, QueryDsl, Queryable,
-    QueryableByName, dsl::sum,
+    AsChangeset, ExpressionMethods, HasQuery, Identifiable, Insertable, OptionalExtension,
+    QueryDsl, QueryableByName, dsl::sum,
 };
-use diesel_async::pooled_connection::deadpool::Object;
-use diesel_async::{AsyncPgConnection, RunQueryDsl};
+use diesel_async::{
+    AsyncConnection, AsyncPgConnection, RunQueryDsl, pooled_connection::deadpool::Object,
+};
 
 #[derive(Identifiable, Insertable, HasQuery, Debug, Clone, PartialEq, QueryableByName)]
 #[diesel(table_name = schema::kabel)]
@@ -79,9 +78,24 @@ impl Cable {
             .first()
             .map(|s| s.segment.schacht_a())
             .map(|first| CablePath {
+                cable: self.clone(),
                 near_schacht: first,
                 segments,
             }))
+    }
+    async fn cable_end(
+        &self,
+        schacht_id: i32,
+        mut connection: &mut Object<AsyncPgConnection>,
+    ) -> Result<CableEnd, diesel::result::Error> {
+        let schacht = Schacht::query()
+            .filter(schema::schacht::id.eq(schacht_id))
+            .first(&mut connection)
+            .await?;
+        Ok(CableEnd {
+            cable: self.clone(),
+            schacht,
+        })
     }
 }
 
@@ -115,14 +129,7 @@ impl Cable {
     }
     async fn end(&self, ctx: &Context<'_>, schacht_id: i32) -> async_graphql::Result<CableEnd> {
         let mut connection = get_connection(ctx).await?;
-        let schacht = Schacht::query()
-            .filter(schema::schacht::id.eq(schacht_id))
-            .first(&mut connection)
-            .await?;
-        Ok(CableEnd {
-            cable: self.clone(),
-            schacht,
-        })
+        Ok(self.cable_end(schacht_id, &mut connection).await?)
     }
 }
 
@@ -131,40 +138,12 @@ pub struct CableEnd {
     pub cable: Cable,
     pub schacht: Schacht,
 }
-
-#[Object]
 impl CableEnd {
-    async fn cable(&self) -> &Cable {
-        &self.cable
-    }
-    async fn schacht(&self) -> &Schacht {
-        &self.schacht
-    }
-    async fn path(&self, ctx: &Context<'_>) -> async_graphql::Result<CablePath> {
-        let mut connection = get_connection(ctx).await?;
-
-        let path = self
-            .cable
-            .build_cable_path(&mut connection)
-            .await?
-            .ok_or_else(|| {
-                async_graphql::Error::new(format!(
-                    "invalid cable end on duct {} for cable {}",
-                    self.schacht.id, self.cable.id
-                ))
-            })?;
-        Ok(if path.near_schacht == self.schacht.id {
-            path
-        } else {
-            path.reverse()
-        })
-    }
-    async fn used_ports(
+    async fn used_ports_impl(
         &self,
-        ctx: &Context<'_>,
+        connection: &mut Object<AsyncPgConnection>,
         plan_id: i32,
-    ) -> async_graphql::Result<Vec<PortUsage>> {
-        let mut connection = get_connection(ctx).await?;
+    ) -> Result<Vec<PortUsage>, diesel::result::Error> {
         let raw_sql = r#"
         -- 1. Echte Belegungen für dieses Kabel im aktuellen Plan, direkt auf den Schacht gefiltert
         SELECT u.*
@@ -200,8 +179,121 @@ impl CableEnd {
             .bind::<diesel::sql_types::Integer, _>(plan_id)
             .bind::<diesel::sql_types::Integer, _>(self.cable.id)
             .bind::<diesel::sql_types::Integer, _>(self.schacht.id)
-            .load::<PortUsage>(&mut connection)
+            .load::<PortUsage>(connection)
             .await?)
+    }
+}
+
+#[Object]
+impl CableEnd {
+    async fn cable(&self) -> &Cable {
+        &self.cable
+    }
+    async fn schacht(&self) -> &Schacht {
+        &self.schacht
+    }
+    async fn path(&self, ctx: &Context<'_>) -> async_graphql::Result<CablePath> {
+        let mut connection = get_connection(ctx).await?;
+
+        let path = self
+            .cable
+            .build_cable_path(&mut connection)
+            .await?
+            .ok_or_else(|| {
+                async_graphql::Error::new(format!(
+                    "invalid cable end on duct {} for cable {}",
+                    self.schacht.id, self.cable.id
+                ))
+            })?;
+        Ok(if path.near_schacht == self.schacht.id {
+            path
+        } else {
+            path.reverse()
+        })
+    }
+
+    async fn used_ports(
+        &self,
+        ctx: &Context<'_>,
+        plan_id: i32,
+    ) -> async_graphql::Result<Vec<PortUsage>> {
+        let mut connection = get_connection(ctx).await?;
+        Ok(self.used_ports_impl(&mut connection, plan_id).await?)
+    }
+    async fn fibers(&self) -> Vec<FiberEnd> {
+        (1..=self.cable.buendel_anz)
+            .flat_map(|bundle| {
+                (1..=self.cable.faser_anz).map(move |fiber| FiberEnd {
+                    cable: self.clone(),
+                    bundle,
+                    fiber,
+                })
+            })
+            .collect()
+    }
+}
+
+struct FiberEnd {
+    pub cable: CableEnd,
+    pub bundle: i32,
+    pub fiber: i32,
+}
+#[Object]
+impl FiberEnd {
+    async fn cable(&self) -> &CableEnd {
+        &self.cable
+    }
+    async fn bundle(&self) -> i32 {
+        self.bundle
+    }
+    async fn fiber(&self) -> i32 {
+        self.fiber
+    }
+    async fn used_port(
+        &self,
+        ctx: &Context<'_>,
+        plan_id: i32,
+    ) -> async_graphql::Result<Option<PortUsage>> {
+        let mut connection = get_connection(ctx).await?;
+        Ok(PortUsage::query()
+            .filter(schema::port_usage::cable.eq(self.cable.cable.id))
+            .filter(schema::port_usage::bundle.eq(self.bundle))
+            .filter(schema::port_usage::fiber.eq(self.fiber))
+            .filter(schema::port_usage::plan_id.eq_any([0, plan_id]))
+            .inner_join(schema::panel_port::table.inner_join(schema::panel::table))
+            .filter(schema::panel::schacht_id.eq(self.cable.schacht.id))
+            .order(schema::port_usage::plan_id.desc())
+            .first(&mut connection)
+            .await
+            .optional()?)
+    }
+    async fn other_end(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<FiberEnd>> {
+        let mut connection = get_connection(ctx).await?;
+        connection
+            .transaction(async move |conn| {
+                Ok(
+                    if let Some(path) = self.cable.cable.build_cable_path(conn).await? {
+                        let other_schacht_id = if path.near_schacht == self.cable.schacht.id {
+                            path.far_schacht_id()
+                        } else {
+                            path.near_schacht
+                        };
+                        let schacht = fetch_schacht(conn, other_schacht_id).await?;
+                        let end = CableEnd {
+                            cable: self.cable.cable.clone(),
+                            schacht,
+                        };
+                        Some(FiberEnd {
+                            cable: end,
+                            bundle: self.bundle,
+                            fiber: self.fiber,
+                        })
+                    } else {
+                        None
+                    },
+                )
+            })
+            .await
     }
 }
 
@@ -262,6 +354,7 @@ impl Fiber {
 }
 
 pub struct CablePath {
+    cable: Cable,
     near_schacht: i32,
     segments: Vec<CablePathSegment>,
 }
@@ -282,28 +375,48 @@ impl CablePath {
             }
             new_segments.reverse();
             CablePath {
+                cable: self.cable,
                 near_schacht: next_schacht,
                 segments: new_segments,
             }
         }
+    }
+    fn far_schacht_id(&self) -> i32 {
+        self.segments
+            .last()
+            .map(|s| s.far_schacht)
+            .unwrap_or(self.near_schacht)
     }
 }
 
 #[Object]
 impl CablePath {
     async fn near_schacht(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
-        schacht::fetch_schacht(ctx, self.near_schacht).await
+        let mut conn = get_connection(ctx).await?;
+        fetch_schacht(&mut conn, self.near_schacht).await
+    }
+    async fn near_end(&self, ctx: &Context<'_>) -> async_graphql::Result<CableEnd> {
+        let mut connection = get_connection(ctx).await?;
+        let schacht = fetch_schacht(&mut connection, self.near_schacht).await?;
+        Ok(CableEnd {
+            cable: self.cable.clone(),
+            schacht,
+        })
     }
     async fn segments(&self) -> &[CablePathSegment] {
         self.segments.as_ref()
     }
     async fn far_schacht(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
-        let schacht_id = self
-            .segments
-            .last()
-            .ok_or_else(|| async_graphql::Error::new("Empty path is invalid"))?
-            .far_schacht;
-        schacht::fetch_schacht(ctx, schacht_id).await
+        let mut conn = get_connection(ctx).await?;
+        fetch_schacht(&mut conn, self.far_schacht_id()).await
+    }
+    async fn far_end(&self, ctx: &Context<'_>) -> async_graphql::Result<CableEnd> {
+        let mut connection = get_connection(ctx).await?;
+        let schacht = fetch_schacht(&mut connection, self.far_schacht_id()).await?;
+        Ok(CableEnd {
+            cable: self.cable.clone(),
+            schacht,
+        })
     }
 }
 
@@ -318,7 +431,8 @@ impl CablePathSegment {
         &self.segment.duct.0
     }
     async fn far_schacht(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
-        schacht::fetch_schacht(ctx, self.far_schacht).await
+        let mut conn = get_connection(ctx).await?;
+        fetch_schacht(&mut conn, self.far_schacht).await
     }
     async fn sequence(&self) -> i32 {
         self.segment.duct.1

@@ -1,25 +1,25 @@
-use crate::{
-    db::{
-        entity::{Duct, XmlDocument},
-        schema::{panel, schacht, schacht_typ, trasse},
-    },
-    graphql::{authenticated::get_connection, model},
-};
 use async_graphql::{Context, Object};
 use diesel::{
     Associations, BoolExpressionMethods, ExpressionMethods, HasQuery, Identifiable, Insertable,
     OptionalExtension, QueryDsl,
 };
-use diesel_async::RunQueryDsl;
+use diesel_async::{AsyncPgConnection, RunQueryDsl, pooled_connection::deadpool::Object};
 
-use crate::db::entity::cable::{Cable, CableEnd, PotentialPathSegment};
-use crate::db::entity::panel::Panel;
-use crate::db::schema;
-use crate::db::schema::{kabel, kabel_trasse};
+use crate::{
+    db::{
+        entity::{
+            Duct, XmlDocument,
+            cable::{Cable, CableEnd, PotentialPathSegment},
+            panel::Panel,
+        },
+        schema,
+    },
+    graphql::{authenticated::get_connection, model},
+};
 use postgis_diesel::types::Point;
 
 #[derive(Identifiable, Insertable, HasQuery, Debug, Clone, PartialEq)]
-#[diesel(table_name = schacht)]
+#[diesel(table_name = schema::schacht)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct Schacht {
     pub id: i32,
@@ -30,7 +30,7 @@ pub struct Schacht {
 
 #[derive(HasQuery, Identifiable, Insertable, Associations, Debug, PartialEq)]
 #[diesel(belongs_to(Schacht, foreign_key = id))]
-#[diesel(table_name = schacht_typ)]
+#[diesel(table_name = schema::schacht_typ)]
 pub struct SchachtTyp {
     pub id: i32,
     pub name: Option<String>,
@@ -51,7 +51,7 @@ impl Schacht {
             let mut connection = get_connection(ctx).await?;
             Ok(Some(
                 SchachtTyp::query()
-                    .filter(schacht_typ::id.eq(typ))
+                    .filter(schema::schacht_typ::id.eq(typ))
                     .get_result(&mut connection)
                     .await?,
             ))
@@ -70,9 +70,9 @@ impl Schacht {
 
         let ducts: Vec<Duct> = Duct::query()
             .filter(
-                trasse::schacht_a
+                schema::trasse::schacht_a
                     .eq(self.id)
-                    .or(trasse::schacht_z.eq(self.id)),
+                    .or(schema::trasse::schacht_z.eq(self.id)),
             )
             .load(&mut connection)
             .await?;
@@ -86,7 +86,7 @@ impl Schacht {
             };
 
             let other_schacht = Schacht::query()
-                .filter(schacht::id.eq(other_schacht_id))
+                .filter(schema::schacht::id.eq(other_schacht_id))
                 .get_result(&mut connection)
                 .await?;
             results.push(PotentialPathSegment {
@@ -101,11 +101,11 @@ impl Schacht {
         let mut connection = get_connection(ctx).await?;
         Ok(Panel::query()
             .filter(
-                panel::schacht_id
+                schema::panel::schacht_id
                     .eq(self.id)
-                    .and(panel::parent_panel.is_null()),
+                    .and(schema::panel::parent_panel.is_null()),
             )
-            .order(panel::parent_order.asc())
+            .order(schema::panel::parent_order.asc())
             .load(&mut connection)
             .await?)
     }
@@ -115,7 +115,7 @@ impl Schacht {
         cable_id: i32,
     ) -> async_graphql::Result<Option<CableEnd>> {
         let mut connection = get_connection(ctx).await?;
-        Ok(kabel::table
+        Ok(schema::kabel::table
             .find(cable_id)
             .first::<Cable>(&mut connection)
             .await
@@ -127,21 +127,21 @@ impl Schacht {
     }
     async fn cables(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<CableEnd>> {
         let mut connection = get_connection(ctx).await?;
-        Ok(kabel::table
+        Ok(schema::kabel::table
             // 1. Die Relationen joinen (Kabel -> KabelTrasse -> Trasse)
-            .inner_join(kabel_trasse::table.inner_join(trasse::table))
+            .inner_join(schema::kabel_trasse::table.inner_join(schema::trasse::table))
             // 2. Nur Trassen betrachten, die an unseren Ziel-Schacht grenzen
             .filter(
-                trasse::schacht_a
+                schema::trasse::schacht_a
                     .eq(self.id)
-                    .or(trasse::schacht_z.eq(self.id)),
+                    .or(schema::trasse::schacht_z.eq(self.id)),
             )
             // 3. Nach den Kabel-Spalten gruppieren, um zählen zu können
-            .group_by(kabel::id)
+            .group_by(schema::kabel::id)
             // 4. Die Magie: Nur Kabel behalten, die exakt 1 Berührungspunkt mit dem Schacht haben
-            .having(diesel::dsl::count(trasse::id).eq(1))
+            .having(diesel::dsl::count(schema::trasse::id).eq(1))
             // 5. Die Daten auslesen
-            .select(kabel::all_columns)
+            .select(schema::kabel::all_columns)
             .load::<Cable>(&mut connection)
             .await
             .map(|cables| {
@@ -171,16 +171,18 @@ impl SchachtTyp {
     async fn list_schacht(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Schacht>> {
         let mut connection = get_connection(ctx).await?;
         Ok(Schacht::query()
-            .filter(schacht::typ.eq(self.id))
+            .filter(schema::schacht::typ.eq(self.id))
             .load(&mut connection)
             .await?)
     }
 }
 
-pub async fn fetch_schacht(ctx: &Context<'_>, id: i32) -> async_graphql::Result<Schacht> {
-    let mut connection = get_connection(ctx).await?;
+pub async fn fetch_schacht(
+    connection: &mut Object<AsyncPgConnection>,
+    id: i32,
+) -> async_graphql::Result<Schacht> {
     Ok(Schacht::query()
         .filter(schema::schacht::id.eq(id))
-        .get_result(&mut connection)
+        .get_result(connection)
         .await?)
 }

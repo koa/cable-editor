@@ -7,14 +7,15 @@ use crate::{
     graphql::authenticated::get_connection,
 };
 use async_graphql::{Context, Enum, Object};
-use diesel::pg::Pg;
+use async_recursion::async_recursion;
 use diesel::{
     Associations, BoolExpressionMethods, ExpressionMethods, HasQuery, Identifiable, Insertable,
-    OptionalExtension, QueryDsl, QueryableByName, sql_query, sql_types::Integer,
+    OptionalExtension, QueryDsl, QueryableByName, pg::Pg, sql_query, sql_types::Integer,
 };
-use diesel_async::RunQueryDsl;
+use diesel_async::{AsyncConnection, AsyncPgConnection, RunQueryDsl, pooled_connection::deadpool};
 use diesel_derive_enum::DbEnum;
-use log::info;
+use log::{error, info};
+use std::collections::HashSet;
 
 #[derive(QueryableByName, Identifiable, Insertable, HasQuery, Debug, Clone, PartialEq)]
 #[diesel(table_name = schema::panel)]
@@ -89,7 +90,7 @@ pub enum PanelPortType {
 }
 
 #[derive(
-    Identifiable, Insertable, HasQuery, Associations, Debug, Clone, PartialEq, QueryableByName,
+    Identifiable, Insertable, HasQuery, Associations, Debug, Copy, Clone, PartialEq, QueryableByName,
 )]
 #[diesel(table_name = schema::port_usage)]
 #[diesel(primary_key(port_id, plan_id, side))]
@@ -102,6 +103,42 @@ pub struct PortUsage {
     pub cable: Option<i32>,
     pub fiber: Option<i32>,
     pub bundle: Option<i32>,
+}
+impl PortUsage {
+    pub async fn other_side_of_port(
+        &self,
+        plan_id: i32,
+        connection: &mut deadpool::Object<AsyncPgConnection>,
+    ) -> Result<Option<PortUsage>, diesel::result::Error> {
+        PortUsage::query()
+            .filter(schema::port_usage::port_id.eq(self.port_id))
+            .filter(schema::port_usage::side.eq(self.side.other()))
+            .filter(schema::port_usage::plan_id.eq_any([0, plan_id]))
+            .order(schema::port_usage::plan_id.desc())
+            .first(connection)
+            .await
+            .optional()
+    }
+    pub async fn other_side_of_fiber(
+        &self,
+        plan_id: i32,
+        connection: &mut deadpool::Object<AsyncPgConnection>,
+    ) -> Result<Option<PortUsage>, diesel::result::Error> {
+        if let (Some(cable), Some(fiber), Some(bundle)) = (self.cable, self.fiber, self.bundle) {
+            PortUsage::query()
+                .filter(schema::port_usage::port_id.ne(self.port_id))
+                .filter(schema::port_usage::cable.eq(cable))
+                .filter(schema::port_usage::bundle.eq(bundle))
+                .filter(schema::port_usage::fiber.eq(fiber))
+                .filter(schema::port_usage::plan_id.eq_any([0, plan_id]))
+                .order(schema::port_usage::plan_id.desc())
+                .first(connection)
+                .await
+                .optional()
+        } else {
+            Ok(None)
+        }
+    }
 }
 
 #[Object]
@@ -152,6 +189,97 @@ impl PortUsage {
     }
     async fn modified_in_plan(&self) -> bool {
         self.plan_id > 0
+    }
+    async fn cable_side_end_port(
+        &self,
+        ctx: &Context<'_>,
+        plan_id: i32,
+    ) -> async_graphql::Result<Option<PortUsage>> {
+        let mut connection = get_connection(ctx).await?;
+
+        // Helper function to trace fiber through port usages recursively
+        #[async_recursion]
+        async fn trace_fiber_to_end<'a>(
+            connection: &mut deadpool::Object<AsyncPgConnection>,
+            usage: &PortUsage,
+            plan_id: i32,
+            visited: &mut HashSet<(i32, PortSide)>,
+        ) -> async_graphql::Result<Option<PortUsage>> {
+            // Avoid infinite loops
+            if !visited.insert((usage.port_id, usage.side)) {
+                error!("Loop detected");
+                return Ok(None);
+            }
+            let option = usage.other_side_of_fiber(plan_id, connection).await?;
+            info!("Other side of fiber: {option:?}");
+            let other_side_of_fiber_port = match option {
+                None => return Ok(Some(*usage)),
+                Some(p) => p,
+            };
+            let next_fiber_start_port = match other_side_of_fiber_port
+                .other_side_of_port(plan_id, connection)
+                .await?
+            {
+                None => {
+                    return Ok(Some(other_side_of_fiber_port));
+                }
+                Some(p) => p,
+            };
+
+            trace_fiber_to_end(connection, &next_fiber_start_port, plan_id, visited).await
+        }
+
+        connection
+            .transaction(async move |conn| {
+                let mut visited = HashSet::new();
+                trace_fiber_to_end(conn, self, plan_id, &mut visited).await
+            })
+            .await
+    }
+    async fn panel_side_end_port(
+        &self,
+        ctx: &Context<'_>,
+        plan_id: i32,
+    ) -> async_graphql::Result<Option<PortUsage>> {
+        let mut connection = get_connection(ctx).await?;
+
+        // Helper function to trace fiber through port usages recursively
+        #[async_recursion]
+        async fn trace_fiber_to_end<'a>(
+            connection: &mut deadpool::Object<AsyncPgConnection>,
+            usage: &PortUsage,
+            plan_id: i32,
+            visited: &mut HashSet<(i32, PortSide)>,
+        ) -> async_graphql::Result<Option<PortUsage>> {
+            // Avoid infinite loops
+            if !visited.insert((usage.port_id, usage.side)) {
+                error!("Loop detected");
+                return Ok(None);
+            }
+            let other_side_of_panel_port =
+                match usage.other_side_of_port(plan_id, connection).await? {
+                    None => return Ok(Some(*usage)),
+                    Some(p) => p,
+                };
+            let next_fiber_start_port = match other_side_of_panel_port
+                .other_side_of_fiber(plan_id, connection)
+                .await?
+            {
+                None => {
+                    return Ok(Some(other_side_of_panel_port));
+                }
+                Some(p) => p,
+            };
+
+            trace_fiber_to_end(connection, &next_fiber_start_port, plan_id, visited).await
+        }
+
+        connection
+            .transaction(async move |conn| {
+                let mut visited = HashSet::new();
+                trace_fiber_to_end(conn, self, plan_id, &mut visited).await
+            })
+            .await
     }
 }
 

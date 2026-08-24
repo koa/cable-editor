@@ -111,7 +111,7 @@ impl TreeTableColumn<IdOrNew, PanelEntry, PanelEditAction> for PanelColumn {
 
                     buttons.push(html!(<Button icon={Icon::AngleDoubleLeft} {onclick} variant={ButtonVariant::Secondary} />))
                 }
-                if let (Some(other_sibling)) = (context.previous_sibling) {
+                if let Some(other_sibling) = context.previous_sibling {
                     let parent = context.parent.copied();
                     let siblings = [*context.key, *other_sibling];
                     let callback = context.callback.clone();

@@ -3,7 +3,7 @@ pub mod marker;
 use crate::components::map::Point;
 use futures::lock::Mutex;
 use gloo_utils::document;
-use leaflet::{LatLng, Map, MapOptions, Marker, MouseEvent, MouseEvents, TileLayerWms};
+use leaflet::{LatLng, Map, MapOptions, Marker, MouseEvent, TileLayerWms};
 use marker::{MarkerLoader, NoDynamicMarkerLayer};
 use std::{collections::HashMap, fmt::Debug, hash::Hash, sync::Arc};
 use wasm_bindgen::JsCast;

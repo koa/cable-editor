@@ -1,8 +1,9 @@
-use crate::graphql::authenticated::{PortSide, PortType};
-use crate::graphql::mutate;
 use crate::{
     error::FrontendError,
-    graphql::{authenticated::schema, query},
+    graphql::{
+        authenticated::{PortSide, PortType, schema},
+        mutate, query,
+    },
 };
 use yew_oauth2::context::OAuth2Context;
 
@@ -89,15 +90,58 @@ pub struct Schacht {
 pub struct CableEnd {
     pub cable: Cable,
     pub path: CablePath,
-    #[arguments(planId: $plan_id)]
-    pub used_ports: Vec<CableUsedPort>,
+    pub fibers: Vec<FiberOwnEnd>,
 }
-#[derive(cynic::QueryFragment, Debug, Copy, Clone, PartialEq, Eq, Hash)]
-#[cynic(graphql_type = "PortUsage")]
-pub struct CableUsedPort {
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
+#[cynic(graphql_type = "FiberEnd", variables = "FetchPanelUsageVariables")]
+pub struct FiberOwnEnd {
+    pub bundle: i32,
+    pub fiber: i32,
+    pub other_end: Option<FiberOtherEnd>,
+    #[arguments(planId: $plan_id)]
+    pub used_port: Option<CableUsedOwnPort>,
+}
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
+#[cynic(graphql_type = "PortUsage", variables = "FetchPanelUsageVariables")]
+pub struct CableUsedOwnPort {
     pub port: PortPanelId,
-    pub fiber: Option<Fiber>,
     pub modified_in_plan: bool,
+}
+
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
+#[cynic(graphql_type = "FiberEnd", variables = "FetchPanelUsageVariables")]
+pub struct FiberOtherEnd {
+    #[arguments(planId: $plan_id)]
+    pub used_port: Option<CableUsedEndPort>,
+}
+
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
+#[cynic(graphql_type = "PortUsage", variables = "FetchPanelUsageVariables")]
+pub struct CableUsedEndPort {
+    #[arguments(planId: $plan_id)]
+    pub panel_side_end_port: Option<UsedEndPort>,
+}
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
+#[cynic(graphql_type = "PortUsage")]
+pub struct UsedEndPort {
+    pub port: EndPort,
+}
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
+#[cynic(graphql_type = "PanelPort")]
+pub struct EndPort {
+    pub label: Option<String>,
+    pub panel: EndPortPanel,
+}
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
+#[cynic(graphql_type = "Panel")]
+pub struct EndPortPanel {
+    pub name: Option<String>,
+    pub schacht: EndPortSchacht,
+}
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
+#[cynic(graphql_type = "Schacht")]
+pub struct EndPortSchacht {
+    pub name: String,
 }
 
 #[derive(cynic::QueryFragment, Debug, Copy, Clone, PartialEq, Eq, Hash)]

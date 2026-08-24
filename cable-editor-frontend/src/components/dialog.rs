@@ -1,6 +1,3 @@
-use patternfly_yew::prelude::*;
-use yew::prelude::*; // Passe dies an deine Patternfly-Yew Imports an
-
 #[macro_export]
 macro_rules! create_simple_dialog {
     (

@@ -1,16 +1,18 @@
 use crate::{
     components::{fiber::FiberLabel, table::ListModel},
     error::FrontendError,
-    graphql::authenticated::connections::{
-        Cable, CableEnd, CableId, Fiber, FiberKeyInput, Panel, PlannedPanel, PortUsageInput,
-        Schacht, UpdatePortUsage,
+    graphql::authenticated::{
+        PortSide, PortType,
+        connections::{
+            Cable, CableEnd, CableId, Fiber, FiberKeyInput, Panel, PlannedPanel, PortUsageInput,
+            Schacht, UpdatePortUsage,
+        },
     },
-    graphql::authenticated::{PortSide, PortType},
     icons::{IconFiberConnected, IconFiberCut, IconLink, IconUnlink},
     util::get_credentials,
 };
 
-use crate::graphql::authenticated::connections::PortUsageUpdateAction;
+use crate::graphql::authenticated::connections::{FiberOwnEnd, PortUsageUpdateAction, UsedEndPort};
 use itertools::Itertools;
 use patternfly_yew::prelude::{
     ActionGroup, Alert, AlertType, Button, ButtonVariant, Cell, CellContext, ExpansionState,
@@ -19,11 +21,12 @@ use patternfly_yew::prelude::{
 };
 use std::{
     cell::RefCell,
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     rc::Rc,
 };
 use yew::{
-    Callback, Component, Context, Html, Properties, html, html_nested, platform::spawn_local,
+    Callback, Component, Context, Html, Properties, html, html::IntoPropValue, html_nested,
+    platform::spawn_local,
 };
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -31,6 +34,8 @@ enum LoopColumn {
     Fiber,
     Status,
     Actions,
+    TerminationA,
+    TerminationB,
 }
 
 impl SelectItemRenderer for CableEnd {
@@ -53,11 +58,13 @@ pub enum FiberStatus {
     Looped,        // Ist aktuell als Loop durchgeschaltet
     UsedElsewhere, // Z.B. "Gepatcht auf Splice-Port 12"
 }
-#[derive(Clone, PartialEq, Debug, Copy)]
+#[derive(Clone, PartialEq, Debug)]
 struct FiberData {
     status: FiberStatus,
     modified_in_plan: bool,
     reset: bool,
+    end_port_a: Option<UsedEndPort>,
+    end_port_b: Option<UsedEndPort>,
 }
 
 // Repräsentiert eine Zeile (eine Faser) in der Matrix
@@ -146,6 +153,22 @@ impl TableEntryRenderer<LoopColumn> for FiberLoopEntry {
                     }
                 }
             }
+            LoopColumn::TerminationA | LoopColumn::TerminationB => {
+                let end_port = if let LoopColumn::TerminationA = context.column {
+                    self.data.end_port_a.as_ref()
+                } else {
+                    self.data.end_port_b.as_ref()
+                };
+                let description = end_port.map(|p| {
+                    format!(
+                        "{} {} {}",
+                        p.port.panel.schacht.name,
+                        p.port.panel.name.as_deref().unwrap_or_default(),
+                        p.port.label.as_deref().unwrap_or_default()
+                    )
+                });
+                Cell::new(description.into_prop_value())
+            }
         }
     }
 }
@@ -162,7 +185,7 @@ pub struct LoopPortEditor {
     cable_b: Option<CableEnd>,
 
     // Status der Fasern (Key: (Bundle, Fiber))
-    fiber_states: HashMap<(i32, i32), FiberData>,
+    fiber_states: BTreeMap<(i32, i32), FiberData>,
 
     table_state: Rc<RefCell<HashMap<usize, ExpansionState<LoopColumn>>>>,
     loading: bool,
@@ -192,7 +215,7 @@ impl Component for LoopPortEditor {
             current_situation: None,
             cable_a: None,
             cable_b: None,
-            fiber_states: HashMap::new(),
+            fiber_states: BTreeMap::new(),
             table_state: Rc::default(),
             loading: true,
             error: None,
@@ -287,18 +310,15 @@ impl Component for LoopPortEditor {
                 true
             }
             Msg::ToggleFiber(bundle, fiber, should_loop) => {
-                self.fiber_states.insert(
-                    (bundle, fiber),
-                    FiberData {
-                        status: if should_loop {
-                            FiberStatus::Looped
-                        } else {
-                            FiberStatus::Free
-                        },
-                        modified_in_plan: true,
-                        reset: false,
-                    },
-                );
+                if let Some(state) = self.fiber_states.get_mut(&(bundle, fiber)) {
+                    state.status = if should_loop {
+                        FiberStatus::Looped
+                    } else {
+                        FiberStatus::Free
+                    };
+                    state.modified_in_plan = true;
+                    state.reset = false;
+                }
                 true
             }
             Msg::Save => {
@@ -602,26 +622,15 @@ impl LoopPortEditor {
         let mut entries = Vec::new();
         let scope = ctx.link().clone();
 
-        for bundle in 1..=a.cable.bundle_count {
-            for fiber in 1..=a.cable.fiber_count {
-                let data = self
-                    .fiber_states
-                    .get(&(bundle, fiber))
-                    .cloned()
-                    .unwrap_or(FiberData {
-                        status: FiberStatus::Free,
-                        modified_in_plan: false,
-                        reset: false,
-                    });
-                entries.push(FiberLoopEntry {
-                    bundle,
-                    fiber,
-                    data,
-                    on_toggle: scope
-                        .callback(|(b, f, should_loop)| Msg::ToggleFiber(b, f, should_loop)),
-                    reset: scope.callback(|(b, f)| Msg::ResetFiber(b, f)),
-                });
-            }
+        for ((bundle, fiber), data) in self.fiber_states.iter() {
+            entries.push(FiberLoopEntry {
+                bundle: *bundle,
+                fiber: *fiber,
+                data: data.clone(),
+                on_toggle: scope
+                    .callback(|(b, f, should_loop)| Msg::ToggleFiber(b, f, should_loop)),
+                reset: scope.callback(|(b, f)| Msg::ResetFiber(b, f)),
+            })
         }
 
         let table_model = ListModel::new(
@@ -631,9 +640,11 @@ impl LoopPortEditor {
 
         let header = html_nested! {
             <TableHeader<LoopColumn>>
+                <TableColumn<LoopColumn> label="Ende" index={LoopColumn::TerminationA} />
                 <TableColumn<LoopColumn> label="Faser" index={LoopColumn::Fiber} />
                 <TableColumn<LoopColumn> label="Status" index={LoopColumn::Status} />
                 <TableColumn<LoopColumn> label="Aktion" index={LoopColumn::Actions} />
+                <TableColumn<LoopColumn> label="Ende" index={LoopColumn::TerminationB} />
             </TableHeader<LoopColumn>>
         };
 
@@ -647,23 +658,11 @@ impl LoopPortEditor {
         }
     }
 
-    fn calculate_current_states(&self, panel_id: i32) -> HashMap<(i32, i32), FiberData> {
-        let mut states = HashMap::new();
+    fn calculate_current_states(&self, panel_id: i32) -> BTreeMap<(i32, i32), FiberData> {
+        let mut states = BTreeMap::new();
         if let (
-            Some(CableEnd {
-                cable: Cable { id: cable_a_id, .. },
-                ..
-            }),
-            Some(CableEnd {
-                cable:
-                    Cable {
-                        id: cable_b_id,
-                        bundle_count,
-                        fiber_count,
-                        ..
-                    },
-                ..
-            }),
+            Some(cable_a),
+            Some(cable_b),
             Some(PlannedPanel {
                 ports,
                 panel: Panel {
@@ -672,44 +671,77 @@ impl LoopPortEditor {
             }),
         ) = (&self.cable_a, &self.cable_b, &self.current_situation)
         {
-            for bundle in 1..=*bundle_count {
-                for fiber in 1..=*fiber_count {
-                    let bundle_key = (bundle, fiber);
-                    states.insert(
-                        bundle_key,
-                        FiberData {
-                            status: FiberStatus::Free,
-                            modified_in_plan: false,
-                            reset: false,
-                        },
-                    );
-                }
-            }
-
-            for cable in cables
+            let fibers_a = cable_a
+                .fibers
                 .iter()
-                .filter(|c| c.cable.id == *cable_a_id || c.cable.id == *cable_b_id)
-            {
-                for port in cable.used_ports.iter() {
-                    if let Some(fiber) = port.fiber.as_ref() {
-                        let bundle_key = (fiber.bundle, fiber.fiber);
-                        let my_panel = port.port.panel.id == panel_id;
-                        let modified_in_plan = port.modified_in_plan;
+                .map(|f| ((f.bundle, f.fiber), f))
+                .collect::<HashMap<_, _>>();
+            let fibers_b = cable_b
+                .fibers
+                .iter()
+                .map(|f| ((f.bundle, f.fiber), f))
+                .collect::<HashMap<_, _>>();
+            let all_fibers = fibers_a
+                .keys()
+                .chain(fibers_b.keys())
+                .copied()
+                .collect::<HashSet<_>>();
+            for fiber_key in all_fibers {
+                let fiber_a = fibers_a.get(&fiber_key).copied();
+                let fiber_b = fibers_b.get(&fiber_key).copied();
+                let modified_in_plan = fiber_a
+                    .and_then(|f| f.used_port.as_ref())
+                    .map(|p| p.modified_in_plan)
+                    .unwrap_or_default()
+                    || fiber_b
+                        .and_then(|f| f.used_port.as_ref())
+                        .map(|p| p.modified_in_plan)
+                        .unwrap_or_default();
+                let end_port_a = fiber_a
+                    .and_then(|f| f.other_end.as_ref())
+                    .and_then(|e| e.used_port.as_ref())
+                    .and_then(|p| p.panel_side_end_port.as_ref())
+                    .cloned();
+                let end_port_b = fiber_b
+                    .and_then(|f| f.other_end.as_ref())
+                    .and_then(|e| e.used_port.as_ref())
+                    .and_then(|p| p.panel_side_end_port.as_ref())
+                    .cloned();
 
-                        states.insert(
-                            bundle_key,
-                            FiberData {
-                                status: if my_panel {
-                                    FiberStatus::Looped
-                                } else {
-                                    FiberStatus::UsedElsewhere
-                                },
-                                modified_in_plan,
-                                reset: false,
-                            },
-                        );
-                    }
-                }
+                states.insert(
+                    fiber_key,
+                    FiberData {
+                        status: match (fiber_a, fiber_b) {
+                            (Some(fa), Some(fb))
+                                if fa
+                                    .used_port
+                                    .as_ref()
+                                    .map(|p| p.port.panel.id == panel_id)
+                                    .unwrap_or(false)
+                                    && fb
+                                        .used_port
+                                        .as_ref()
+                                        .map(|p| p.port.panel.id == panel_id)
+                                        .unwrap_or(false) =>
+                            {
+                                FiberStatus::Looped
+                            }
+                            (
+                                Some(FiberOwnEnd {
+                                    used_port: None, ..
+                                }),
+                                Some(FiberOwnEnd {
+                                    used_port: None, ..
+                                }),
+                            ) => FiberStatus::Free,
+                            _ => FiberStatus::UsedElsewhere,
+                        },
+                        modified_in_plan,
+                        reset: false,
+                        end_port_a,
+                        end_port_b,
+                    },
+                );
             }
         }
         states

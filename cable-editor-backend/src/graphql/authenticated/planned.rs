@@ -1,13 +1,17 @@
-use crate::db::entity::panel::{Panel, PanelPort, PanelPortType, PortSide, PortUsage};
-use crate::db::entity::plan::Plan;
-use crate::db::schema::{panel, panel_port, port_usage};
-use crate::graphql::authenticated::get_connection;
-use async_graphql::{Context, Object, SimpleObject};
-use diesel::HasQuery;
-use diesel::OptionalExtension;
-use diesel::QueryDsl;
-use diesel::sql_types::Integer;
-use diesel::{ExpressionMethods, sql_query};
+use crate::{
+    db::{
+        entity::{
+            panel::{Panel, PanelPort, PanelPortType, PortSide, PortUsage},
+            plan::Plan,
+        },
+        schema::{panel, panel_port, port_usage},
+    },
+    graphql::authenticated::get_connection,
+};
+use async_graphql::{Context, Object};
+use diesel::{
+    ExpressionMethods, HasQuery, OptionalExtension, QueryDsl, sql_query, sql_types::Integer,
+};
 use diesel_async::RunQueryDsl;
 
 pub struct PlannedPanel {

@@ -12,8 +12,8 @@ use leaflet::{
 };
 use log::info;
 use patternfly_yew::prelude::{
-    ActionGroup, Backdrop, Backdropper, Bullseye, Button, Form, Menu, MenuAction, Modal,
-    SelectItemRenderer, ToggleGroup, ToggleGroupItem,
+    ActionGroup, Backdrop, Bullseye, Button, Form, Menu, MenuAction, Modal, SelectItemRenderer,
+    ToggleGroup, ToggleGroupItem,
 };
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{Element, HtmlElement, Node, window};
@@ -162,7 +162,7 @@ impl Component for MapComponent {
                     info!("Clicked on marker {event:?}");
                 }));
 
-                if let Some((backdropper)) = get_backdrop(ctx.link()) {
+                if let Some(backdropper) = get_backdrop(ctx.link()) {
                     let marker_clone = marker.clone();
                     let onclose = {
                         let scope = ctx.link().clone();
