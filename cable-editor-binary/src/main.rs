@@ -5,20 +5,19 @@ use actix_4_jwt_auth::{
     biscuit::{Validation, ValidationOptions},
 };
 use actix_web::{
-    App, HttpServer, get,
+    App, HttpRequest, HttpResponse, HttpServer, Responder, get,
     guard::Post,
     middleware::Logger,
+    web,
     web::{Data, resource},
 };
 use actix_web_prometheus::PrometheusMetricsBuilder;
-use actix_web_static_files::ResourceFiles;
-use async_graphql::futures_util::future::join_all;
-use async_graphql::{Response, ServerError};
+use actix_web_static_files::{ResourceFiles, deps::static_files::Resource};
+use async_graphql::{Response, ServerError, futures_util::future::join_all};
 use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse};
-use cable_editor_backend::db::{DB, run_sync_migrations};
 use cable_editor_backend::{
     config::CONFIG,
-    db::connect,
+    db::{DB, connect, run_sync_migrations},
     graphql::{
         anonymous::{AnonymousGraphqlSchema, create_anonymous_schema},
         authenticated::{AuthenticatedGraphqlSchema, create_authenticated_schema},
@@ -28,12 +27,45 @@ use cable_editor_backend::{
 use cached::cached;
 use env_logger::Env;
 use log::{error, info, trace};
+use mime_guess::from_path;
 use prometheus::{HistogramVec, histogram_opts};
 use reqwest::Client;
-use static_files::Resource;
+use rust_embed::RustEmbed;
 use thiserror::Error;
 use tracing_actix_web::TracingLogger;
-//include!(concat!(env!("OUT_DIR"), "/generated.rs"));
+#[derive(RustEmbed)]
+#[folder = "../cable-editor-frontend/dist"]
+struct Assets;
+
+async fn static_handler(req: HttpRequest) -> impl Responder {
+    // Den Pfad aus der URL extrahieren (catch-all)
+    let mut path = req.match_info().query("filename");
+
+    if path.is_empty() {
+        path = "index.html";
+    }
+
+    // Versuchen, die Datei zu laden
+    match Assets::get(path) {
+        Some(content) => {
+            let mime = from_path(path).first_or_octet_stream();
+            HttpResponse::Ok()
+                .content_type(mime.as_ref())
+                .body(content.data.into_owned())
+        }
+        None => {
+            // Fallback für Yew (SPA): Wenn eine Route nicht gefunden wird,
+            // liefere die index.html aus, damit der Yew-Router übernehmen kann.
+            if let Some(index) = Assets::get("index.html") {
+                HttpResponse::Ok()
+                    .content_type("text/html")
+                    .body(index.data.into_owned())
+            } else {
+                HttpResponse::NotFound().body("404 Not Found")
+            }
+        }
+    }
+}
 
 async fn graphql(
     context: Data<ApplicationContext>,
@@ -210,7 +242,7 @@ async fn main() -> Result<(), BackendError> {
                     .guard(Post())
                     .to(graphql_anonymous),
             )
-            .service(ResourceFiles::new("/", resources).resolve_not_found_to_root())
+            .route("/{filename:.*}", web::get().to(static_handler))
     })
     .bind((bind_addr, api_port))?
     .run();

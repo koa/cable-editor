@@ -6,7 +6,8 @@ edition = "2024"
 [dependencies]
 actix-web = "4"
 actix-web-static-files = "4"
-static-files = "0.2"
+rust-embed = "8.0"
+mime_guess = "2.0"
 cable-editor-backend = { path = "../cable-editor-backend" }
 async-graphql = "7.0"
 async-graphql-actix-web = "7.0"

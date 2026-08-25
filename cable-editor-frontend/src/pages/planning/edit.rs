@@ -10,10 +10,9 @@ use crate::{
     util::{get_backdrop, get_credentials},
 };
 use patternfly_yew::prelude::{
-    ActionGroup, Alert, AlertType, Backdrop, Backdropper, Bullseye, Button, ButtonVariant, Cell,
-    CellContext, ExpansionState, Form, FormGroup, MemoizedTableModel, Modal, ModalVariant, Spinner,
-    Table, TableColumn, TableEntryRenderer, TableGridMode, TableHeader, TableMode, TextInput,
-    Title,
+    ActionGroup, Alert, AlertType, Backdrop, Bullseye, Button, ButtonVariant, Cell, CellContext,
+    ExpansionState, Form, FormGroup, MemoizedTableModel, Modal, ModalVariant, Spinner, Table,
+    TableColumn, TableEntryRenderer, TableGridMode, TableHeader, TableMode, TextInput, Title,
 };
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use yew::{
@@ -178,9 +177,9 @@ impl Component for EditPlan {
 
                     backdrop.open(Backdrop::new(html! {
                         <Bullseye>
-                            <Modal 
+                            <Modal
                                 title="Planung abschliessen" 
-                                variant={ModalVariant::Small} 
+                                variant={ModalVariant::Small}
                                 footer={html!{
                                     <>
                                         <Button label="Abschliessen" variant={ButtonVariant::Danger} onclick={on_confirm}/>

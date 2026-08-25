@@ -1,9 +1,8 @@
-use std::fs;
-
 use anyhow::Result;
 use cable_editor_backend::graphql::{
     anonymous::create_anonymous_schema, authenticated::create_authenticated_schema,
 };
+use std::fs;
 
 fn main() -> Result<()> {
     write_graphql_schema()?;
