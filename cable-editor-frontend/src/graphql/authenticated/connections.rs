@@ -5,6 +5,7 @@ use crate::{
         mutate, query,
     },
 };
+use std::fmt::{Display, Formatter};
 use yew_oauth2::context::OAuth2Context;
 
 #[derive(cynic::QueryVariables, Debug)]
@@ -125,6 +126,18 @@ pub struct CableUsedEndPort {
 #[cynic(graphql_type = "PortUsage")]
 pub struct UsedEndPort {
     pub port: EndPort,
+}
+
+impl Display for UsedEndPort {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} {} {}",
+            self.port.panel.schacht.name,
+            self.port.panel.name.as_deref().unwrap_or_default(),
+            self.port.label.as_deref().unwrap_or_default()
+        )
+    }
 }
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
 #[cynic(graphql_type = "PanelPort")]

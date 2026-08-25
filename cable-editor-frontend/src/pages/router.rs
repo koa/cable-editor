@@ -1,17 +1,17 @@
-use crate::components::panel::loop_editor::LoopPortEditor;
-use crate::error::FrontendError;
-use crate::graphql::authenticated::plan_details::PlanDetails;
-use crate::pages::cabinet::list::ListOfCabinets;
-use crate::pages::cable::edit::EditCable;
-use crate::pages::list_of_cables::ListOfCables;
-use crate::pages::panel::EditPanel;
-use crate::pages::planning::list::ListOfPlannings;
-use crate::util::get_credentials;
+use crate::{
+    components::panel::{attach_fiber::AttachFiber, loop_editor::LoopPortEditor},
+    error::FrontendError,
+    graphql::authenticated::plan_details::PlanDetails,
+    pages::{
+        cabinet::list::ListOfCabinets, cable::edit::EditCable, list_of_cables::ListOfCables,
+        panel::EditPanel, planning::list::ListOfPlannings,
+    },
+    util::get_credentials,
+};
 use patternfly_yew::prelude::{Nav, NavList, NavRouterItem, Spinner};
-use yew::html::IntoPropValue;
-use yew::platform::spawn_local;
 use yew::{
     Callback, Component, Context, ContextHandle, Html, Properties, function_component, html,
+    html::IntoPropValue, platform::spawn_local,
 };
 use yew_nested_router::prelude::{RouterContext, Target, use_router};
 
@@ -175,6 +175,7 @@ pub enum CabinetView {
 pub enum PanelView {
     Edit,
     Loop,
+    Attach,
 }
 
 impl PanelView {
@@ -185,6 +186,9 @@ impl PanelView {
             }
             PanelView::Loop => {
                 html!(<LoopPortEditor  {plan_id} {panel_id}/>)
+            }
+            PanelView::Attach => {
+                html!(<AttachFiber {plan_id} {panel_id}/>)
             }
         }
     }

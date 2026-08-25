@@ -55,8 +55,8 @@ impl SelectItemRenderer for CableEnd {
 #[derive(Clone, PartialEq, Debug, Copy)]
 pub enum FiberStatus {
     Free,
-    Looped,        // Ist aktuell als Loop durchgeschaltet
-    UsedElsewhere, // Z.B. "Gepatcht auf Splice-Port 12"
+    Looped,
+    UsedElsewhere,
 }
 #[derive(Clone, PartialEq, Debug)]
 struct FiberData {
@@ -159,15 +159,7 @@ impl TableEntryRenderer<LoopColumn> for FiberLoopEntry {
                 } else {
                     self.data.end_port_b.as_ref()
                 };
-                let description = end_port.map(|p| {
-                    format!(
-                        "{} {} {}",
-                        p.port.panel.schacht.name,
-                        p.port.panel.name.as_deref().unwrap_or_default(),
-                        p.port.label.as_deref().unwrap_or_default()
-                    )
-                });
-                Cell::new(description.into_prop_value())
+                Cell::new(end_port.map(UsedEndPort::to_string).into_prop_value())
             }
         }
     }

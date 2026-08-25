@@ -159,7 +159,17 @@ impl TreeTableColumn<IdOrNew, PanelEntry, PanelEditAction> for PanelColumn {
                                     view: PanelView::Loop,
                                 },
                             };
-                            buttons.push(html!(<Link<AppRoute>{to} {class}>{"Loops Verbinden"}</Link<AppRoute>>));
+                            buttons.push(html!(<Link<AppRoute>{to} class={class.clone()}>{"Loops Verbinden"}</Link<AppRoute>>));
+                        }
+                        if context.row.port_count > 0 {
+                            let to = AppRoute::Plan {
+                                plan_id: *plan_id,
+                                view: PlanView::Panel {
+                                    id: *id,
+                                    view: PanelView::Attach,
+                                },
+                            };
+                            buttons.push(html!(<Link<AppRoute>{to} {class}>{"Fasern auflegen"}</Link<AppRoute>>));
                         }
                     }
                 }
