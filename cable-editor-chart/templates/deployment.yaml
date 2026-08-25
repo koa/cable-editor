@@ -57,4 +57,11 @@ spec:
               value: {{ .Values.config.serverBindAddress | quote }}
             # Wenn du die DB noch brauchst (ist nicht im Settings-Struct, aber vielleicht in config.yaml?)
             - name: DATABASE_URL
+              {{- if .Values.config.databaseSecret}}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.config.databaseSecret | squote}}
+                  key: "uri"
+              {{- else}}
               value: {{ .Values.config.databaseUrl | quote }}
+              {{- end}}

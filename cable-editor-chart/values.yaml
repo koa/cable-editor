@@ -37,6 +37,7 @@ podMonitor:
 config:
   logLevel: "info"
   # Diese Werte müssen beim Deployment überschrieben werden (z.B. über eine CI/CD Pipeline oder Helm Secrets)
+  databaseSecret: "cable-editor-db-app"
   databaseUrl: "postgres://user:password@localhost:5432/cable_editor"
   authIssuer: "https://login.berg-turbenthal.ch"
   serverBindAddress: "0.0.0.0"
