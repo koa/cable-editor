@@ -3,8 +3,11 @@ use crate::{
     error::FrontendError,
     graphql::authenticated::plan_details::PlanDetails,
     pages::{
-        cabinet::list::ListOfCabinets, cable::edit::EditCable, list_of_cables::ListOfCables,
-        panel::EditPanel, planning::list::ListOfPlannings,
+        cabinet::list::ListOfCabinets,
+        cable::edit::EditCable,
+        list_of_cables::ListOfCables,
+        panel::EditPanel,
+        planning::{edit::EditPlan, list::ListOfPlannings},
     },
     util::get_credentials,
 };
@@ -234,7 +237,7 @@ impl AppRoute {
 impl PlanView {
     fn content(self, plan_id: i32) -> Html {
         match self {
-            PlanView::Edit => format!("Edit Plan {plan_id}").into_prop_value(),
+            PlanView::Edit => html!(<EditPlan {plan_id}/>),
             PlanView::ListOfCabinets => html! {<ListOfCabinets {plan_id}/>},
             PlanView::Cabinet { id, view } => view.content(plan_id, id),
             PlanView::ListOfCables => html! {<ListOfCables/>},

@@ -76,3 +76,10 @@ pub enum PortSide {
     FRONT,
     BACK,
 }
+
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
+#[cynic(graphql_type = "Panel")]
+pub struct ParentChainPanel {
+    pub id: i32,
+    pub name: Option<String>,
+}

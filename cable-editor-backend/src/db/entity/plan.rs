@@ -1,17 +1,21 @@
-use crate::db::entity::panel::Panel;
-use crate::db::schema;
-use crate::graphql::authenticated::get_connection;
-use crate::graphql::authenticated::planned::PlannedPanel;
+use crate::{
+    db::{
+        entity::panel::{Panel, PortUsage},
+        schema,
+    },
+    graphql::authenticated::{get_connection, planned::PlannedPanel},
+};
 use async_graphql::{Context, Enum, Object};
-use diesel::sql_types::Integer;
 use diesel::{
-    ExpressionMethods, HasQuery, Identifiable, Insertable, OptionalExtension, QueryDsl,
-    QueryableByName, sql_query,
+    AsChangeset, ExpressionMethods, HasQuery, Identifiable, Insertable, OptionalExtension,
+    QueryDsl, QueryableByName, sql_query, sql_types::Integer,
 };
 use diesel_async::RunQueryDsl;
 use diesel_derive_enum::DbEnum;
 
-#[derive(QueryableByName, Identifiable, Insertable, HasQuery, Debug, Clone, PartialEq)]
+#[derive(
+    QueryableByName, Identifiable, Insertable, HasQuery, Debug, Clone, PartialEq, AsChangeset,
+)]
 #[diesel(table_name = schema::plan)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct Plan {
@@ -108,5 +112,12 @@ WHERE a.parent_panel IS NULL;
                     plan: self.clone(),
                 }))
         }
+    }
+    async fn usage(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<PortUsage>> {
+        let mut connection = get_connection(ctx).await?;
+        Ok(PortUsage::query()
+            .filter(schema::port_usage::plan_id.eq(self.id))
+            .load(&mut connection)
+            .await?)
     }
 }

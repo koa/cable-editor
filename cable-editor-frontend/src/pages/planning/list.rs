@@ -1,24 +1,22 @@
-use crate::components::table::ListModel;
-use crate::error::FrontendError;
-use crate::graphql::authenticated::list_plans::{PlanListEntry, PlanStatus};
-use crate::pages::router::{AppRoute, PlanView};
-use crate::util::{get_backdrop, get_credentials};
-use log::info;
-use patternfly_yew::prelude::{
-    Action, ActionGroup, Backdrop, Backdropper, Bullseye, Button, ButtonVariant, Cell, CellContext,
-    ExpansionState, Form, FormGroup, LabelIcon, MemoizedTableModel, MenuAction, MenuChildVariant,
-    Modal, PopoverBody, Spinner, Table, TableColumn, TableEntryRenderer, TableGridMode,
-    TableHeader, TableMode, TextInput,
+use crate::{
+    components::table::ListModel,
+    error::FrontendError,
+    graphql::authenticated::list_plans::{PlanListEntry, PlanStatus},
+    pages::router::{AppRoute, PlanView},
+    util::{get_backdrop, get_credentials},
 };
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::ops::Deref;
-use std::rc::Rc;
-use yew::html::IntoPropValue;
-use yew::platform::spawn_local;
-use yew::{Callback, Component, Context, Html, Properties, html, html_nested};
+use patternfly_yew::prelude::{
+    ActionGroup, Backdrop, Bullseye, Button, ButtonVariant, Cell, CellContext, ExpansionState,
+    Form, FormGroup, LabelIcon, MemoizedTableModel, MenuAction, MenuChildVariant, Modal,
+    PopoverBody, Spinner, Table, TableColumn, TableEntryRenderer, TableGridMode, TableHeader,
+    TableMode, TextInput,
+};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use yew::{
+    Callback, Component, Context, Html, Properties, html, html::IntoPropValue, html_nested,
+    platform::spawn_local,
+};
 use yew_nested_router::components::Link;
-use yew_nested_router::prelude::RouterContext;
 
 pub struct ListOfPlannings {
     error: Option<FrontendError>,
@@ -120,7 +118,7 @@ impl Component for ListOfPlannings {
                             let scope=scope.clone();
                             Callback::from(move |_| {
                                 let name = project_name.borrow();
-                                if name.len() > 3 {
+                                if !name.is_empty() {
                                     let credentials = get_credentials(&scope);
                                     let name = name.clone();
                                     let bd=bd.clone();

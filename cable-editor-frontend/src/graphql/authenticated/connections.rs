@@ -1,7 +1,7 @@
 use crate::{
     error::FrontendError,
     graphql::{
-        authenticated::{PortSide, PortType, schema},
+        authenticated::{ParentChainPanel, PortSide, PortType, schema},
         mutate, query,
     },
 };
@@ -79,7 +79,7 @@ pub struct PlannedPort {
 pub struct Panel {
     pub schacht: Schacht,
     pub name: Option<String>,
-    pub parent_chain: Vec<EndPortParentPanel>,
+    pub parent_chain: Vec<ParentChainPanel>,
 }
 impl Display for Panel {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -172,7 +172,7 @@ pub struct EndPort {
 pub struct EndPortPanel {
     pub schacht: EndPortSchacht,
     pub name: Option<String>,
-    pub parent_chain: Vec<EndPortParentPanel>,
+    pub parent_chain: Vec<ParentChainPanel>,
 }
 impl Display for EndPortPanel {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -194,11 +194,6 @@ impl Display for EndPortPanel {
         }
         Ok(())
     }
-}
-#[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
-#[cynic(graphql_type = "Panel")]
-pub struct EndPortParentPanel {
-    pub name: Option<String>,
 }
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
 #[cynic(graphql_type = "Schacht")]
