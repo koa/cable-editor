@@ -14,8 +14,7 @@ jobs:
       - name: Delete old Docker Snapshot Images
         uses: snok/container-retention-policy@v3.1.0
         with:
-          account-type: personal
-          account: ${{ github.repository_owner }} # Dein Benutzername oder Org-Name
+          account: user
           image-names: cable-editor
           # Löscht nur die Tags, die mit "sha-" anfangen
           image-tags: "sha-*"
@@ -26,8 +25,7 @@ jobs:
       - name: Delete old Helm Snapshot Charts
         uses: snok/container-retention-policy@v3.1.0
         with:
-          account-type: personal
-          account: ${{ github.repository_owner }}
+          account: user
           image-names: cable-editor-chart
           # Löscht nur Tags, die "-snapshot." beinhalten
           image-tags: "*-snapshot.*"
