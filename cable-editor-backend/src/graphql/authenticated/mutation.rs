@@ -451,7 +451,7 @@ impl Mutation {
                     .await?;
                 for PortUsage {
                     port_id,
-                    plan_id,
+                    plan_id: _,
                     side,
                     cable,
                     fiber,

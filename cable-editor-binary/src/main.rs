@@ -12,7 +12,7 @@ use actix_web::{
     web::{Data, resource},
 };
 use actix_web_prometheus::PrometheusMetricsBuilder;
-use actix_web_static_files::{ResourceFiles, deps::static_files::Resource};
+use actix_web_static_files::deps::static_files::Resource;
 use async_graphql::{Response, ServerError, futures_util::future::join_all};
 use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse};
 use cable_editor_backend::{
@@ -26,7 +26,7 @@ use cable_editor_backend::{
 };
 use cached::cached;
 use env_logger::Env;
-use log::{error, info, trace};
+use log::{info, trace};
 use mime_guess::from_path;
 use prometheus::{HistogramVec, histogram_opts};
 use reqwest::Client;
@@ -211,8 +211,6 @@ async fn main() -> Result<(), BackendError> {
         pool: connection_pool,
     });
     let main_server = HttpServer::new(move || {
-        let resources: HashMap<&str, Resource> = HashMap::new(); // generate();
-
         App::new()
             .wrap(prometheus.clone())
             .wrap(TracingLogger::default())

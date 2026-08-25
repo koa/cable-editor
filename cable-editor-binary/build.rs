@@ -1,13 +1,19 @@
-use std::{path::Path, process::Command};
+use std::{env, path::Path, process::Command};
 
 fn main() {
     let frontend_dir = Path::new("../cable-editor-frontend");
+    let frontend_target_dir = frontend_dir.join("target");
+    let profile = env::var("PROFILE").unwrap();
 
     // 2. Führe 'trunk build' im Frontend-Verzeichnis aus
-    let status = Command::new("trunk")
-        .arg("build")
-        .arg("--release") // Optional: Für Production optimieren
+    let mut cmd = Command::new("trunk");
+    cmd.arg("build")
         .current_dir(frontend_dir)
+        .env("CARGO_TARGET_DIR", frontend_target_dir);
+    if profile == "release" {
+        cmd.arg("--release");
+    }
+    let status = cmd
         .status()
         .expect("Fehler: Konnte 'trunk' nicht ausführen. Ist Trunk installiert?");
 
