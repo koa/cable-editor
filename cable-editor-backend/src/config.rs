@@ -38,10 +38,10 @@ impl Settings {
 
 fn create_settings() -> Result<Settings, ConfigError> {
     let cfg = Config::builder()
-        .add_source(File::with_name("config.yaml"))
-        .add_source(Environment::with_prefix("app"))
+        .add_source(File::with_name("config.yaml").required(false))
+        .add_source(Environment::with_prefix("app").separator("__"))
         .build()?;
-    Ok(cfg.get("oauth")?)
+    cfg.get("oauth")
 }
 
 lazy_static! {
