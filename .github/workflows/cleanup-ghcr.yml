@@ -17,11 +17,10 @@ jobs:
       - name: Delete old Docker Snapshot Images
         uses: snok/container-retention-policy@v3
         with:
-          # ACHTUNG: Passe diesen Namen an dein echtes Image an (ohne ghcr.io/owner/ davor)
-          image-names: cable-editor-binary
+          image-names: cable-editor
           cut-off: 7 days ago
           keep-at-least: 3
-          account-type: personal # Ändern in 'org', falls das ein Organisations-Repo ist
+          account-type: personal
           # LÖSUNG: Nur Tags löschen, die mit "sha-" beginnen
           filter-tags: ^sha-.*
           token: ${{ secrets.GITHUB_TOKEN }}
