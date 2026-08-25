@@ -8,7 +8,7 @@ serviceAccount:
   name: ""
 
 image:
-  repository: cable-editor  # Passe das an deine Registry an, falls du eine nutzt
+  repository: ghcr.io/koa/cable-editor
   pullPolicy: IfNotPresent
   tag: "latest"
 
