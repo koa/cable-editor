@@ -6,3 +6,4 @@
 /cable-editor-frontend/graphql/authenticated_schema.graphql
 /.env
 .diesel_lock
+/cable-editor-frontend/target/

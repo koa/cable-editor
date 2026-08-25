@@ -6,6 +6,9 @@
       <sourceFolder url="file://$MODULE_DIR$/cable-editor-binary/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/cable-editor-frontend/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
+      <excludeFolder url="file://$MODULE_DIR$/.idea/dataSources" />
+      <excludeFolder url="file://$MODULE_DIR$/cable-editor-frontend/dist" />
+      <excludeFolder url="file://$MODULE_DIR$/cable-editor-frontend/target" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>
     <orderEntry type="inheritedJdk" />

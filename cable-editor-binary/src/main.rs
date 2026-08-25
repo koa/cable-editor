@@ -12,7 +12,6 @@ use actix_web::{
     web::{Data, resource},
 };
 use actix_web_prometheus::PrometheusMetricsBuilder;
-use actix_web_static_files::deps::static_files::Resource;
 use async_graphql::{Response, ServerError, futures_util::future::join_all};
 use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse};
 use cable_editor_backend::{
