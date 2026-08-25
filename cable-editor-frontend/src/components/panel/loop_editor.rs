@@ -480,13 +480,16 @@ impl Component for LoopPortEditor {
 
         let is_pair_defined = self.cable_a.is_some() && self.cable_b.is_some();
         let unmodified = self.calculate_current_states(ctx.props().panel_id) == self.fiber_states;
-        let scope = ctx.link().clone();
+        let title = self.current_situation.as_ref().map(|p| {
+            let title = format!("Direktverbindungen in {}", p.panel);
+            html!(<Title size={patternfly_yew::prelude::Size::XLarge}>{title}</Title>)
+        });
 
         html! {
             <div class="pf-v6-c-panel">
                 <div class="pf-v6-c-panel__main">
                     <div class="pf-v6-c-panel__main-body">
-                        <Title size={patternfly_yew::prelude::Size::XLarge}>{"Direktverbindungen"}</Title>
+                        {title}
                         if let Some(err) = &self.error {
                             <Alert title={err.to_string()} r#type={AlertType::Danger} inline=true />
                         }
@@ -656,10 +659,12 @@ impl LoopPortEditor {
             Some(cable_a),
             Some(cable_b),
             Some(PlannedPanel {
-                ports,
-                panel: Panel {
-                    schacht: Schacht { cables },
-                },
+                panel:
+                    Panel {
+                        schacht: Schacht { cables, .. },
+                        ..
+                    },
+                ..
             }),
         ) = (&self.cable_a, &self.cable_b, &self.current_situation)
         {

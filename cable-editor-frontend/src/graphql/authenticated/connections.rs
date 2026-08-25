@@ -78,12 +78,36 @@ pub struct PlannedPort {
 #[cynic(variables = "FetchPanelUsageVariables")]
 pub struct Panel {
     pub schacht: Schacht,
+    pub name: Option<String>,
+    pub parent_chain: Vec<EndPortParentPanel>,
+}
+impl Display for Panel {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.schacht.name,)?;
+        let mut device_written = false;
+        for name in self
+            .parent_chain
+            .iter()
+            .filter_map(|p| p.name.as_deref())
+            .chain(self.name.as_deref())
+        {
+            if device_written {
+                f.write_str(" ")?;
+            } else {
+                f.write_str(":")?;
+                device_written = true;
+            }
+            f.write_str(name)?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone)]
 #[cynic(variables = "FetchPanelUsageVariables")]
 pub struct Schacht {
     pub cables: Vec<CableEnd>,
+    pub name: String,
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
@@ -130,13 +154,11 @@ pub struct UsedEndPort {
 
 impl Display for UsedEndPort {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{} {} {}",
-            self.port.panel.schacht.name,
-            self.port.panel.name.as_deref().unwrap_or_default(),
-            self.port.label.as_deref().unwrap_or_default()
-        )
+        write!(f, "{}", self.port.panel)?;
+        if let Some(name) = self.port.label.as_deref() {
+            write!(f, ":{name}",)?;
+        }
+        Ok(())
     }
 }
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
@@ -148,8 +170,35 @@ pub struct EndPort {
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
 #[cynic(graphql_type = "Panel")]
 pub struct EndPortPanel {
-    pub name: Option<String>,
     pub schacht: EndPortSchacht,
+    pub name: Option<String>,
+    pub parent_chain: Vec<EndPortParentPanel>,
+}
+impl Display for EndPortPanel {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.schacht.name,)?;
+        let mut device_written = false;
+        for name in self
+            .parent_chain
+            .iter()
+            .filter_map(|p| p.name.as_deref())
+            .chain(self.name.as_deref())
+        {
+            if device_written {
+                f.write_str(" ")?;
+            } else {
+                f.write_str(":")?;
+                device_written = true;
+            }
+            f.write_str(name)?;
+        }
+        Ok(())
+    }
+}
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
+#[cynic(graphql_type = "Panel")]
+pub struct EndPortParentPanel {
+    pub name: Option<String>,
 }
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
 #[cynic(graphql_type = "Schacht")]

@@ -317,12 +317,22 @@ impl Component for AttachFiber {
         let validation_errors = self.validate();
         let has_changes = self.has_changes();
         let can_save = has_changes && validation_errors.is_empty();
+        let title = self
+            .current_situation
+            .as_ref()
+            .map(|p| {
+                let title = format!("Fasern auflegen in {}", p.panel);
+                html! {
+                    <Title size={patternfly_yew::prelude::Size::XLarge}>{title}</Title>
+                }
+            })
+            .unwrap_or_else(|| html!(<Spinner/>));
 
         html! {
             <div class="pf-v6-c-panel">
                 <div class="pf-v6-c-panel__main">
                     <div class="pf-v6-c-panel__main-body">
-                        <Title size={patternfly_yew::prelude::Size::XLarge}>{"Fasern auflegen"}</Title>
+                        {title}
 
                         if let Some(err) = &self.error {
                             <Alert title={err.to_string()} r#type={AlertType::Danger} inline=true />

@@ -1,10 +1,8 @@
-use crate::graphql::authenticated::PortType;
-use crate::graphql::authenticated::edit_ports::FetchedPanelWithPorts;
 use crate::{
     error::FrontendError,
     graphql::authenticated::{
-        IdOrNew,
-        edit_ports::{FlatPortInput, update_panel_ports},
+        IdOrNew, PortType,
+        edit_ports::{FetchedPanelWithPorts, FlatPortInput, update_panel_ports},
     },
     util::get_credentials,
 };
@@ -142,22 +140,26 @@ impl Component for PortEditor {
                     .map(|last| {
                         let text = last.label.trim();
                         (
-                            text.rfind(|ch: char| !ch.is_numeric())
-                                .and_then(|digit_pos| {
-                                    let (prefix, number) = text.split_at(digit_pos + 1);
-                                    number.parse::<usize>().ok().map(|n| {
-                                        let new_number_str = (n + 1).to_string();
-                                        (String::from(prefix)
-                                            + &if number.starts_with('0') {
-                                                "0".repeat(number.len() - new_number_str.len())
-                                                    + new_number_str.as_ref()
-                                            } else {
-                                                new_number_str
-                                            })
-                                            .into_boxed_str()
-                                    })
+                            Some(
+                                text.rfind(|ch: char| !ch.is_numeric())
+                                    .map(|digit_pos| text.split_at(digit_pos + 1))
+                                    .unwrap_or(("", text)),
+                            )
+                            .filter(|(_, n)| !n.is_empty())
+                            .and_then(|(prefix, number)| {
+                                number.parse::<usize>().ok().map(|n| {
+                                    let new_number_str = (n + 1).to_string();
+                                    (String::from(prefix)
+                                        + &if number.starts_with('0') {
+                                            "0".repeat(number.len() - new_number_str.len())
+                                                + new_number_str.as_ref()
+                                        } else {
+                                            new_number_str
+                                        })
+                                        .into_boxed_str()
                                 })
-                                .unwrap_or_else(|| format!("Port {next_order}").into_boxed_str()),
+                            })
+                            .unwrap_or_else(|| format!("Port {next_order}").into_boxed_str()),
                             last.port_type,
                         )
                     })

@@ -1,7 +1,6 @@
 use crate::{
-    db::entity::plan::Plan,
     db::{
-        entity::{cable::Fiber, schacht::Schacht},
+        entity::{cable::Fiber, plan::Plan, schacht::Schacht},
         schema,
     },
     graphql::authenticated::get_connection,
@@ -316,6 +315,36 @@ impl Panel {
             ))
         } else {
             Ok(None)
+        }
+    }
+    async fn parent_chain(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Panel>> {
+        #[async_recursion]
+        async fn fetch_parent_chain(
+            transaction: &mut deadpool::Object<AsyncPgConnection>,
+            entry: &Panel,
+            parents: &mut Vec<Panel>,
+        ) -> Result<(), diesel::result::Error> {
+            if let Some(parent_panel_id) = entry.parent_panel {
+                let parent_panel = Panel::query()
+                    .filter(schema::panel::id.eq(parent_panel_id))
+                    .first(transaction)
+                    .await?;
+                fetch_parent_chain(transaction, &parent_panel, parents).await?;
+                parents.push(parent_panel);
+            }
+            Ok(())
+        }
+        if self.parent_panel.is_some() {
+            let mut connection = get_connection(ctx).await?;
+            connection
+                .transaction(async |conn| {
+                    let mut result = Vec::new();
+                    fetch_parent_chain(conn, self, &mut result).await?;
+                    Ok(result)
+                })
+                .await
+        } else {
+            Ok(Vec::default())
         }
     }
     async fn children(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Panel>> {
