@@ -1,0 +1,84 @@
+name: Build and Publish
+
+on:
+  push:
+    branches: [ "master" ]
+    tags: [ 'v*.*.*' ]
+  # Ermöglicht manuelles Starten
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    # Schreibrechte für die GitHub Container Registry (GHCR)[cite: 7]
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # --- DOCKER BUILD & PUSH ---
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f95db51fddba0c2d1ec667646a06c2ce06100226 # v3.0.0[cite: 7]
+
+      - name: Log into registry ${{ env.REGISTRY }}
+        uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d # v3.0.0[cite: 7]
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@96383f45573cb7f253c731d3b3ab81c87ef81934 # v5.0.0[cite: 7]
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            # Generiert automatisch einen Tag wie 'sha-a1b2c3d'
+            type=sha,format=short
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0[cite: 7]
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # --- HELM PACKAGE & PUSH ---
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.2
+
+      - name: Package and Push Helm Chart
+        run: |
+          # Extrahiere die kurzen 7 Zeichen des Commit-Hashes
+          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          
+          # Helm benötigt striktes Semantic Versioning! 
+          CHART_VERSION="0.1.0-snapshot.${SHORT_SHA}"
+
+          # Ersetze den "latest" Tag in der values.yaml durch den eben gebauten Docker-Tag
+          sed -i "s/tag: .*/tag: \"sha-${SHORT_SHA}\"/" cable-editor-chart/values.yaml
+
+          # Verpackt das Chart mit der neuen dynamischen Version
+          helm package cable-editor-chart --version ${CHART_VERSION} --app-version ${SHORT_SHA} --destination .
+
+          # Push-Vorbereitungen[cite: 7]
+          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          CHART_PKG=$(ls cable-editor-chart-*.tgz)
+
+          # Sicherstellen, dass Helm eingeloggt ist (nutzt das gleiche Token)[cite: 7]
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ${{ env.REGISTRY }} --username ${{ github.actor }} --password-stdin
+          helm push $CHART_PKG oci://${{ env.REGISTRY }}/$REPO_OWNER

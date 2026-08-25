@@ -1,0 +1,38 @@
+name: Cleanup old GHCR packages
+
+on:
+  schedule:
+    # Läuft jeden Tag um 03:00 Uhr nachts
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  clean-ghcr:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+
+    steps:
+      - name: Delete old Docker Snapshot Images
+        uses: snok/container-retention-policy@v3
+        with:
+          # ACHTUNG: Passe diesen Namen an dein echtes Image an (ohne ghcr.io/owner/ davor)
+          image-names: cable-editor-binary
+          cut-off: 7 days ago
+          keep-at-least: 3
+          account-type: personal # Ändern in 'org', falls das ein Organisations-Repo ist
+          # LÖSUNG: Nur Tags löschen, die mit "sha-" beginnen
+          filter-tags: ^sha-.*
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Delete old Helm Snapshot Charts
+        uses: snok/container-retention-policy@v3
+        with:
+          image-names: cable-editor-chart
+          cut-off: 7 days ago
+          keep-at-least: 3
+          account-type: personal
+          # LÖSUNG: Nur Tags löschen, die "-snapshot." im Namen haben
+          filter-tags: .*-snapshot\..*
+          token: ${{ secrets.GITHUB_TOKEN }}
