@@ -7,3 +7,4 @@
 /.env
 .diesel_lock
 /cable-editor-frontend/target/
+/cable-editor-chart/charts/

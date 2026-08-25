@@ -1,0 +1,19 @@
+{{- if .Values.podMonitor.enabled -}}
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: {{ include "cable-editor-chart.fullname" . }}
+  labels:
+    {{- include "cable-editor-chart.labels" . | nindent 4 }}
+    {{- with .Values.podMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "cable-editor-chart.selectorLabels" . | nindent 6 }}
+  podMetricsEndpoints:
+    - port: http-mgmt
+      path: {{ .Values.podMonitor.path }}
+      interval: {{ .Values.podMonitor.interval }}
+{{- end }}

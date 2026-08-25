@@ -1,0 +1,44 @@
+replicaCount: 1
+
+
+serviceAccount:
+  create: true
+  annotations: {}
+  # Wenn leer, wird der Name über das Helm-Template generiert
+  name: ""
+
+image:
+  repository: cable-editor  # Passe das an deine Registry an, falls du eine nutzt
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+service:
+  type: ClusterIP
+  apiPort: 8080
+  mgmtPort: 9090
+
+gateway:
+  enabled: true
+  parentRefs:
+    - name: mein-gateway
+      namespace: default
+  hostnames:
+    - "cable-editor.meinedomain.local"
+
+podMonitor:
+  enabled: true
+  interval: 15s
+  path: /metrics
+  # Manche Prometheus-Setups erfordern spezielle Labels,
+  # damit der Operator den PodMonitor erkennt (z.B. release: prometheus).
+  labels: {}
+
+# Konfiguration deiner Anwendung (Umgebungsvariablen)
+config:
+  logLevel: "info"
+  # Diese Werte müssen beim Deployment überschrieben werden (z.B. über eine CI/CD Pipeline oder Helm Secrets)
+  databaseUrl: "postgres://user:password@localhost:5432/cable_editor"
+  authIssuer: "https://login.berg-turbenthal.ch"
+  serverBindAddress: "0.0.0.0"
+  serverPort: "8080"
+  serverMgmtPort: "9090"

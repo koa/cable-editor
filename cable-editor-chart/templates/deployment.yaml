@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cable-editor-chart.fullname" . }}
+  labels:
+    {{- include "cable-editor-chart.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "cable-editor-chart.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cable-editor-chart.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http-api
+              containerPort: 8080
+              protocol: TCP
+            - name: http-mgmt
+              containerPort: 9090
+              protocol: TCP
+          # Liveness & Readiness über den Mgmt-Port
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http-mgmt
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http-mgmt
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          # Umgebungsvariablen injizieren
+          env:
+            # Struct-Feld: auth_client_id
+            - name: APP__OAUTH__AUTH_CLIENT_ID
+              value: {{ .Values.config.authClientId | quote }}
+            # Struct-Feld: auth_issuer
+            - name: APP__OAUTH__AUTH_ISSUER
+              value: {{ .Values.config.authIssuer | quote }}
+            # Struct-Feld: server_port
+            - name: APP__OAUTH__SERVER_PORT
+              value: {{ .Values.config.serverPort | quote }}
+            # Struct-Feld: server_mgmt_port
+            - name: APP__OAUTH__SERVER_MGMT_PORT
+              value: {{ .Values.config.serverMgmtPort | quote }}
+            # Struct-Feld: server_bind_address
+            - name: APP__OAUTH__SERVER_BIND_ADDRESS
+              value: {{ .Values.config.serverBindAddress | quote }}
+            # Wenn du die DB noch brauchst (ist nicht im Settings-Struct, aber vielleicht in config.yaml?)
+            - name: DATABASE_URL
+              value: {{ .Values.config.databaseUrl | quote }}
