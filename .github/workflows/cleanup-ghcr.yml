@@ -9,29 +9,28 @@ on:
 jobs:
   clean-ghcr:
     runs-on: ubuntu-latest
-    permissions:
-      packages: write
-      contents: read
 
     steps:
       - name: Delete old Docker Snapshot Images
-        uses: snok/container-retention-policy@v3
+        uses: snok/container-retention-policy@v3.1.0
         with:
-          image-names: cable-editor
-          cut-off: 7 days ago
-          keep-at-least: 3
           account-type: personal
-          # LÖSUNG: Nur Tags löschen, die mit "sha-" beginnen
-          filter-tags: ^sha-.*
-          token: ${{ secrets.GITHUB_TOKEN }}
+          account: ${{ github.repository_owner }} # Dein Benutzername oder Org-Name
+          image-names: cable-editor
+          # Löscht nur die Tags, die mit "sha-" anfangen
+          image-tags: "sha-*"
+          cut-off: 7d # Älter als 7 Tage
+          keep-n-most-recent: 3 # Die 3 neuesten behalten
+          token: ${{ secrets.GHCR_PAT }}
 
       - name: Delete old Helm Snapshot Charts
-        uses: snok/container-retention-policy@v3
+        uses: snok/container-retention-policy@v3.1.0
         with:
-          image-names: cable-editor-chart
-          cut-off: 7 days ago
-          keep-at-least: 3
           account-type: personal
-          # LÖSUNG: Nur Tags löschen, die "-snapshot." im Namen haben
-          filter-tags: .*-snapshot\..*
-          token: ${{ secrets.GITHUB_TOKEN }}
+          account: ${{ github.repository_owner }}
+          image-names: cable-editor-chart
+          # Löscht nur Tags, die "-snapshot." beinhalten
+          image-tags: "*-snapshot.*"
+          cut-off: 7d
+          keep-n-most-recent: 3
+          token: ${{ secrets.GHCR_PAT }}
