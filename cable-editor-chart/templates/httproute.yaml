@@ -20,6 +20,8 @@ spec:
             type: PathPrefix
             value: /
       backendRefs:
-        - name: {{ include "cable-editor-chart.fullname" . }}
+        - group: ''
+          kind: Service
+          name: {{ include "cable-editor-chart.fullname" . }}
           port: {{ .Values.service.apiPort }}
 {{- end }}
