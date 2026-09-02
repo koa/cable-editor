@@ -3,6 +3,7 @@ pub mod panel;
 pub mod path;
 pub mod plan;
 pub mod schacht;
+pub mod trasse;
 
 use crate::{
     db::{
