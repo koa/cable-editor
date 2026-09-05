@@ -36,18 +36,29 @@ enum UsageColumn {
 #[derive(Clone, PartialEq, Debug)]
 struct PortUsageRow {
     pub port_id: i32,
+    pub schacht_id: i32,
     pub schacht_name: String,
-    pub panel_name: String,
+    panel: Box<[PanelChain]>,
     pub port_label: String,
     pub front: Option<PortUsage>,
     pub back: Option<PortUsage>,
+}
+
+#[derive(Clone, PartialEq, Debug, Ord, PartialOrd, Eq)]
+struct PanelChain {
+    panel_id: i32,
+    panel_name: String,
 }
 
 impl TableEntryRenderer<UsageColumn> for PortUsageRow {
     fn render_cell(&self, context: CellContext<'_, UsageColumn>) -> Cell {
         match context.column {
             UsageColumn::Location => {
-                let text = format!("{} - {}", self.schacht_name, self.panel_name);
+                let mut text = self.schacht_name.clone();
+                for panel in &self.panel {
+                    text.push_str(" - ");
+                    text.push_str(panel.panel_name.as_str());
+                }
                 Cell::new(text.into_prop_value())
             }
             UsageColumn::Port => Cell::new(self.port_label.clone().into_prop_value()),
@@ -238,13 +249,28 @@ impl Component for EditPlan {
         // Tabelle aufbereiten: Usages nach Port-ID gruppieren
         let mut row_map: HashMap<i32, PortUsageRow> = HashMap::new();
         for u in &details.usage {
-            let entry = row_map.entry(u.port.id).or_insert_with(|| PortUsageRow {
-                port_id: u.port.id,
-                schacht_name: u.port.panel.schacht.name.clone(),
-                panel_name: u.port.panel.name.clone().unwrap_or_default(),
-                port_label: u.port.label.clone().unwrap_or_default(),
-                front: None,
-                back: None,
+            let entry = row_map.entry(u.port.id).or_insert_with(|| {
+                let mut panel_chain = Vec::with_capacity(u.port.panel.parent_chain.len() + 1);
+                for p in &u.port.panel.parent_chain {
+                    panel_chain.push(PanelChain {
+                        panel_id: p.id,
+                        panel_name: p.name.clone().unwrap_or_default(),
+                    })
+                }
+                panel_chain.push(PanelChain {
+                    panel_id: u.port.panel.schacht.id,
+                    panel_name: u.port.panel.schacht.name.clone(),
+                });
+                PortUsageRow {
+                    port_id: u.port.id,
+                    schacht_id: u.port.panel.schacht.id,
+                    schacht_name: u.port.panel.schacht.name.clone(),
+
+                    port_label: u.port.label.clone().unwrap_or_default(),
+                    front: None,
+                    back: None,
+                    panel: panel_chain.into_boxed_slice(),
+                }
             });
             match u.side {
                 PortSide::FRONT => entry.front = Some(u.clone()),
@@ -256,7 +282,7 @@ impl Component for EditPlan {
         rows.sort_by(|a, b| {
             a.schacht_name
                 .cmp(&b.schacht_name)
-                .then(a.panel_name.cmp(&b.panel_name))
+                .then(a.panel.cmp(&b.panel))
                 .then(a.port_label.cmp(&b.port_label))
         });
 

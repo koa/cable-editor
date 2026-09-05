@@ -32,10 +32,8 @@ pub struct PlanDetails {
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
 #[cynic(graphql_type = "PortUsage")]
 pub struct PortUsage {
-    // --- Erweiterungen für EditPlan ---
     pub side: PortSide,
     pub fiber: Option<FiberDetails>,
-    // --- Bestehend ---
     pub port: Port,
 }
 
