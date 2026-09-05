@@ -24,4 +24,5 @@ spec:
           kind: Service
           name: {{ include "cable-editor-chart.fullname" . }}
           port: {{ .Values.service.apiPort }}
+          weight: 1
 {{- end }}
