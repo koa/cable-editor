@@ -250,17 +250,13 @@ impl Component for EditPlan {
         let mut row_map: HashMap<i32, PortUsageRow> = HashMap::new();
         for u in &details.usage {
             let entry = row_map.entry(u.port.id).or_insert_with(|| {
-                let mut panel_chain = Vec::with_capacity(u.port.panel.parent_chain.len() + 1);
+                let mut panel_chain = Vec::with_capacity(u.port.panel.parent_chain.len());
                 for p in &u.port.panel.parent_chain {
                     panel_chain.push(PanelChain {
                         panel_id: p.id,
                         panel_name: p.name.clone().unwrap_or_default(),
                     })
                 }
-                panel_chain.push(PanelChain {
-                    panel_id: u.port.panel.schacht.id,
-                    panel_name: u.port.panel.schacht.name.clone(),
-                });
                 PortUsageRow {
                     port_id: u.port.id,
                     schacht_id: u.port.panel.schacht.id,
