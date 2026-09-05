@@ -17,12 +17,12 @@ use crate::{
 };
 use cynic::GraphQlResponse;
 use patternfly_yew::prelude::{
-    BackdropViewer, Brand, Button, MastheadBrand, Page, PageSidebar, ToastViewer,
+    BackdropViewer, Brand, Button, MastheadBrand, Page, PageSidebar, Spinner, ToastViewer,
 };
 use web_sys::MouseEvent;
 use yew::{
     Callback, Context, Html, Properties, function_component, html, html_nested,
-    platform::spawn_local,
+    platform::spawn_local, use_effect_with,
 };
 use yew_nested_router::{Router, Switch};
 use yew_oauth2::hook::openid::use_auth_agent;
@@ -133,7 +133,7 @@ pub fn main_oauth2(props: &MainOAuth2Props) -> Html {
                     </Router<AppRoute>>
                 </Authenticated>
                 <NotAuthenticated>
-                    <LoginButton/>
+                    <AutoLogin/>
                 </NotAuthenticated>
             </ToastViewer>
         </BackdropViewer>
@@ -151,5 +151,20 @@ fn not_authenticated_sidebar() -> Html {
     });
     html! {
         <Button {onclick}>{"Login"}</Button>
+    }
+}
+#[function_component(AutoLogin)]
+fn auto_login() -> Html {
+    let agent = use_auth_agent().expect("Requires OAuth2Context component in parent hierarchy");
+
+    use_effect_with((), move |_| {
+        if let Err(err) = agent.start_login() {
+            log::warn!("Failed to start login: {err}");
+        }
+        || ()
+    });
+
+    html! {
+        <Spinner />
     }
 }
