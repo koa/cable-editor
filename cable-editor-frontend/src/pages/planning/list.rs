@@ -134,7 +134,7 @@ impl Component for ListOfPlannings {
                         };
                         bd.open(Backdrop::new(html! {
                             <Bullseye>
-                                <Modal title="Schacht setzen" onclose={onclose}>
+                                <Modal title="Neue Planung" onclose={onclose}>
                                     <Form>
                                         <FormGroup
                                             label="Name"
@@ -184,7 +184,7 @@ impl TableEntryRenderer<Columns> for PlanListEntry {
             Columns::Status => Cell::new(self.status.name().into_prop_value()),
         }
     }
-    fn actions(&self) -> Vec<MenuChildVariant> {
+    /*fn actions(&self) -> Vec<MenuChildVariant> {
         match self.status {
             PlanStatus::IMPLEMENTED => vec![],
             PlanStatus::OPEN => vec![
@@ -193,5 +193,5 @@ impl TableEntryRenderer<Columns> for PlanListEntry {
             ],
             PlanStatus::REJECTED => vec![],
         }
-    }
+    }*/
 }

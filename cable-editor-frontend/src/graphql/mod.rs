@@ -72,6 +72,27 @@ where
         .map_err(FrontendError::ErrorQueryingAuthenticatedTransfer)?;
     Ok(response)
 }
+pub async fn query_simple<Q, V>(
+    request: V,
+    credentials: Option<&OAuth2Context>,
+) -> Result<Q, FrontendError>
+where
+    Q: QueryFragment<VariablesFields = V::Fields>
+        + QueryBuilder<V>
+        + serde::de::DeserializeOwned
+        + 'static,
+    Q::SchemaType: cynic::schema::QueryRoot,
+    V: QueryVariables + Serialize,
+{
+    let result = query::<Q, V>(request, credentials).await?;
+    if let Some(errors) = result.errors {
+        Err(FrontendError::Graphql(errors))
+    } else if let Some(data) = result.data {
+        Ok(data)
+    } else {
+        Err(FrontendError::NotFound)
+    }
+}
 
 pub async fn mutate<Q, V>(
     request: V,

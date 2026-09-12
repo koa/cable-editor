@@ -1,3 +1,4 @@
+use crate::components::plan::netbox_sync::NetboxSyncModal;
 use crate::{
     components::table::ListModel,
     error::FrontendError,
@@ -9,6 +10,7 @@ use crate::{
     icons::{IconLink, IconUnlink},
     util::{get_backdrop, get_credentials},
 };
+use log::info;
 use patternfly_yew::prelude::{
     ActionGroup, Alert, AlertType, Backdrop, Bullseye, Button, ButtonVariant, Cell, CellContext,
     ExpansionState, Form, FormGroup, MemoizedTableModel, Modal, ModalVariant, Spinner, Table,
@@ -106,6 +108,7 @@ pub enum Msg {
     AskImplement,
     ImplementPlan,
     Error(FrontendError),
+    SyncNetbox,
 }
 
 impl Component for EditPlan {
@@ -231,6 +234,24 @@ impl Component for EditPlan {
                 self.saving = false;
                 true
             }
+            Msg::SyncNetbox => {
+                info!("Sync Netbox");
+                if let Some(backdrop) = get_backdrop(ctx.link())
+                    && let Some(data) = &self.details
+                {
+                    let on_close = {
+                        let backdrop = backdrop.clone();
+                        Callback::from(move |_| backdrop.close())
+                    };
+                    let plan_id = data.id;
+                    backdrop.open(Backdrop::new(html! {
+                        <Bullseye>
+                            <NetboxSyncModal {plan_id} {on_close}/>
+                        </Bullseye>
+                    }));
+                }
+                false
+            }
         }
     }
 
@@ -301,6 +322,12 @@ impl Component for EditPlan {
             PlanStatus::IMPLEMENTED => "Implementiert (Abgeschlossen)",
             PlanStatus::REJECTED => "Verworfen",
         };
+        let can_sync_netbox = match details.status {
+            PlanStatus::OPEN => true,
+            PlanStatus::IMPLEMENTED => details.id == 0,
+            PlanStatus::REJECTED => false,
+        };
+        let sync_netbox = ctx.link().callback(|_| Msg::SyncNetbox);
 
         html! {
             <div class="pf-v6-c-panel">
@@ -332,6 +359,9 @@ impl Component for EditPlan {
                                     />
                                 </div>
                             </FormGroup>
+                            <ActionGroup>
+                                <Button variant={ButtonVariant::Secondary} label="Sync Netbox" disabled={!can_sync_netbox} onclick={sync_netbox}/>
+                            </ActionGroup>
                         </Form>
 
                         <div class="pf-v6-u-mt-xl">

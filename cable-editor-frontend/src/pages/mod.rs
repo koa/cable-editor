@@ -7,6 +7,7 @@ pub mod panel;
 pub mod planning;
 pub mod router;
 
+use crate::icons::IconBlueprintNode;
 use crate::{
     error::FrontendError,
     graphql::{
@@ -106,11 +107,12 @@ pub fn main_oauth2(props: &MainOAuth2Props) -> Html {
     let brand = html! (
         <MastheadBrand>
             <div className="show-light">
-                <Brand
-                    src="./images/pf-logo.svg"
+                <IconBlueprintNode/>
+                /*<Brand
+                    src="./icon.svg"
                     alt="Cable Editor Logo"
                     style="--pf-v6-c-brand--Height: 36px;"
-                />
+                />*/
             </div>
         </MastheadBrand>
     );

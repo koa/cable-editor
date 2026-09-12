@@ -810,6 +810,8 @@ dependencies = [
  "async-graphql",
  "async-recursion",
  "config",
+ "cynic",
+ "cynic-codegen",
  "diesel",
  "diesel-async",
  "diesel-derive-enum",
@@ -817,7 +819,9 @@ dependencies = [
  "dotenvy",
  "lazy_static",
  "log",
+ "netbox",
  "postgis_diesel",
+ "reqwest 0.13.4",
  "serde",
  "thiserror 2.0.20",
 ]
@@ -3166,6 +3170,37 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e94e1e6445d314f972ff7395df2de295fe51b71821694f0b0e1e79c4f12c8577"
 
 [[package]]
+name = "netbox"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bb60e6e3d5dcf5138226ba723572837cc29e80df3679c65f08f86dbdfa746216"
+dependencies = [
+ "netbox-openapi",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+ "thiserror 2.0.20",
+ "tokio",
+ "url",
+]
+
+[[package]]
+name = "netbox-openapi"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d59f1569761880c3098aed1fc2a9196cc8f7c796faf7fd0c36793850d053e900"
+dependencies = [
+ "reqwest 0.12.28",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "serde_with",
+ "url",
+ "uuid",
+]
+
+[[package]]
 name = "num-bigint"
 version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4150,6 +4185,7 @@ dependencies = [
  "base64 0.22.1",
  "bytes",
  "futures-core",
+ "futures-util",
  "http 1.5.0",
  "http-body",
  "http-body-util",
@@ -4158,6 +4194,7 @@ dependencies = [
  "hyper-util",
  "js-sys",
  "log",
+ "mime_guess",
  "percent-encoding",
  "pin-project-lite",
  "quinn",
@@ -5550,6 +5587,7 @@ checksum = "bf3923a6f5c4c6382e0b653c4117f48d631ea17f38ed86e2a828e6f7412f5239"
 dependencies = [
  "getrandom 0.4.3",
  "js-sys",
+ "serde_core",
  "wasm-bindgen",
 ]
 

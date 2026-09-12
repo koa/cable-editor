@@ -2,19 +2,22 @@ use crate::{
     components::table::{TreeModel, TreeState, TreeTable, TreeTableColumn, TreeTableContext},
     create_simple_dialog,
     error::FrontendError,
-    graphql::authenticated::{
-        IdOrNew,
-        cabinet_details::{FlatPanelInput, PanelTreeEntry, update_panels_in_cabinet},
-    },
+    graphql::authenticated::{IdOrNew, cabinet_details::PanelTreeEntry},
     pages::router::{AppRoute, PanelView, PlanView},
     util::get_credentials,
 };
+use std::borrow::Cow;
 
+use crate::graphql::authenticated::edit_cabinet::{
+    FlatPanelInput, OverviewNetboxDevice, update_panels_in_cabinet,
+};
 use patternfly_yew::prelude::{
-    ActionGroup, Button, ButtonType, ButtonVariant, Cell, Form, FormGroup, Icon, Modal, Spinner,
-    TableColumn, TableHeader, TableMode, TextInput, TextModifier, Title,
+    ActionGroup, Button, ButtonType, ButtonVariant, Cell, Dropdown, Form, FormGroup, Icon,
+    MenuAction, Modal, Spinner, TableColumn, TableHeader, TableMode, TextInput, TextModifier,
+    Title,
 };
 use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 use yew::{
     Callback, Component, Context, Html, Properties, classes, html,
     html::IntoPropValue,
@@ -30,6 +33,7 @@ pub struct EditCabinet {
     state: TreeState<IdOrNew>,
     model: TreeModel<IdOrNew, PanelEntry>,
     loaded_panels: Option<Box<[PanelTreeEntry]>>,
+    netbox_devices: Rc<[OverviewNetboxDevice]>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
@@ -38,6 +42,7 @@ pub struct PanelEntry {
     pub name: Option<Box<str>>,
     pub has_loop: bool,
     pub port_count: usize,
+    pub netbox_device_id: Option<i32>,
 }
 
 pub enum Msg {
@@ -47,6 +52,7 @@ pub enum Msg {
     Error(FrontendError),
     PanelEvent(PanelEditAction),
     Save,
+    NetboxDevicesFetched(Rc<[OverviewNetboxDevice]>),
 }
 #[derive(PartialEq, Properties)]
 pub struct EditCabinetProps {
@@ -54,10 +60,11 @@ pub struct EditCabinetProps {
     pub cabinet_id: i32,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
 enum PanelColumn {
     Name,
     Id { modified: bool, plan_id: i32 },
+    SelectNetbox(Rc<[OverviewNetboxDevice]>),
     Actions { modified: bool, plan_id: i32 },
 }
 #[derive(Clone, PartialEq, Hash, Eq)]
@@ -75,6 +82,10 @@ enum PanelEditAction {
     SetName {
         id: IdOrNew,
         text: Box<str>,
+    },
+    SetNetboxId {
+        id: IdOrNew,
+        netbox_id: Option<i32>,
     },
 }
 
@@ -193,6 +204,36 @@ impl TreeTableColumn<IdOrNew, PanelEntry, PanelEditAction> for PanelColumn {
                 }
                 IdOrNew::Temporary(_) => String::from("neu").into_prop_value(),
             }),
+            PanelColumn::SelectNetbox(devices) => {
+                let text = context
+                    .row
+                    .netbox_device_id
+                    .and_then(|id| devices.iter().find(|d| d.id == id))
+                    .map(|d| Cow::Owned(d.to_string()))
+                    .unwrap_or(" - ".into());
+                let disabled = devices.is_empty();
+                let callback = context.callback.clone();
+                let id = *context.key;
+                let entries = devices.iter().map(|e| {
+                    let callback = callback.clone();
+                    let netbox_id = Some(e.id);
+                    let onclick = Callback::from(move |_| {
+                        callback.emit(PanelEditAction::SetNetboxId { id, netbox_id });
+                    });
+
+                    html_nested!(<MenuAction {onclick}>{e.to_string()}</MenuAction>)
+                });
+                let callback = callback.clone();
+                let onclick = Callback::from(move |_| {
+                    callback.emit(PanelEditAction::SetNetboxId {
+                        id,
+                        netbox_id: None,
+                    });
+                });
+                Cell::new(
+                    html!(<Dropdown {text} {disabled}><MenuAction {onclick}>{" - "}</MenuAction>{for entries}</Dropdown>),
+                )
+            }
         }
     }
 }
@@ -207,6 +248,7 @@ impl Component for EditCabinet {
             state: TreeState::default(),
             model: TreeModel::default(),
             loaded_panels: None,
+            netbox_devices: Rc::default(),
         }
     }
 
@@ -224,6 +266,12 @@ impl Component for EditCabinet {
                                 .await
                                 .map_or_else(Msg::Error, Msg::PanelsFetched),
                         );
+                        scope.send_message(
+                            OverviewNetboxDevice::list_devices(Some(credentials))
+                                .await
+                                .map(Rc::from)
+                                .map_or_else(Msg::Error, Msg::NetboxDevicesFetched),
+                        );
                     });
                 }
                 true
@@ -240,6 +288,7 @@ impl Component for EditCabinet {
                     children,
                     has_loop,
                     port_count,
+                    netbox_device_id,
                 } in panel_entries.iter().cloned()
                 {
                     roots.push(id.into());
@@ -250,6 +299,7 @@ impl Component for EditCabinet {
                             name,
                             has_loop,
                             port_count,
+                            netbox_device_id,
                         },
                     );
                     append_children(&mut entries, &mut child_rels, id.into(), children);
@@ -279,6 +329,7 @@ impl Component for EditCabinet {
                             name: None,
                             has_loop: false,
                             port_count: 0,
+                            netbox_device_id: None,
                         },
                     )))
                     .collect();
@@ -344,6 +395,16 @@ impl Component for EditCabinet {
                 self.model = TreeModel::new(roots, entries, children);
                 true
             }
+            Msg::PanelEvent(PanelEditAction::SetNetboxId { id, netbox_id }) => {
+                let mut entries = self.model.entries().clone();
+                if let Some(entry) = entries.get_mut(&id) {
+                    entry.netbox_device_id = netbox_id;
+                }
+                let roots = Box::from(self.model.roots());
+                let children = self.model.children().clone();
+                self.model = TreeModel::new(roots, entries, children);
+                true
+            }
             Msg::Save => {
                 self.loading = true;
 
@@ -397,6 +458,7 @@ impl Component for EditCabinet {
                         name: node.name.map(str::into_string),
                         parent_id: node.parent_id.map(Into::into),
                         order: node.order,
+                        netbox_device_id: node.netbox_id,
                     });
                 }
 
@@ -412,6 +474,10 @@ impl Component for EditCabinet {
                 });
                 true
             }
+            Msg::NetboxDevicesFetched(devices) => {
+                self.netbox_devices = devices;
+                true
+            }
         }
     }
 
@@ -421,10 +487,12 @@ impl Component for EditCabinet {
         } else {
             let modified = self.has_changes();
             let plan_id = ctx.props().plan_id;
+            let netbox_devices = self.netbox_devices.clone();
             let header = html_nested! {
                 <TableHeader<PanelColumn>>
                     //<TableColumn<PanelColumn> label="ID" index={PanelColumn::Id{modified,plan_id}} />
                     <TableColumn<PanelColumn> label="Name" index={PanelColumn::Name} />
+                    <TableColumn<PanelColumn> label="Netbox" index={PanelColumn::SelectNetbox(netbox_devices)} />
                     <TableColumn<PanelColumn> index={PanelColumn::Actions{modified,plan_id}} />
                 </TableHeader<PanelColumn>>
             };
@@ -486,6 +554,7 @@ fn append_children(
         children,
         has_loop,
         port_count,
+        netbox_device_id,
     } in children
     {
         child_ids.push(id.into());
@@ -496,6 +565,7 @@ fn append_children(
                 name,
                 has_loop,
                 port_count,
+                netbox_device_id,
             },
         );
         append_children(entries, child_rels, id.into(), children);
@@ -545,6 +615,7 @@ struct FlatPanelNode {
     name: Option<Box<str>>,
     parent_id: Option<IdOrNew>,
     order: i32,
+    netbox_id: Option<i32>,
 }
 
 // Rekursives Flachklopfen der vom Server geladenen Daten
@@ -562,6 +633,7 @@ fn flatten_loaded(
                 name: panel.name.clone(),
                 parent_id,
                 order: (i + 1) as i32,
+                netbox_id: panel.netbox_device_id,
             },
         );
         flatten_loaded(&panel.children, Some(current_id), result);
@@ -581,6 +653,7 @@ fn flatten_current(
                 name: entry.name.clone(),
                 parent_id,
                 order: (i + 1) as i32,
+                netbox_id: entry.netbox_device_id,
             });
 
             if let Some(children) = model.children().get(id) {

@@ -39,6 +39,7 @@ diesel::table! {
         schacht_id -> Int4,
         parent_panel -> Nullable<Int4>,
         parent_order -> Nullable<Int4>,
+        netbox_device_id -> Nullable<Int4>
     }
 }
 
@@ -53,6 +54,7 @@ diesel::table! {
         #[max_length = 20]
         label -> Nullable<Varchar>,
         port_type -> PortTypeEnum,
+        netbox_port_id -> Nullable<Int4>,
     }
 }
 

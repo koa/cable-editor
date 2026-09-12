@@ -1,5 +1,4 @@
 use crate::error::FrontendError;
-use crate::graphql::authenticated::cable_details::CableDetails;
 use crate::graphql::authenticated::{IdOrNew, IdOrNewInput, schema};
 use crate::graphql::{mutate, query};
 use cynic::GraphQlResponse;
@@ -34,6 +33,7 @@ struct RootPanelEntry {
     #[arguments(portType: "LOOP")]
     #[cynic(rename = "countPorts", alias)]
     count_loop_ports: i32,
+    netbox_device: Option<NetboxDeviceId>,
 }
 #[derive(cynic::QueryFragment, Debug)]
 #[cynic(graphql_type = "Panel")]
@@ -46,6 +46,12 @@ struct ChildPanelEntry {
     #[arguments(portType: "LOOP")]
     #[cynic(rename = "countPorts", alias)]
     count_loop_ports: i32,
+    netbox_device: Option<NetboxDeviceId>,
+}
+#[derive(cynic::QueryFragment, Debug)]
+#[cynic(graphql_type = "DeviceWithRearPorts")]
+struct NetboxDeviceId {
+    id: i32,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -55,11 +61,13 @@ pub struct PanelTreeEntry {
     pub children: Box<[PanelTreeEntry]>,
     pub has_loop: bool,
     pub port_count: usize,
+    pub netbox_device_id: Option<i32>,
 }
 struct PanelEntryData {
     name: Option<Box<str>>,
     has_loop: bool,
     port_count: usize,
+    netbox_device_id: Option<i32>,
 }
 
 impl PanelTreeEntry {
@@ -100,6 +108,7 @@ impl PanelTreeEntry {
                             name: child.name.map(|v| v.into_boxed_str()),
                             has_loop: child.count_loop_ports > 0,
                             port_count: child.count_ports as usize,
+                            netbox_device_id: child.netbox_device.map(|d| d.id),
                         },
                     );
                 }
@@ -109,6 +118,7 @@ impl PanelTreeEntry {
                         name: root_entry.name.map(|v| v.into_boxed_str()),
                         has_loop: root_entry.count_loop_ports > 0,
                         port_count: root_entry.count_ports as usize,
+                        netbox_device_id: root_entry.netbox_device.map(|d| d.id),
                     },
                 );
             }
@@ -148,6 +158,7 @@ fn collect_children(
             children: child_results.into_boxed_slice(),
             has_loop: entry_data.has_loop,
             port_count: entry_data.port_count,
+            netbox_device_id: entry_data.netbox_device_id,
         }
     } else {
         PanelTreeEntry {
@@ -156,6 +167,7 @@ fn collect_children(
             children: child_results.into_boxed_slice(),
             has_loop: false,
             port_count: 0,
+            netbox_device_id: None,
         }
     }
 }
@@ -176,6 +188,7 @@ struct CreatePanelVariables {
 #[cynic(graphql_type = "Mutation", variables = "CreatePanelVariables")]
 struct CreatePanelQuery {
     #[arguments(panel: $panel, parentPanel: $parent_panel)]
+    #[allow(unused)]
     create_panel: bool,
 }
 pub async fn create_panel(
@@ -196,45 +209,4 @@ pub async fn create_panel(
     } else {
         Ok(())
     }
-}
-
-#[derive(cynic::InputObject, Debug, Clone)]
-#[cynic(graphql_type = "FlatPanelInput")]
-pub struct FlatPanelInput {
-    pub id: IdOrNewInput,
-    pub name: Option<String>,
-    pub parent_id: Option<IdOrNewInput>,
-    pub order: i32,
-}
-
-#[derive(cynic::QueryVariables, Debug)]
-pub struct SyncCabinetPanelsVariables {
-    pub cabinet_id: i32,
-    pub changes: Vec<FlatPanelInput>,
-    pub deletes: Vec<i32>,
-}
-
-#[derive(cynic::QueryFragment, Debug)]
-#[cynic(graphql_type = "Mutation", variables = "SyncCabinetPanelsVariables")]
-struct SyncCabinetPanelsMutation {
-    #[arguments(cabinetId: $cabinet_id, changes: $changes, deletes: $deletes)]
-    update_cabinet_panels: bool,
-}
-
-pub async fn update_panels_in_cabinet(
-    deletes: Vec<i32>,
-    changes: Vec<FlatPanelInput>,
-    cabinet_id: i32,
-    credentials: Option<OAuth2Context>,
-) -> Result<(), FrontendError> {
-    mutate::<SyncCabinetPanelsMutation, _>(
-        SyncCabinetPanelsVariables {
-            cabinet_id,
-            changes,
-            deletes,
-        },
-        credentials.as_ref(),
-    )
-    .await
-    .map(|_| ())
 }

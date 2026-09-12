@@ -3,11 +3,13 @@ use uuid::Uuid;
 pub mod cabinet_details;
 pub mod cable_details;
 pub mod connections;
+pub mod edit_cabinet;
 pub mod edit_ports;
 pub mod list_cables;
 pub mod list_plans;
 pub mod list_schacht;
 pub mod list_schacht_typ;
+pub mod netbox_sync;
 pub mod plan_details;
 pub mod select_duct;
 

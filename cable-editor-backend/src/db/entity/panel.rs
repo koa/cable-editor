@@ -1,3 +1,6 @@
+use crate::netbox::fetch::{DeviceWithRearPorts, RearPort};
+use crate::netbox::fetch_device_with_ports;
+use crate::netbox::id::NumberId;
 use crate::{
     db::{
         entity::{cable::Fiber, plan::Plan, schacht::Schacht},
@@ -25,6 +28,7 @@ pub struct Panel {
     pub schacht_id: i32,
     pub parent_panel: Option<i32>,
     pub parent_order: Option<i32>,
+    pub netbox_device_id: Option<i32>,
 }
 
 #[derive(Insertable)]
@@ -43,6 +47,7 @@ pub struct InsertPanelPort {
     pub port_order: i32,
     pub port_type: PanelPortType,
     pub label: Option<String>,
+    pub netbox_port_id: Option<i32>,
 }
 
 #[derive(
@@ -57,6 +62,7 @@ pub struct PanelPort {
     pub port_order: i32,
     pub label: Option<String>,
     pub port_type: PanelPortType,
+    pub netbox_port_id: Option<i32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Copy, Eq, DbEnum, Enum, Hash, PartialOrd, Ord)]
@@ -360,7 +366,7 @@ impl Panel {
         let raw_sql = r#"
         WITH RECURSIVE panel_tree AS (
             SELECT
-                id, name, schacht_id, parent_panel, parent_order,
+                id, name, schacht_id, parent_panel, parent_order, netbox_device_id,
                 1 as level
             FROM panel
             WHERE parent_panel = $1
@@ -368,13 +374,13 @@ impl Panel {
             UNION ALL
 
             SELECT
-                p.id, p.name, p.schacht_id, p.parent_panel, p.parent_order,
+                p.id, p.name, p.schacht_id, p.parent_panel, p.parent_order, p.netbox_device_id,
                 pt.level + 1 as level
             FROM panel p
             INNER JOIN panel_tree pt ON p.parent_panel = pt.id
         )
         SELECT
-            id, name, schacht_id, parent_panel, parent_order
+            id, name, schacht_id, parent_panel, parent_order, netbox_device_id
         FROM panel_tree
         ORDER BY level, parent_order;
     "#;
@@ -422,6 +428,28 @@ impl Panel {
         } else {
             statement.count().get_result(&mut connection).await?
         })
+    }
+    async fn netbox_device(&self) -> async_graphql::Result<Option<DeviceWithRearPorts>> {
+        Ok(if let Some(device_id) = self.netbox_device_id {
+            fetch_device_with_ports((device_id as u32).into()).await?
+        } else {
+            None
+        })
+    }
+}
+
+impl PanelPort {
+    pub async fn rear_port_from_netbox(
+        id: NumberId,
+        ctx: &Context<'_>,
+    ) -> async_graphql::Result<Vec<PanelPort>> {
+        let mut connection = get_connection(ctx).await?;
+        let id: u32 = id.into();
+        let filter = schema::panel_port::netbox_port_id.eq(id as i32);
+        Ok(PanelPort::query()
+            .filter(filter)
+            .load(&mut connection)
+            .await?)
     }
 }
 
@@ -477,8 +505,15 @@ impl PanelPort {
             .await
     }*/
     async fn port_type(&self) -> PanelPortType {
-        info!("type: {:?}", self.port_type);
         self.port_type
+    }
+
+    async fn netbox_device(&self) -> async_graphql::Result<Option<RearPort>> {
+        if let Some(netbox_port_id) = self.netbox_port_id {
+            Ok(RearPort::fetch_by_id((netbox_port_id as u32).into()).await?)
+        } else {
+            Ok(None)
+        }
     }
 }
 

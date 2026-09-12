@@ -35,15 +35,42 @@ impl Settings {
             .unwrap_or_else(|| IpAddr::from([0u8; 16]))
     }
 }
+#[derive(Deserialize)]
+pub struct NetboxSettings {
+    url: String,
+    token: String,
+}
+
+impl NetboxSettings {
+    pub fn url(&self) -> &str {
+        &self.url
+    }
+
+    pub fn token(&self) -> &str {
+        &self.token
+    }
+}
+
+fn create_netbox_settings() -> Result<NetboxSettings, ConfigError> {
+    let cfg = read_cfg()?;
+    cfg.get("netbox")
+}
 
 fn create_settings() -> Result<Settings, ConfigError> {
+    let cfg = read_cfg()?;
+    cfg.get("oauth")
+}
+
+fn read_cfg() -> Result<Config, ConfigError> {
     let cfg = Config::builder()
         .add_source(File::with_name("config.yaml").required(false))
         .add_source(Environment::with_prefix("app").separator("__"))
         .build()?;
-    cfg.get("oauth")
+    Ok(cfg)
 }
 
 lazy_static! {
     pub static ref CONFIG: Settings = create_settings().expect("Cannot load config.yaml");
+    pub static ref NETBOX_CONFIG: NetboxSettings =
+        create_netbox_settings().expect("Cannot load config.yaml");
 }

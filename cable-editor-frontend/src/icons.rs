@@ -37,3 +37,35 @@ pub fn icon_fiber_cut() -> Html {
         </svg>
     }
 }
+#[function_component(IconBlueprintNode)]
+pub fn icon_blueprint_node() -> Html {
+    html! {
+        <svg style="vertical-align: -0.125em;" fill="currentColor" height="1em" width="1em" viewBox="0 0 512 512" aria-hidden="true" role="img">
+            <path fill-rule="evenodd" d="
+                M 16 224 H 96 V 288 H 16 Z
+                M 416 224 H 448 V 288 H 416 Z
+                M 480 224 H 512 V 288 H 480 Z
+                M 128 160
+                L 256 86
+                L 384 160
+                L 384 352
+                L 256 426
+                L 128 352
+                Z
+                M 224 176
+                H 288
+                V 224
+                H 336
+                V 288
+                H 288
+                V 336
+                H 224
+                V 288
+                H 176
+                V 224
+                H 224
+                Z
+            "/>
+        </svg>
+    }
+}

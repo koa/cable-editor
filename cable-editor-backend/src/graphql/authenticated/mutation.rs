@@ -1,3 +1,4 @@
+use crate::netbox::fetch_devices_and_ports;
 use crate::{
     db::{
         entity::{
@@ -5,7 +6,7 @@ use crate::{
             panel::{InsertPanel, InsertPanelPort, PanelPortType, PortSide, PortUsage},
             plan::{InsertPlan, Plan, PlanStatusType},
         },
-        schema::{self, kabel, kabel_trasse, panel, panel_port, plan},
+        schema,
     },
     graphql::authenticated,
 };
@@ -24,11 +25,11 @@ pub struct Mutation;
 impl Mutation {
     async fn create_cable(&self, ctx: &Context<'_>, name: String) -> async_graphql::Result<Cable> {
         let mut connection = authenticated::get_connection(ctx).await?;
-        Ok(diesel::insert_into(kabel::table)
+        Ok(diesel::insert_into(schema::kabel::table)
             .values((
-                kabel::name.eq(name),
-                kabel::buendel_anz.eq(1),
-                kabel::faser_anz.eq(12),
+                schema::kabel::name.eq(name),
+                schema::kabel::buendel_anz.eq(1),
+                schema::kabel::faser_anz.eq(12),
             ))
             .get_result::<Cable>(&mut connection)
             .await?)
@@ -61,16 +62,19 @@ impl Mutation {
         let updated_db_cable = connection
             .transaction(async move |conn| {
                 if let Some(ref path_ids) = path {
-                    diesel::delete(kabel_trasse::table.filter(kabel_trasse::kabel.eq(cable_id)))
-                        .execute(conn)
-                        .await?;
+                    diesel::delete(
+                        schema::kabel_trasse::table
+                            .filter(schema::kabel_trasse::kabel.eq(cable_id)),
+                    )
+                    .execute(conn)
+                    .await?;
 
                     for (sequenz, &trasse_id) in path_ids.iter().enumerate() {
-                        diesel::insert_into(kabel_trasse::table)
+                        diesel::insert_into(schema::kabel_trasse::table)
                             .values((
-                                kabel_trasse::kabel.eq(cable_id),
-                                kabel_trasse::trasse.eq(trasse_id),
-                                kabel_trasse::sequenz.eq(sequenz as i32),
+                                schema::kabel_trasse::kabel.eq(cable_id),
+                                schema::kabel_trasse::trasse.eq(trasse_id),
+                                schema::kabel_trasse::sequenz.eq(sequenz as i32),
                             ))
                             .execute(conn)
                             .await?;
@@ -78,13 +82,13 @@ impl Mutation {
                 }
 
                 let updated = if changeset.any() {
-                    diesel::update(kabel::table.find(cable_id))
+                    diesel::update(schema::kabel::table.find(cable_id))
                         .set(&changeset)
                         .get_result::<Cable>(conn)
                         .await
                         .optional()?
                 } else {
-                    kabel::table
+                    schema::kabel::table
                         .find(cable_id)
                         .first::<Cable>(conn)
                         .await
@@ -101,10 +105,12 @@ impl Mutation {
         authenticated::get_connection(ctx)
             .await?
             .transaction(async move |conn| {
-                diesel::delete(kabel_trasse::table.filter(kabel_trasse::kabel.eq(cable_id)))
-                    .execute(conn)
-                    .await?;
-                diesel::delete(kabel::table.filter(kabel::id.eq(cable_id)))
+                diesel::delete(
+                    schema::kabel_trasse::table.filter(schema::kabel_trasse::kabel.eq(cable_id)),
+                )
+                .execute(conn)
+                .await?;
+                diesel::delete(schema::kabel::table.filter(schema::kabel::id.eq(cable_id)))
                     .execute(conn)
                     .await?;
                 Ok(true)
@@ -121,9 +127,9 @@ impl Mutation {
             .await?
             .transaction(async move |conn| {
                 let parent_order = if let Some(parent_id) = parent_panel {
-                    let max_order: Option<i32> = panel::table
-                        .filter(panel::parent_panel.eq(parent_id))
-                        .select(max(panel::parent_order))
+                    let max_order: Option<i32> = schema::panel::table
+                        .filter(schema::panel::parent_panel.eq(parent_id))
+                        .select(max(schema::panel::parent_order))
                         .first(conn)
                         .await?;
                     Some(max_order.unwrap_or(0) + 1)
@@ -148,14 +154,16 @@ impl Mutation {
                     name,
                     order,
                     parent,
+                    netbox_device_id,
                 } in updates
                 {
-                    diesel::update(panel::table)
-                        .filter(panel::id.eq(panel_id))
+                    diesel::update(schema::panel::table)
+                        .filter(schema::panel::id.eq(panel_id))
                         .set(UpdatePanelChangeset {
                             name: name.map(|n| n.value),
                             parent_panel: order.map(|o| Some(o.order)),
                             parent_order: parent.map(|p| p.parent),
+                            netbox_device_id: netbox_device_id.map(|n| n.device_id),
                         })
                         .execute(conn)
                         .await?;
@@ -172,7 +180,7 @@ impl Mutation {
     ) -> async_graphql::Result<bool> {
         let mut connection = authenticated::get_connection(ctx).await?;
         let new_plan = InsertPlan { name: plan.name };
-        diesel::insert_into(plan::table)
+        diesel::insert_into(schema::plan::table)
             .values(new_plan)
             .execute(&mut connection)
             .await?;
@@ -191,7 +199,7 @@ impl Mutation {
             .transaction(async move |conn| {
                 // 1. Zuerst Löschungen verarbeiten
                 if !deletes.is_empty() {
-                    diesel::delete(panel::table.filter(panel::id.eq_any(&deletes)))
+                    diesel::delete(schema::panel::table.filter(schema::panel::id.eq_any(&deletes)))
                         .execute(conn)
                         .await?;
                 }
@@ -221,11 +229,12 @@ impl Mutation {
 
                     if let Some(panel_id) = change.id.id {
                         // UPDATE: Bestehendes Panel
-                        diesel::update(panel::table.find(panel_id))
+                        diesel::update(schema::panel::table.find(panel_id))
                             .set((
-                                panel::name.eq(change.name),
-                                panel::parent_panel.eq(resolved_parent_id),
-                                panel::parent_order.eq(change.order),
+                                schema::panel::name.eq(change.name),
+                                schema::panel::parent_panel.eq(resolved_parent_id),
+                                schema::panel::parent_order.eq(change.order),
+                                schema::panel::netbox_device_id.eq(change.netbox_device_id),
                             ))
                             .execute(conn)
                             .await?;
@@ -238,9 +247,9 @@ impl Mutation {
                             parent_order: Some(change.order), // Das Schema erwartet Option<i32>
                         };
 
-                        let inserted_id: i32 = diesel::insert_into(panel::table)
+                        let inserted_id: i32 = diesel::insert_into(schema::panel::table)
                             .values(new_panel)
-                            .returning(panel::id)
+                            .returning(schema::panel::id)
                             .get_result(conn)
                             .await?;
 
@@ -272,9 +281,11 @@ impl Mutation {
             .transaction(async move |conn| {
                 // 1. Zuerst Löschungen verarbeiten
                 if !deletes.is_empty() {
-                    diesel::delete(panel_port::table.filter(panel_port::id.eq_any(&deletes)))
-                        .execute(conn)
-                        .await?;
+                    diesel::delete(
+                        schema::panel_port::table.filter(schema::panel_port::id.eq_any(&deletes)),
+                    )
+                    .execute(conn)
+                    .await?;
                 }
 
                 // 2. Erstellungen und Updates verarbeiten
@@ -290,16 +301,17 @@ impl Mutation {
                         // UPDATE: Bestehender Port
                         // Wir prüfen zur Sicherheit panel_id mit, damit niemand fremde Ports manipuliert
                         diesel::update(
-                            panel_port::table.filter(
-                                panel_port::id
+                            schema::panel_port::table.filter(
+                                schema::panel_port::id
                                     .eq(port_id)
-                                    .and(panel_port::panel_id.eq(panel_id)),
+                                    .and(schema::panel_port::panel_id.eq(panel_id)),
                             ),
                         )
                         .set((
-                            panel_port::port_order.eq(change.order),
-                            panel_port::label.eq(label_opt),
-                            panel_port::port_type.eq(change.port_type),
+                            schema::panel_port::port_order.eq(change.order),
+                            schema::panel_port::label.eq(label_opt),
+                            schema::panel_port::port_type.eq(change.port_type),
+                            schema::panel_port::netbox_port_id.eq(change.netbox_port_id),
                         ))
                         .execute(conn)
                         .await?;
@@ -310,9 +322,10 @@ impl Mutation {
                             port_order: change.order,
                             port_type: change.port_type,
                             label: label_opt,
+                            netbox_port_id: change.netbox_port_id,
                         };
 
-                        diesel::insert_into(panel_port::table)
+                        diesel::insert_into(schema::panel_port::table)
                             .values(new_port)
                             .execute(conn)
                             .await?;
@@ -429,7 +442,9 @@ impl Mutation {
     }
     async fn implement_plan(&self, ctx: &Context<'_>, plan_id: i32) -> async_graphql::Result<Plan> {
         if plan_id <= 0 {
-            return Err(format!("Cannot manipulate plan {plan_id} directly").into());
+            return Err(
+                format!("Cannot implement plan {plan_id}, it is already implemented").into(),
+            );
         }
         let mut connection = authenticated::get_connection(ctx).await?;
         connection
@@ -497,6 +512,22 @@ impl Mutation {
             })
             .await
     }
+    async fn sync_plan_to_netbox(
+        &self,
+        ctx: &Context<'_>,
+        plan_id: i32,
+    ) -> async_graphql::Result<Plan> {
+        let mut connection = authenticated::get_connection(ctx).await?;
+        connection
+            .transaction(async move |conn| {
+                fetch_devices_and_ports().await?;
+                Ok(Plan::query()
+                    .filter(schema::plan::id.eq(plan_id))
+                    .first(conn)
+                    .await?)
+            })
+            .await
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, InputObject, Copy)]
@@ -538,6 +569,7 @@ pub struct PanelUpdate {
     name: Option<PanelUpdateSetName>,
     order: Option<PanelUpdateSetOrder>,
     parent: Option<PanelUpdateSetParent>,
+    netbox_device_id: Option<PanelUpdateSetNetboxDeviceId>,
 }
 
 #[derive(Debug, Clone, PartialEq, InputObject)]
@@ -554,6 +586,10 @@ pub struct PanelUpdateSetOrder {
 pub struct PanelUpdateSetParent {
     parent: Option<i32>,
 }
+#[derive(Debug, Clone, PartialEq, InputObject)]
+pub struct PanelUpdateSetNetboxDeviceId {
+    device_id: Option<i32>,
+}
 
 #[derive(Debug, Clone, PartialEq, InputObject)]
 pub struct CreatePlan {
@@ -567,11 +603,12 @@ struct UpdateCableStructure {
 }
 
 #[derive(AsChangeset)]
-#[diesel(table_name = panel)]
+#[diesel(table_name = schema::panel)]
 struct UpdatePanelChangeset {
     name: Option<Option<String>>,
     parent_panel: Option<Option<i32>>,
     parent_order: Option<Option<i32>>,
+    netbox_device_id: Option<Option<i32>>,
 }
 
 #[async_recursion]
@@ -589,9 +626,9 @@ async fn insert_panel_tree_recursive(
         parent_order: parent_order_val,
     };
 
-    let inserted_panel_id: i32 = diesel::insert_into(panel::table)
+    let inserted_panel_id: i32 = diesel::insert_into(schema::panel::table)
         .values(new_panel)
-        .returning(panel::id)
+        .returning(schema::panel::id)
         .get_result(conn)
         .await?;
 
@@ -618,6 +655,7 @@ pub struct IdOrNewInput {
 pub struct FlatPanelInput {
     pub id: IdOrNewInput,
     pub name: Option<String>,
+    pub netbox_device_id: Option<i32>,
     pub parent_id: Option<IdOrNewInput>,
     pub order: i32,
 }
@@ -628,4 +666,5 @@ pub struct FlatPortInput {
     pub order: i32,
     pub label: String,
     pub port_type: PanelPortType,
+    pub netbox_port_id: Option<i32>,
 }

@@ -3,3 +3,4 @@ pub mod db;
 pub mod error;
 pub mod export;
 pub mod graphql;
+pub mod netbox;
