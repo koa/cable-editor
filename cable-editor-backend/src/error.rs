@@ -1,9 +1,9 @@
 use cynic::http::CynicReqwestError;
 use diesel_async::pooled_connection::deadpool::{BuildError, PoolError};
 use reqwest::header::InvalidHeaderValue;
-use std::borrow::Cow;
-use std::{env::VarError, error::Error};
+use std::{borrow::Cow, env::VarError, error::Error};
 use thiserror::Error;
+use tokio::sync::AcquireError;
 
 #[derive(Debug, Error)]
 pub enum BackendError {
@@ -34,5 +34,10 @@ pub enum BackendError {
     NetboxGraphqlError {
         query: Option<Cow<'static, str>>,
         errors: Vec<cynic::GraphQlError>,
+    },
+    #[error("Error aquiring semaphore for graphql operation {}",query.as_deref().unwrap_or_default())]
+    NetboxSemaphoreError {
+        query: Option<Cow<'static, str>>,
+        error: AcquireError,
     },
 }

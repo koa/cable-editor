@@ -1,12 +1,14 @@
-use crate::netbox::fetch::{DeviceWithRearPorts, RearPort};
-use crate::netbox::fetch_device_with_ports;
-use crate::netbox::id::NumberId;
 use crate::{
     db::{
         entity::{cable::Fiber, plan::Plan, schacht::Schacht},
         schema,
     },
     graphql::authenticated::get_connection,
+    netbox::{
+        fetch::{DeviceWithRearPorts, RearPort},
+        fetch_device_with_ports,
+        id::NumberId,
+    },
 };
 use async_graphql::{Context, Enum, Object};
 use async_recursion::async_recursion;
@@ -508,7 +510,7 @@ impl PanelPort {
         self.port_type
     }
 
-    async fn netbox_device(&self) -> async_graphql::Result<Option<RearPort>> {
+    async fn netbox_port(&self) -> async_graphql::Result<Option<RearPort>> {
         if let Some(netbox_port_id) = self.netbox_port_id {
             Ok(RearPort::fetch_by_id((netbox_port_id as u32).into()).await?)
         } else {

@@ -2,14 +2,18 @@ use crate::{
     error::FrontendError,
     graphql::authenticated::{
         IdOrNew, PortType,
-        edit_ports::{FetchedPanelWithPorts, FlatPortInput, update_panel_ports},
+        edit_ports::{FetchedPanelWithPorts, FlatPortInput, NetboxDevicePort, update_panel_ports},
     },
     util::get_credentials,
 };
 use patternfly_yew::prelude::{
-    ActionGroup, Button, ButtonVariant, Icon, Spinner, TextInput, ToggleGroup, ToggleGroupItem,
+    ActionGroup, Button, ButtonVariant, Dropdown, Icon, MenuAction, Spinner, TextInput,
+    ToggleGroup, ToggleGroupItem,
 };
-use yew::{Component, Context, Html, Properties, html, html::IntoPropValue, platform::spawn_local};
+use yew::{
+    Callback, Component, Context, Html, Properties, html, html::IntoPropValue, html_nested,
+    platform::spawn_local,
+};
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct EditablePort {
@@ -18,6 +22,7 @@ pub struct EditablePort {
     label: Box<str>,
     port_type: PortType,
     deleted: bool,
+    netbox_port: Option<i32>,
 }
 
 pub enum Msg {
@@ -26,6 +31,7 @@ pub enum Msg {
         ports: Vec<EditablePort>,
         panel_name: Option<Box<str>>,
         duct_name: Option<Box<str>>,
+        netbox_device_id: Option<i32>,
     },
     AddPort,
     UpdateLabel(usize, Box<str>),
@@ -35,6 +41,11 @@ pub enum Msg {
     Error(FrontendError),
     MoveUp(usize),
     MoveDown(usize),
+    NetboxPortsFetched(Box<[NetboxDevicePort]>),
+    UpdateNetboxId {
+        idx: usize,
+        port_id: Option<i32>,
+    },
 }
 
 #[derive(Properties, PartialEq, Clone)]
@@ -48,6 +59,8 @@ pub struct PortEditor {
     error: Option<FrontendError>,
     panel_name: Option<Box<str>>,
     cabinet_name: Option<Box<str>>,
+    netbox_device_id: Option<i32>,
+    netbox_ports: Box<[NetboxDevicePort]>,
 }
 impl PortEditor {
     fn recalculate_orders(&mut self) {
@@ -72,6 +85,8 @@ impl Component for PortEditor {
             error: None,
             panel_name: None,
             cabinet_name: None,
+            netbox_device_id: None,
+            netbox_ports: Box::default(),
         }
     }
 
@@ -93,9 +108,10 @@ impl Component for PortEditor {
                                      ports,
                                      panel_name,
                                      schacht_name,
+                                     netbox_device_id,
                                  }| {
-                                    (
-                                        ports
+                                    Msg::PortsFetched {
+                                        ports: ports
                                             .into_iter()
                                             .map(|p| EditablePort {
                                                 id: IdOrNew::Id(p.id),
@@ -103,20 +119,16 @@ impl Component for PortEditor {
                                                 label: p.label.unwrap_or_default().into_boxed_str(),
                                                 port_type: p.port_type.into(),
                                                 deleted: false,
+                                                netbox_port: p.netbox_port.map(|p| p.id),
                                             })
                                             .collect(),
-                                        panel_name.map(|s| s.into_boxed_str()),
-                                        schacht_name.map(|s| s.into_boxed_str()),
-                                    )
+                                        panel_name: panel_name.map(|s| s.into_boxed_str()),
+                                        duct_name: schacht_name.map(|s| s.into_boxed_str()),
+                                        netbox_device_id,
+                                    }
                                 },
                             )
-                            .map_or_else(Msg::Error, |(ports, panel_name, duct_name)| {
-                                Msg::PortsFetched {
-                                    ports,
-                                    panel_name,
-                                    duct_name,
-                                }
-                            }),
+                            .unwrap_or_else(Msg::Error),
                     );
                 });
                 true
@@ -125,11 +137,31 @@ impl Component for PortEditor {
                 ports,
                 panel_name,
                 duct_name,
+                netbox_device_id,
             } => {
                 self.ports = ports;
                 self.panel_name = panel_name;
                 self.cabinet_name = duct_name;
+                self.netbox_device_id = netbox_device_id;
                 self.loading = false;
+                self.error = None;
+                self.netbox_ports = Box::default();
+                if let Some(device_id) = netbox_device_id {
+                    let scope = ctx.link().clone();
+                    spawn_local(async move {
+                        let credentials = get_credentials(&scope);
+                        scope.send_message(
+                            NetboxDevicePort::fetch_ports(credentials.as_ref(), device_id)
+                                .await
+                                .map_or_else(Msg::Error, Msg::NetboxPortsFetched),
+                        );
+                    });
+                }
+                true
+            }
+            Msg::NetboxPortsFetched(netbox_ports) => {
+                self.netbox_ports = netbox_ports;
+                self.error = None;
                 true
             }
             Msg::AddPort => {
@@ -176,6 +208,7 @@ impl Component for PortEditor {
                     label,
                     port_type,
                     deleted: false,
+                    netbox_port: None,
                 });
                 self.recalculate_orders();
                 true
@@ -192,6 +225,13 @@ impl Component for PortEditor {
                 }
                 true
             }
+            Msg::UpdateNetboxId { idx, port_id } => {
+                if let Some(port) = self.ports.get_mut(idx) {
+                    port.netbox_port = port_id;
+                }
+                true
+            }
+
             Msg::MarkDeleted(index) => {
                 if let Some(port) = self.ports.get_mut(index) {
                     match port.id {
@@ -243,6 +283,7 @@ impl Component for PortEditor {
                             order: port.order_number,
                             label: port.label.to_string(),
                             port_type: port.port_type.into(),
+                            netbox_port_id: port.netbox_port,
                         });
                     }
                 }
@@ -277,6 +318,8 @@ impl Component for PortEditor {
             .map(|(i, _)| i)
             .collect();
 
+        let has_netbox = !self.netbox_ports.is_empty();
+
         let rows = visible_indices.iter().enumerate().map(|(pos, &idx)| {
             let is_first = pos == 0;
             let is_last = pos == visible_indices.len() - 1;
@@ -295,6 +338,25 @@ impl Component for PortEditor {
             let on_up = ctx.link().callback(move |_| Msg::MoveUp(idx));
             let on_down = ctx.link().callback(move |_| Msg::MoveDown(idx));
             let selected=port.port_type;
+
+            let text = port.netbox_port.and_then(|p| self.netbox_ports.iter().find(|np| np.id == p)).map(|p| p.name.as_str()).unwrap_or(" - ");
+            let scope=ctx.link().clone();
+            let onclick={
+                let scope=scope.clone();
+                Callback::from(move |_|{
+                    scope.send_message(Msg::UpdateNetboxId{idx, port_id: None })
+                })
+            };
+            let entries = self.netbox_ports.iter().map(|np|{
+                let port_id = Some(np.id);
+                let onclick={
+                    let scope=scope.clone();
+                    Callback::from(move |_|{
+                        scope.send_message(Msg::UpdateNetboxId{idx, port_id })
+                    })
+                };
+                html_nested!(<MenuAction {onclick}>{np.name.as_str()}</MenuAction>)
+            });
 
             html! {
                 <tr class="pf-v6-c-table__tr" key={row_key}>
@@ -323,6 +385,9 @@ impl Component for PortEditor {
                                 selected={selected == PortType::Loop}
                             />
                         </ToggleGroup>
+                    </td>
+                    <td class="pf-v6-c-table__td">
+                        <Dropdown {text} disabled={!has_netbox}><MenuAction {onclick}>{" - "}</MenuAction>{for entries}</Dropdown>
                     </td>
                     <td class="pf-v6-c-table__td">
                         <Button icon={Icon::AngleUp} variant={ButtonVariant::Plain} onclick={on_up} disabled={is_first} />
@@ -359,6 +424,7 @@ impl Component for PortEditor {
                                     //<th class="pf-v6-c-table__th">{"Nr."}</th>
                                     <th class="pf-v6-c-table__th">{"Bezeichnung"}</th>
                                     <th class="pf-v6-c-table__th">{"Typ"}</th>
+                                    <th class="pf-v6-c-table__th">{"Netbox"}</th>
                                     <th class="pf-v6-c-table__th">{"Aktionen"}</th>
                                 </tr>
                             </thead>

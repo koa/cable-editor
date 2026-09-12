@@ -24,6 +24,7 @@ async-recursion = "1.1"
 cynic = { version = "3", features = ["http-reqwest"] }
 netbox = "0.8.0"
 reqwest = { version = "0.13", features = ["rustls"] }
+tokio = { version = "1.53.1", features = ["sync"] }
 
 
 [build-dependencies]

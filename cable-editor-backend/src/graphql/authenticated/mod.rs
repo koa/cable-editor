@@ -1,8 +1,6 @@
 pub mod mutation;
 pub mod planned;
 
-use crate::netbox::fetch::DeviceWithRearPorts;
-use crate::netbox::fetch_devices_and_ports;
 use crate::{
     db::{
         DB,
@@ -16,6 +14,7 @@ use crate::{
         schema::{kabel, panel, plan, schacht},
     },
     graphql::context::UserInfo,
+    netbox::{fetch::DeviceWithRearPorts, fetch_device_with_ports, fetch_devices_and_ports},
 };
 use async_graphql::{Context, EmptySubscription, Object, Schema};
 use diesel::{
@@ -115,6 +114,12 @@ impl Query {
     }
     async fn netbox_devices(&self) -> async_graphql::Result<Vec<DeviceWithRearPorts>> {
         Ok(fetch_devices_and_ports().await?)
+    }
+    async fn netbox_device(
+        &self,
+        netbox_device_id: u32,
+    ) -> async_graphql::Result<Option<DeviceWithRearPorts>> {
+        Ok(fetch_device_with_ports(netbox_device_id.into()).await?)
     }
 }
 

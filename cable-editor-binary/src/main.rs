@@ -160,7 +160,7 @@ enum BackendError {
 
 #[actix_web::main]
 async fn main() -> Result<(), BackendError> {
-    env_logger::init_from_env(Env::default().filter_or("LOG_LEVEL", "debug"));
+    env_logger::init_from_env(Env::default().filter_or("LOG_LEVEL", "info"));
 
     run_sync_migrations();
 
