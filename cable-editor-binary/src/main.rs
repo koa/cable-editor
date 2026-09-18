@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use actix_4_jwt_auth::{
     DecodedInfo, OIDCValidationError, Oidc, OidcBiscuitValidator, OidcConfig,
     biscuit::{Validation, ValidationOptions},
@@ -15,6 +13,7 @@ use actix_web_prometheus::PrometheusMetricsBuilder;
 use async_graphql::{Response, ServerError, futures_util::future::join_all};
 use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse};
 use cable_editor_backend::{
+    RunQueryDsl,
     config::CONFIG,
     db::{DB, connect, run_sync_migrations},
     graphql::{
@@ -22,6 +21,7 @@ use cable_editor_backend::{
         authenticated::{AuthenticatedGraphqlSchema, create_authenticated_schema},
         context::UserInfo,
     },
+    sql_query,
 };
 use cached::cached;
 use env_logger::Env;
@@ -30,8 +30,11 @@ use mime_guess::from_path;
 use prometheus::{HistogramVec, histogram_opts};
 use reqwest::Client;
 use rust_embed::RustEmbed;
+use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
+use tokio::sync::Mutex;
 use tracing_actix_web::TracingLogger;
+
 #[derive(RustEmbed)]
 #[folder = "../cable-editor-frontend/dist"]
 struct Assets;
@@ -71,11 +74,18 @@ async fn graphql(
     user: Option<DecodedInfo>,
     request: GraphQLRequest,
 ) -> GraphQLResponse {
-    //let user: Option<AuthenticatedUser<UserInfo>> = Some(user);
     trace!("Execute Authenticated: {user:#?}");
     let schema = &context.schema;
     let histogram = context.graphql_request_histogram.clone();
-    let request = request.into_inner().data(context.pool.clone());
+
+    // 1. Connection-Objekt aus dem Pool holen (Owned Type)
+    let mut connection = match context.pool.get().await {
+        Ok(connection) => connection,
+        Err(error) => {
+            return Response::from_errors(vec![ServerError::new(error.to_string(), None)]).into();
+        }
+    };
+
     let found_user = if let Some(DecodedInfo { jwt, payload: _ }) = user {
         match fetch_user_info(jwt).await {
             Ok(info) => info,
@@ -87,19 +97,44 @@ async fn graphql(
     } else {
         return Response::from_errors(vec![ServerError::new("No user token found", None)]).into();
     };
+
+    let request = request.into_inner();
     let timer = histogram
         .with_label_values(&[
             request.operation_name.as_deref().unwrap_or_default(),
             found_user.preferred_username.as_ref(),
         ])
         .start_timer();
-    let request = request.data(found_user);
+
+    if let Err(e) = sql_query("BEGIN").execute(&mut connection).await {
+        return Response::from_errors(vec![ServerError::new(
+            format!("Failed to start transaction: {}", e),
+            None,
+        )])
+        .into();
+    }
+
+    let shared_conn = Arc::new(Mutex::new(connection));
+
+    let request = request.data(shared_conn.clone()).data(found_user);
 
     let response = schema.execute(request).await;
+
+    let mut final_conn = shared_conn.lock().await;
+    if response.errors.is_empty() {
+        if let Err(e) = sql_query("COMMIT").execute(&mut *final_conn).await {
+            log::error!("Failed to commit transaction: {}", e);
+        }
+    } else {
+        if let Err(e) = sql_query("ROLLBACK").execute(&mut *final_conn).await {
+            log::error!("Failed to rollback transaction: {}", e);
+        }
+    }
+
     timer.stop_and_record();
+
     response.into()
 }
-
 #[cached(ttl = 30)]
 async fn fetch_user_info(access_token_str: String) -> Result<UserInfo, BackendError> {
     let client = Client::new();

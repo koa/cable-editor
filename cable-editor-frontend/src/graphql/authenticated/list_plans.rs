@@ -49,6 +49,7 @@ struct CreatePlanInput {
 #[cynic(graphql_type = "Mutation", variables = "CreatePlanMutationVariables")]
 struct CreatePlanMutation {
     #[arguments( plan: $data)]
+    #[allow(unused)]
     pub create_plan: bool,
 }
 

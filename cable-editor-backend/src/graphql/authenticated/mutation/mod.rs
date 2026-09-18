@@ -31,7 +31,7 @@ use diesel::{
 };
 use diesel_async::{AsyncConnection, AsyncPgConnection, RunQueryDsl};
 use log::info;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 pub struct Mutation;
 
@@ -538,7 +538,7 @@ impl Mutation {
                 let mut issues = Vec::new();
 
                 // DB-Daten laden
-                let panels = schema::panel::table.load::<Panel>(conn).await?;
+                //let panels = schema::panel::table.load::<Panel>(conn).await?;
                 let mut remaining_connector_ports = schema::panel_port::table
                     .filter(schema::panel_port::port_type.eq(PanelPortType::Connector))
                     .load::<PanelPort>(conn)

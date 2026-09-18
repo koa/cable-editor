@@ -1,17 +1,17 @@
-use crate::components::table::ListModel;
-use crate::error::FrontendError;
-use crate::graphql::authenticated::select_duct::{DuctListEntry, list_all_ducts};
-use log::info;
+use crate::{
+    components::table::ListModel,
+    error::FrontendError,
+    graphql::authenticated::select_duct::{DuctListEntry, list_all_ducts},
+};
 use patternfly_yew::prelude::{
     Cell, CellContext, ExpansionState, MemoizedTableModel, Spinner, Table, TableColumn,
     TableEntryRenderer, TableGridMode, TableHeader, TableMode, UseTableData,
 };
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::rc::Rc;
-use yew::html::IntoPropValue;
-use yew::platform::spawn_local;
-use yew::{Callback, Component, Context, Html, Properties, html, html_nested};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use yew::{
+    Callback, Component, Context, Html, Properties, html, html::IntoPropValue, html_nested,
+    platform::spawn_local,
+};
 use yew_oauth2::prelude::OAuth2Context;
 
 #[derive(Debug, Default)]

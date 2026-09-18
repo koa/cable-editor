@@ -5,7 +5,6 @@ use crate::{
         query,
     },
 };
-use yew::Component;
 use yew_oauth2::context::OAuth2Context;
 
 #[derive(cynic::QueryFragment, Debug)]

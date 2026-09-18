@@ -2,7 +2,7 @@ use log::debug;
 use patternfly_yew::prelude::Backdropper;
 use web_sys::{Element, window};
 use yew::html::Scope;
-use yew::{AppHandle, BaseComponent, Callback, Context};
+use yew::{AppHandle, BaseComponent, Callback};
 use yew_oauth2::context::OAuth2Context;
 
 #[derive(Debug)]

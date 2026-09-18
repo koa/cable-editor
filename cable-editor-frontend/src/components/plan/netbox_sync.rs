@@ -1,14 +1,16 @@
-use crate::error::FrontendError;
-use crate::graphql::authenticated::netbox_sync::{
-    AsymetricTargetConnectionEntry, AsymmetricDuplexError, BlindEndError,
-    MissingNetboxReferenceError, SyncIssue, SyncNetbox,
+use crate::{
+    error::FrontendError,
+    graphql::authenticated::netbox_sync::{
+        AsymetricTargetConnectionEntry, AsymmetricDuplexError, BlindEndError,
+        MissingNetboxReferenceError, SyncIssue, SyncNetbox,
+    },
+    util::get_credentials,
 };
-use crate::util::get_credentials;
 use patternfly_yew::prelude::{Button, ButtonVariant, Modal, ModalVariant};
-use std::fmt::format;
-use yew::html::IntoPropValue;
-use yew::platform::spawn_local;
-use yew::{Callback, Component, Context, Html, Properties, html};
+use yew::{
+    Callback, Component, Context, Html, Properties, html, html::IntoPropValue,
+    platform::spawn_local,
+};
 
 pub struct NetboxSyncModal {
     syncing: bool,
@@ -120,7 +122,10 @@ impl Component for NetboxSyncModal {
                     }
                 }
                 SyncIssue::PortBlockedInNetbox(err) => {
-                    let msg = format!("Port blockiert in Netbox: Panel ID {}, Port ID {}, Netbox Port ID {}", err.panel_id, err.port_id, err.netbox_port_id);
+                    let msg = format!(
+                        "Port blockiert in Netbox: Panel ID {}, Port ID {}, Netbox Port ID {}",
+                        err.panel_id, err.port_id, err.netbox_port_id
+                    );
                     html!(msg)
                 }
                 SyncIssue::NameCollision(err) => {
@@ -132,7 +137,10 @@ impl Component for NetboxSyncModal {
                     html!(msg)
                 }
                 SyncIssue::RoutingLoop(err) => {
-                    let msg = format!("Routing Loop festgestellt bei Port {}", err.port.port_label());
+                    let msg = format!(
+                        "Routing Loop festgestellt bei Port {}",
+                        err.port.port_label()
+                    );
                     html!(msg)
                 }
                 SyncIssue::InvalidTargetReference(err) => {

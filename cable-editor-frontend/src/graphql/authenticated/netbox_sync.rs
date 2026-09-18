@@ -1,9 +1,8 @@
-use crate::error::FrontendError;
-use crate::graphql::authenticated::schema;
-use crate::graphql::mutate;
-use std::fmt;
+use crate::{
+    error::FrontendError,
+    graphql::{authenticated::schema, mutate},
+};
 use std::fmt::Write;
-use std::fmt::write;
 use yew_oauth2::context::OAuth2Context;
 
 #[derive(cynic::QueryVariables)]

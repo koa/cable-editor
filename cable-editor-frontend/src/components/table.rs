@@ -1,21 +1,23 @@
-use log::info;
-use patternfly_yew::ouia;
-use patternfly_yew::prelude::{
-    Button, ButtonVariant, Caption, Cell, ComposableTable, Dropdown, ExpandParams, ExpandType,
-    ExpansionState, Icon, MenuChildVariant, MenuToggleVariant, Ouia, OuiaComponentType, OuiaSafe,
-    StateModel, StateModelIter, TableBody, TableData, TableDataModel, TableGridMode, TableHeader,
-    TableMode, TableModel,
+use patternfly_yew::{
+    ouia,
+    prelude::{
+        Button, ButtonVariant, Caption, Cell, ComposableTable, Dropdown, ExpansionState, Icon,
+        MenuChildVariant, MenuToggleVariant, Ouia, OuiaComponentType, OuiaSafe, StateModel,
+        StateModelIter, TableBody, TableData, TableDataModel, TableGridMode, TableHeader,
+        TableMode, TableModel,
+    },
 };
-use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
-use std::hash::Hash;
-use std::marker::PhantomData;
-use std::rc::Rc;
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    hash::Hash,
+    marker::PhantomData,
+    rc::Rc,
+};
 use web_sys::MouseEvent;
-use yew::virtual_dom::VChild;
 use yew::{
     AttrValue, Callback, Classes, Component, Context, Html, Properties, classes,
-    function_component, html, props,
+    function_component, html, props, virtual_dom::VChild,
 };
 
 pub struct ListModel<C, M>

@@ -1,8 +1,11 @@
-use crate::error::FrontendError;
-use crate::graphql::authenticated::{IdOrNewInput, schema};
-use crate::graphql::{mutate, query, query_simple};
+use crate::{
+    error::FrontendError,
+    graphql::{
+        authenticated::{IdOrNewInput, schema},
+        mutate, query_simple,
+    },
+};
 use std::fmt::{Display, Formatter};
-use std::fs::write;
 use yew_oauth2::context::OAuth2Context;
 
 #[derive(cynic::InputObject, Debug, Clone)]

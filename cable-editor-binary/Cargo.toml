@@ -19,3 +19,4 @@ actix-4-jwt-auth = { version = "1.2" }
 tracing-actix-web = "0.7"
 reqwest = { version = "0.13.4", features = ["rustls", "json"] }
 cached = { version = "2", features = ["async", "cached_proc_macro"] }
+tokio = "1"

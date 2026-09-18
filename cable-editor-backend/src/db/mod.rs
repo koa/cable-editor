@@ -1,5 +1,6 @@
 pub mod entity;
 pub mod schema;
+
 use crate::error::BackendError;
 use diesel::{Connection, PgConnection};
 use diesel_async::{

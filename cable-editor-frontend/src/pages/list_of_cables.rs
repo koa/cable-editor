@@ -121,11 +121,11 @@ fn CablesTable() -> HtmlResult {
     };
     let header = html_nested! {
         <TableHeader<Columns>>
-            <TableColumn<Columns> label="Name" index={Columns::Name} onsort={onsort.clone()} sortby={(*sort_state)}/>
-            <TableColumn<Columns> label="Fasern" index={Columns::Fibers} onsort={onsort.clone()} sortby={(*sort_state)}/>
-            <TableColumn<Columns> label="Streckenlänge" index={Columns::Length} onsort={onsort.clone()} sortby={(*sort_state)}/>
-            <TableColumn<Columns> label="Von" index={Columns::SchachtA} onsort={onsort.clone()} sortby={(*sort_state)}/>
-            <TableColumn<Columns> label="Bis" index={Columns::SchachtZ} onsort={onsort.clone()} sortby={(*sort_state)}/>
+            <TableColumn<Columns> label="Name" index={Columns::Name} onsort={onsort.clone()} sortby={*sort_state}/>
+            <TableColumn<Columns> label="Fasern" index={Columns::Fibers} onsort={onsort.clone()} sortby={*sort_state}/>
+            <TableColumn<Columns> label="Streckenlänge" index={Columns::Length} onsort={onsort.clone()} sortby={*sort_state}/>
+            <TableColumn<Columns> label="Von" index={Columns::SchachtA} onsort={onsort.clone()} sortby={*sort_state}/>
+            <TableColumn<Columns> label="Bis" index={Columns::SchachtZ} onsort={onsort.clone()} sortby={*sort_state}/>
         </TableHeader<Columns>>
     };
     let backdrop = use_backdrop();

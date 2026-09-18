@@ -1,6 +1,5 @@
 use crate::db::entity::panel::{Panel, PanelPort};
-use crate::db::entity::plan::Plan;
-use async_graphql::{Object, SimpleObject, Union};
+use async_graphql::{SimpleObject, Union};
 
 /// Union-Typ für alle spezifischen Fehlerzustände
 #[derive(Union)]

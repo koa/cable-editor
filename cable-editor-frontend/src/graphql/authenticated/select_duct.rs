@@ -1,8 +1,10 @@
-use crate::error::FrontendError;
-use crate::graphql::authenticated::cable_details::CableSegmentEndSchacht;
-use crate::graphql::authenticated::list_cables::CableListEntry;
-use crate::graphql::authenticated::schema;
-use crate::graphql::query;
+use crate::{
+    error::FrontendError,
+    graphql::{
+        authenticated::{cable_details::CableSegmentEndSchacht, schema},
+        query,
+    },
+};
 use yew_oauth2::context::OAuth2Context;
 
 #[derive(cynic::QueryFragment, Debug)]

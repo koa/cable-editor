@@ -1,15 +1,14 @@
 use crate::{
     components::table::ListModel,
     error::FrontendError,
-    graphql::authenticated::list_plans::{PlanListEntry, PlanStatus},
+    graphql::authenticated::list_plans::PlanListEntry,
     pages::router::{AppRoute, PlanView},
     util::{get_backdrop, get_credentials},
 };
 use patternfly_yew::prelude::{
     ActionGroup, Backdrop, Bullseye, Button, ButtonVariant, Cell, CellContext, ExpansionState,
-    Form, FormGroup, LabelIcon, MemoizedTableModel, MenuAction, MenuChildVariant, Modal,
-    PopoverBody, Spinner, Table, TableColumn, TableEntryRenderer, TableGridMode, TableHeader,
-    TableMode, TextInput,
+    Form, FormGroup, LabelIcon, MemoizedTableModel, Modal, PopoverBody, Spinner, Table,
+    TableColumn, TableEntryRenderer, TableGridMode, TableHeader, TableMode, TextInput,
 };
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use yew::{

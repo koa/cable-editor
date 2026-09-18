@@ -25,6 +25,8 @@ use diesel_async::{
     AsyncPgConnection, RunQueryDsl, pooled_connection::deadpool::Object as DpObject,
 };
 use mutation::Mutation;
+use std::sync::Arc;
+use tokio::{sync::Mutex, sync::MutexGuard};
 
 pub type AuthenticatedGraphqlSchema = Schema<Query, Mutation, EmptySubscription>;
 
@@ -127,11 +129,18 @@ pub fn create_authenticated_schema() -> AuthenticatedGraphqlSchema {
     Schema::build(Query, Mutation, EmptySubscription).finish()
 }
 
-pub async fn get_connection(
+pub async fn get_connection2(
     ctx: &Context<'_>,
 ) -> async_graphql::Result<DpObject<AsyncPgConnection>> {
     let db = ctx.data::<DB>()?;
     Ok(db.get().await?)
+}
+
+pub async fn get_connection<'a>(
+    ctx: &'a Context<'_>,
+) -> async_graphql::Result<MutexGuard<'a, DpObject<AsyncPgConnection>>> {
+    let shared_conn = ctx.data::<Arc<Mutex<DpObject<AsyncPgConnection>>>>()?;
+    Ok(shared_conn.lock().await)
 }
 
 pub async fn trace_fiber_path(

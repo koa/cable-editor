@@ -18,7 +18,7 @@ use crate::{
 };
 use cynic::GraphQlResponse;
 use patternfly_yew::prelude::{
-    BackdropViewer, Brand, Button, MastheadBrand, Page, PageSidebar, Spinner, ToastViewer,
+    BackdropViewer, Button, MastheadBrand, Page, PageSidebar, Spinner, ToastViewer,
 };
 use web_sys::MouseEvent;
 use yew::{
@@ -26,11 +26,10 @@ use yew::{
     platform::spawn_local, use_effect_with,
 };
 use yew_nested_router::{Router, Switch};
-use yew_oauth2::hook::openid::use_auth_agent;
-use yew_oauth2::openid::OAuth2;
 use yew_oauth2::{
     agent::OAuth2Operations,
-    //oauth2::{OAuth2, use_auth_agent},
+    hook::openid::use_auth_agent,
+    openid::OAuth2,
     prelude::{Authenticated, NotAuthenticated},
 };
 

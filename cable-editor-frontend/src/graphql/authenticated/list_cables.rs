@@ -1,10 +1,9 @@
-use crate::graphql::authenticated::cable_details::{
-    CableDetails, CableSegmentEndSchacht, UpdateCableStructure,
-};
-use crate::graphql::mutate;
 use crate::{
     error::FrontendError,
-    graphql::{authenticated::schema, query},
+    graphql::{
+        authenticated::{cable_details::CableSegmentEndSchacht, schema},
+        mutate, query,
+    },
 };
 use yew_oauth2::context::OAuth2Context;
 
@@ -94,5 +93,6 @@ struct DeleteCableMutationVariables {
 #[cynic(graphql_type = "Mutation", variables = "DeleteCableMutationVariables")]
 struct DeleteCableMutation {
     #[arguments( cableId: $cable_id)]
+    #[allow(unused)]
     delete_cable: bool,
 }

@@ -1,31 +1,33 @@
-use crate::graphql::authenticated::list_cables::delete_cable;
-use crate::graphql::authenticated::select_duct::DuctListEntry;
-use crate::pages::duct::select_duct::SelectDuct;
-use crate::pages::router::{AppRoute, PlanView};
-use crate::util::{get_backdrop, get_credentials};
 use crate::{
     components::table::ListModel,
     error::FrontendError,
-    graphql::authenticated::cable_details::{
-        CableDetails, CableDuct, CablePath, CablePathSegment, CableSegmentEndSchacht,
-        PotentialDuct, UpdateCableStructure,
+    graphql::authenticated::{
+        cable_details::{
+            CableDetails, CableDuct, CablePath, CablePathSegment, CableSegmentEndSchacht,
+            PotentialDuct, UpdateCableStructure,
+        },
+        list_cables::delete_cable,
+        select_duct::DuctListEntry,
     },
-    util,
+    pages::{
+        duct::select_duct::SelectDuct,
+        router::{AppRoute, PlanView},
+    },
+    util::{get_backdrop, get_credentials},
 };
 use log::{error, info};
 use patternfly_yew::prelude::{
-    Alert, AlertType, Backdrop, Backdropper, Bullseye, Button, ButtonVariant, Cell, CellContext,
-    ExpansionState, Form, FormGroup, Icon, InputState, LabelIcon, MemoizedTableModel, Modal,
-    ModalVariant, Panel, PanelVariant, SimpleList, SimpleListItem, Spinner, Table, TableColumn,
-    TableEntryRenderer, TableGridMode, TableHeader, TableMode, TextInput, Toolbar, ToolbarContent,
-    ToolbarItem,
+    Backdrop, Bullseye, Button, ButtonVariant, Cell, CellContext, ExpansionState, Form, FormGroup,
+    Icon, InputState, LabelIcon, MemoizedTableModel, Modal, ModalVariant, SimpleList,
+    SimpleListItem, Spinner, Table, TableColumn, TableEntryRenderer, TableGridMode, TableHeader,
+    TableMode, TextInput, Toolbar, ToolbarContent, ToolbarItem,
 };
 use std::{cell::RefCell, collections::HashMap, mem, rc::Rc};
 use yew::{
-    BaseComponent, Callback, Component, Context, Html, Properties, function_component, html,
-    html::IntoPropValue, html::Scope, html_nested, platform::spawn_local,
+    Callback, Component, Context, Html, Properties, function_component, html, html::IntoPropValue,
+    html::Scope, html_nested, platform::spawn_local,
 };
-use yew_nested_router::prelude::{RouterContext, State};
+use yew_nested_router::prelude::RouterContext;
 use yew_oauth2::prelude::OAuth2Context;
 
 #[derive(Debug, Clone, PartialEq)]
