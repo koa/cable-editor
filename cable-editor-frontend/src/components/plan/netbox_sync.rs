@@ -99,30 +99,27 @@ impl Component for NetboxSyncModal {
                     start_netbox_port,
                     connections,
                 }) => {
-                    let endpoints = connections.iter().map(
-                        |AsymetricTargetConnectionEntry {
-                             target_netbox_port,
-                             source_port,
-                             target_port,
-                         }| {
-                            let msg = format!(
-                                "{}: {} -> {}",
-                                target_netbox_port.display_name(),
-                                source_port.port_label(),
-                                target_port.port_label()
-                            );
-                            html!(<dd>{msg}</dd>)
-                        },
-                    );
-
                     let msg = format!(
                         "Verschiedene Netbox-Gegenstellen zu {}",
                         start_netbox_port.display_name()
                     );
+
                     html! {
                         <>
                         <dt>{msg}</dt>
-                        {for endpoints}
+                        {for connections.iter().map(|conn| html! {
+                            <>
+                            {for conn.pairs.iter().map(|pair| {
+                                let pair_msg = format!(
+                                    "{}: {} -> {}",
+                                    conn.target_netbox_port.display_name(),
+                                    pair.source_port.port_label(),
+                                    pair.target_port.port_label()
+                                );
+                                html!(<dd>{pair_msg}</dd>)
+                            })}
+                            </>
+                        })}
                         </>
                     }
                 }

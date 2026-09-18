@@ -64,7 +64,7 @@ pub struct DeviceWithRearPorts {
     #[arguments(filters: { type: { in_list: $types } })]
     pub rearports: Vec<RearPort>,
 }
-#[derive(cynic::QueryFragment, Debug)]
+#[derive(cynic::QueryFragment, Debug, Copy, Clone)]
 #[cynic(graphql_type = "DeviceType")]
 pub struct DeviceWithId {
     pub id: NumberId,
@@ -88,7 +88,7 @@ impl DeviceWithRearPorts {
     }
 }
 
-#[derive(cynic::QueryFragment, Debug)]
+#[derive(cynic::QueryFragment, Debug, Clone)]
 #[cynic(graphql_type = "RearPortType")]
 pub struct RearPort {
     pub id: NumberId,

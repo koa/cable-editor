@@ -37,7 +37,7 @@ pub struct MissingNetboxReferenceError {
     pub port: PanelPortInfo,
 }
 
-#[derive(cynic::QueryFragment, Debug)]
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
 #[cynic(graphql_type = "PanelPort")]
 pub struct PanelPortInfo {
     order_number: i32,
@@ -68,19 +68,19 @@ impl PanelPortInfo {
     }
 }
 
-#[derive(cynic::QueryFragment, Debug)]
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
 #[cynic(graphql_type = "Panel")]
 struct PanelInfo {
     name: Option<String>,
     schacht: SchachtInfo,
     parent_chain: Vec<ParentChainPanelInfo>,
 }
-#[derive(cynic::QueryFragment, Debug)]
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
 #[cynic(graphql_type = "Panel")]
 struct ParentChainPanelInfo {
     name: Option<String>,
 }
-#[derive(cynic::QueryFragment, Debug)]
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
 #[cynic(graphql_type = "Schacht")]
 struct SchachtInfo {
     name: String,
@@ -120,14 +120,18 @@ impl RearPort {
     }
 }
 
-#[derive(cynic::QueryFragment, Debug)]
-#[cynic(graphql_type = "AsymetricTargetConnectionEntry")]
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
 pub struct AsymetricTargetConnectionEntry {
     pub target_netbox_port: RearPort,
+    pub pairs: Vec<PortPair>,
+}
+
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
+pub struct PortPair {
     pub source_port: PanelPortInfo,
     pub target_port: PanelPortInfo,
 }
-#[derive(cynic::QueryFragment, Debug)]
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
 #[cynic(graphql_type = "PortBlockedInNetboxError")]
 pub struct PortBlockedInNetboxError {
     pub port: PanelPortInfo,

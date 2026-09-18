@@ -1,7 +1,7 @@
 pub mod sync;
 
 use crate::graphql::authenticated::mutation::sync::{
-    AsymetricTargetConnectionEntry, InvalidTargetReferenceError,
+    AsymetricTargetConnectionEntry, CircuitMember, InvalidTargetReferenceError, PortPair,
 };
 use crate::netbox::fetch::RearPort;
 use crate::{
@@ -547,7 +547,7 @@ impl Mutation {
                     .into_iter()
                     .map(|port| (port.id, port))
                     .collect::<HashMap<_, _>>();
-                let mut port_pairs = HashMap::<_, HashMap<_, _>>::new();
+                let mut port_pairs = HashMap::<_, HashMap<_, Vec<_>>>::new();
                 while !remaining_connector_ports.is_empty() {
                     if let Some(port) = remaining_connector_ports
                         .keys()
@@ -591,11 +591,15 @@ impl Mutation {
                                 port_pairs
                                     .entry(p1)
                                     .or_default()
-                                    .insert(p2, (port.clone(), remote_port.clone()));
+                                    .entry(p2)
+                                    .or_default()
+                                    .push((port.clone(), remote_port.clone()));
                                 port_pairs
                                     .entry(p2)
                                     .or_default()
-                                    .insert(p1, (remote_port, port));
+                                    .entry(p1)
+                                    .or_default()
+                                    .push((remote_port, port));
                             }
                         } else {
                             let port = PanelPort::query()
@@ -623,9 +627,7 @@ impl Mutation {
                     {
                         if r1.len() > 1 {
                             issues.push(create_asymetric_duplex_error(start_netbox_id, r1).await?)
-                        } else if let Some((end_netbox_id, (start_port, end_port))) =
-                            r1.into_iter().next()
-                        {
+                        } else if let Some((end_netbox_id, connections)) = r1.into_iter().next() {
                             if let Some(r2) = port_pairs.remove(&end_netbox_id) {
                                 if r2.len() > 1 {
                                     issues.push(
@@ -636,8 +638,13 @@ impl Mutation {
                                     PlannedCircuit {
                                         start_netbox_id,
                                         end_netbox_id,
-                                        start_port,
-                                        end_port,
+                                        members: connections
+                                            .into_iter()
+                                            .map(|(start_port, end_port)| CircuitMember {
+                                                start_port,
+                                                end_port,
+                                            })
+                                            .collect(),
                                     }
                                     .order(),
                                 );
@@ -654,9 +661,9 @@ impl Mutation {
 
                 // --- AB HIER: SOLL-ZUSTAND IST DEFINIERT UND FEHLERFREI ---
                 // planned_circuits enthält nun dedupliziert exakt die Circuits, die NetBox benötigt.
-                info!("Planned circuits: {planned_circuits:#?}");
 
-                for _circuit in planned_circuits {
+                for circuit in planned_circuits {
+                    info!("{}: {}", circuit.cid(), circuit.description());
                     // Da NetBox GraphQL Read-Only ist, implementieren Sie hier die Reqwest-Aufrufe an die REST-API:
                     // 1. POST /api/circuits/circuits/ mit { "cid": circuit.cid, ... }
                     // 2. POST /api/circuits/circuit-terminations/ (Side A)
@@ -675,7 +682,7 @@ impl Mutation {
 
 async fn create_asymetric_duplex_error(
     start_netbox_id: i32,
-    r1: HashMap<i32, (PanelPort, PanelPort)>,
+    r1: HashMap<i32, Vec<(PanelPort, PanelPort)>>,
 ) -> async_graphql::Result<SyncIssue> {
     let start_netbox_port = RearPort::fetch_by_id((start_netbox_id as u32).into())
         .await?
@@ -684,17 +691,24 @@ async fn create_asymetric_duplex_error(
         })?;
 
     let mut connections = Vec::new();
-    for (target_netbox_id, (source_port, target_port)) in r1 {
+    for (target_netbox_id, port_pairs) in r1 {
         let target_netbox_port = RearPort::fetch_by_id((target_netbox_id as u32).into())
             .await?
             .ok_or_else(|| {
                 async_graphql::Error::new(format!("Netbox RearPort {} not found", target_netbox_id))
             })?;
 
+        let pairs: Vec<PortPair> = port_pairs
+            .into_iter()
+            .map(|(source_port, target_port)| PortPair {
+                source_port,
+                target_port,
+            })
+            .collect();
+
         connections.push(AsymetricTargetConnectionEntry {
             target_netbox_port,
-            source_port,
-            target_port,
+            pairs: pairs.into_boxed_slice(),
         });
     }
 
