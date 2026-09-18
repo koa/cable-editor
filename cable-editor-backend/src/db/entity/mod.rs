@@ -118,17 +118,10 @@ impl UnalignedDuct<i32> for (Duct, i32) {
 pub struct FiberPathNode {
     #[diesel(sql_type = Integer)]
     pub step: i32,
-
     #[diesel(sql_type = Integer)]
-    pub from_panel: i32,
+    pub from_port_id: i32,
     #[diesel(sql_type = Integer)]
-    pub from_port: i32,
-
-    #[diesel(sql_type = Integer)]
-    pub to_panel: i32,
-    #[diesel(sql_type = Integer)]
-    pub to_port: i32,
-
+    pub to_port_id: i32,
     #[diesel(sql_type = Integer)]
     pub kabel: i32,
     #[diesel(sql_type = Integer)]
@@ -136,7 +129,6 @@ pub struct FiberPathNode {
     #[diesel(sql_type = Integer)]
     pub faser: i32,
 }
-
 #[derive(Debug, Clone, FromSqlRow, AsExpression, PartialOrd, PartialEq, Hash)]
 #[diesel(sql_type = schema::sql_types::Xml)]
 pub struct XmlDocument(pub Box<str>);

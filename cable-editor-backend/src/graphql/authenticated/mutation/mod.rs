@@ -544,7 +544,7 @@ impl Mutation {
                     .load::<PanelPort>(conn)
                     .await?
                     .into_iter()
-                    .map(|port| ((port.id, port.port_order), port))
+                    .map(|port| (port.id, port))
                     .collect::<HashMap<_, _>>();
                 let mut port_pairs = HashMap::<_, HashMap<_, _>>::new();
                 while !remaining_connector_ports.is_empty() {
@@ -555,23 +555,20 @@ impl Mutation {
                         .and_then(|k| remaining_connector_ports.remove(&k))
                     {
                         let mut error = false;
-                        let trace =
-                            trace_fiber_path(conn, port.panel_id, port.port_order, plan_id).await?;
+                        let trace = trace_fiber_path(conn, port.id, plan_id).await?;
                         if trace.is_empty() {
                             continue;
                         }
                         let last_node = trace.last().unwrap();
-                        let target_panel = last_node.to_panel;
-                        let target_port = last_node.to_port;
+                        let target_port_id = last_node.to_port_id;
 
-                        if target_panel == port.panel_id && target_port == port.port_order {
+                        if target_port_id == port.id {
                             issues.push(SyncIssue::RoutingLoop(RoutingLoopError {
                                 port: port.clone(),
                             }));
                             error = true;
                         }
-                        if let Some(remote_port) =
-                            remaining_connector_ports.remove(&(target_panel, target_port))
+                        if let Some(remote_port) = remaining_connector_ports.remove(&target_port_id)
                         {
                             if port.netbox_port_id.is_none() {
                                 issues.push(SyncIssue::MissingNetboxReference(
@@ -601,8 +598,7 @@ impl Mutation {
                             }
                         } else {
                             let port = PanelPort::query()
-                                .filter(schema::panel_port::port_order.eq(target_port))
-                                .filter(schema::panel_port::panel_id.eq(target_panel))
+                                .filter(schema::panel_port::id.eq(target_port_id))
                                 .first(conn)
                                 .await?;
                             issues.push(SyncIssue::InvalidTargetReference(
@@ -610,7 +606,6 @@ impl Mutation {
                             ));
                             error = true;
                         }
-
                         if error {
                             continue;
                         }

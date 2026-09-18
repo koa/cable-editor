@@ -145,39 +145,34 @@ pub async fn get_connection<'a>(
 
 pub async fn trace_fiber_path(
     conn: &mut AsyncPgConnection,
-    start_panel_id: i32,
-    start_port_number: i32,
+    start_port_id: i32,
     plan_id: i32,
 ) -> QueryResult<Vec<FiberPathNode>> {
     let raw_sql = r#"
     WITH RECURSIVE
-    -- 1. Effektiven Zustand berechnen: Ist-Zustand (0) und EINE Planung ($3) mischen
+    -- 1. Effektiven Zustand berechnen: Ist-Zustand (0) und EINE Planung ($2) mischen
     effective_usage AS (
         SELECT DISTINCT ON (port_id, side)
             port_id, side, cable, bundle, fiber
         FROM port_usage
-        WHERE plan_id IN (0, $3)
+        WHERE plan_id IN (0, $2)
         -- plan_id DESC überschreibt den Ist-Zustand (0) mit der Planung (>0)
         ORDER BY port_id, side, plan_id DESC
     ),
-
-    -- 2. Hardware-Infos anfügen und Tombstones (cable IS NULL) herausfiltern
+    -- 2. Tombstones (cable IS NULL) herausfiltern (JOIN mit panel_port fällt komplett weg!)
     endpoints AS (
         SELECT
-            eu.port_id, pp.panel_id, pp.port_order AS port_number,
-            eu.cable AS k_id, eu.bundle AS b, eu.fiber AS f
-        FROM effective_usage eu
-        JOIN panel_port pp ON eu.port_id = pp.id
-        WHERE eu.cable IS NOT NULL
+            port_id, cable AS k_id, bundle AS b, fiber AS f
+        FROM effective_usage
+        WHERE cable IS NOT NULL
     ),
-
     -- 3. Die eigentliche Wegfindung
     signal_path AS (
-        -- Basisfall: Direkter Startpunkt (gefiltert auf $1 und $2)
+        -- Basisfall: Direkter Startpunkt (gefiltert auf $1)
         SELECT
             1 AS step,
-            e1.panel_id AS from_panel, e1.port_number AS from_port,
-            e2.panel_id AS to_panel, e2.port_number AS to_port,
+            e1.port_id AS from_port_id,
+            e2.port_id AS to_port_id,
             e1.k_id AS kabel, e1.b AS buendel, e1.f AS faser,
             -- Array merkt sich besuchte ports anstatt panel/port kombinationen
             ARRAY[e1.port_id] AS visited
@@ -185,34 +180,31 @@ pub async fn trace_fiber_path(
         JOIN endpoints e2
           ON e1.k_id = e2.k_id AND e1.b = e2.b AND e1.f = e2.f
          AND e1.port_id != e2.port_id -- Faser muss auf einen ANDEREN Port springen
-        WHERE e1.panel_id = $1 AND e1.port_number = $2
-
+        WHERE e1.port_id = $1
         UNION ALL
-
         -- Rekursion: Springt iterativ die Folge-Ports ab
         SELECT
             sp.step + 1,
-            e1.panel_id, e1.port_number,
-            e2.panel_id, e2.port_number,
+            e1.port_id, 
+            e2.port_id,
             e1.k_id, e1.b, e1.f,
             sp.visited || e1.port_id
         FROM signal_path sp
         -- Vom Ziel des letzten Schritts auf den Eingang des neuen Ports...
-        JOIN endpoints e1 ON e1.panel_id = sp.to_panel AND e1.port_number = sp.to_port
+        JOIN endpoints e1 ON e1.port_id = sp.to_port_id
         -- ...auf das andere Ende der verbundenen Faser springen
         JOIN endpoints e2 ON e1.k_id = e2.k_id AND e1.b = e2.b AND e1.f = e2.f
          AND e1.port_id != e2.port_id
         -- Verhindern, dass wir im Kreis laufen
         WHERE NOT (e2.port_id = ANY(sp.visited))
     )
-    SELECT step, from_panel, from_port, to_panel, to_port, kabel, buendel, faser
+    SELECT step, from_port_id, to_port_id, kabel, buendel, faser
     FROM signal_path
     ORDER BY step;
     "#;
 
     sql_query(raw_sql)
-        .bind::<Integer, _>(start_panel_id)
-        .bind::<Integer, _>(start_port_number)
+        .bind::<Integer, _>(start_port_id)
         .bind::<Integer, _>(plan_id)
         .load::<FiberPathNode>(conn)
         .await
