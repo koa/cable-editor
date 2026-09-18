@@ -1,21 +1,24 @@
 use crate::error::FrontendError;
-use crate::graphql::authenticated::netbox_sync::{PlanDummy, SyncNetbox};
-use crate::graphql::authenticated::plan_details::PlanDetails;
+use crate::graphql::authenticated::netbox_sync::{
+    AsymetricTargetConnectionEntry, AsymmetricDuplexError, BlindEndError,
+    MissingNetboxReferenceError, SyncIssue, SyncNetbox,
+};
 use crate::util::get_credentials;
 use patternfly_yew::prelude::{Button, ButtonVariant, Modal, ModalVariant};
+use std::fmt::format;
 use yew::html::IntoPropValue;
 use yew::platform::spawn_local;
 use yew::{Callback, Component, Context, Html, Properties, html};
-use yew_oauth2::agent::OpenIdClient;
 
 pub struct NetboxSyncModal {
     syncing: bool,
     error: Option<FrontendError>,
+    sync_issues: Box<[SyncIssue]>,
 }
 pub enum Msg {
     StartSync,
     Error(FrontendError),
-    Synced(PlanDummy),
+    Synced(Vec<SyncIssue>),
 }
 #[derive(Properties, PartialEq)]
 pub struct NetboxSyncProps {
@@ -31,6 +34,7 @@ impl Component for NetboxSyncModal {
         Self {
             syncing: false,
             error: None,
+            sync_issues: Box::new([]),
         }
     }
 
@@ -56,7 +60,8 @@ impl Component for NetboxSyncModal {
                 self.syncing = false;
                 true
             }
-            Msg::Synced(_) => {
+            Msg::Synced(sync_issues) => {
+                self.sync_issues = sync_issues.into_boxed_slice();
                 self.error = None;
                 self.syncing = false;
                 true
@@ -75,6 +80,70 @@ impl Component for NetboxSyncModal {
             Callback::from(move |_| scope.send_message(Msg::StartSync))
         };
         let error: Option<Html> = self.error.as_ref().map(|e| e.into_prop_value());
+        let issues = self
+            .sync_issues
+            .iter()
+            .map(|issue| match issue {
+                SyncIssue::MissingNetboxReference(MissingNetboxReferenceError { port }) => {
+                    let msg = format!("Fehlende Netbox refernz beim Port {}", port.port_label());
+                    html!(msg)
+                }
+                SyncIssue::BlindEnd(BlindEndError { port }) => format!(
+                    "Verbindung endet nicht auf einem Stecker {} ",
+                    port.port_label()
+                )
+                .into_prop_value(),
+                SyncIssue::AsymmetricDuplex(AsymmetricDuplexError {
+                    start_netbox_id,
+                    connections,
+                }) => {
+                    let endpoints = connections.iter().map(
+                        |AsymetricTargetConnectionEntry {
+                             target_netbox_id,
+                             source_port,
+                             target_port,
+                         }| {
+                            let msg = format!(
+                                "{target_netbox_id}: {} -> {}",
+                                source_port.port_label(),
+                                target_port.port_label()
+                            );
+                            html!(<dd>{msg}</dd>)
+                        },
+                    );
+                    let msg = format!("Verschiedene Netbox-Gegenstellen zu {}", start_netbox_id);
+                    html! {
+                        <>
+                        <dt>{msg}</dt>
+                        {for endpoints}
+                        </>
+                    }
+                }
+                SyncIssue::PortBlockedInNetbox(err) => {
+                    let msg = format!("Port blockiert in Netbox: Panel ID {}, Port ID {}, Netbox Port ID {}", err.panel_id, err.port_id, err.netbox_port_id);
+                    html!(msg)
+                }
+                SyncIssue::NameCollision(err) => {
+                    let msg = format!("Namenskollision bei Circuit: {}", err.circuit_name);
+                    html!(msg)
+                }
+                SyncIssue::MissingNetboxMasterData(err) => {
+                    let msg = format!("Fehlende Netbox Stammdaten für Typ: {}", err.entity_type);
+                    html!(msg)
+                }
+                SyncIssue::RoutingLoop(err) => {
+                    let msg = format!("Routing Loop festgestellt bei Port {}", err.port.port_label());
+                    html!(msg)
+                }
+                SyncIssue::InvalidTargetReference(err) => {
+                    let msg = format!("Ungültiges Ziel bei Port {}", err.port.port_label());
+                    html!(msg)
+                }
+                SyncIssue::Unknown => {
+                    html!("Unbekannter Fehler")
+                }
+            })
+            .map(|i: Html| html!(<p>{i}</p>));
         html! {
             <Modal
                 title="Netbox Sync"
@@ -86,6 +155,7 @@ impl Component for NetboxSyncModal {
                     </>
                 }}>
                 {error}
+            {for issues}
                 <p>{"Synchronisiere Netbox."}</p>
             </Modal>
         }

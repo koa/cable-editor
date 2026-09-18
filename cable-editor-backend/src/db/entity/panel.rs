@@ -19,6 +19,7 @@ use diesel::{
 use diesel_async::{AsyncConnection, AsyncPgConnection, RunQueryDsl, pooled_connection::deadpool};
 use diesel_derive_enum::DbEnum;
 use log::{error, info};
+use std::borrow::Cow;
 use std::collections::HashSet;
 
 #[derive(QueryableByName, Identifiable, Insertable, HasQuery, Debug, Clone, PartialEq)]
@@ -433,7 +434,10 @@ impl Panel {
     }
     async fn netbox_device(&self) -> async_graphql::Result<Option<DeviceWithRearPorts>> {
         Ok(if let Some(device_id) = self.netbox_device_id {
-            fetch_device_with_ports((device_id as u32).into()).await?
+            fetch_device_with_ports((device_id as u32).into())
+                .await
+                .ok()
+                .flatten()
         } else {
             None
         })
@@ -441,6 +445,13 @@ impl Panel {
 }
 
 impl PanelPort {
+    pub fn create_label(&self) -> Cow<'_, str> {
+        if let Some(name) = self.label.as_deref() {
+            Cow::Borrowed(name)
+        } else {
+            Cow::Owned(format!("Port {}", self.id))
+        }
+    }
     pub async fn rear_port_from_netbox(
         id: NumberId,
         ctx: &Context<'_>,
@@ -512,7 +523,10 @@ impl PanelPort {
 
     async fn netbox_port(&self) -> async_graphql::Result<Option<RearPort>> {
         if let Some(netbox_port_id) = self.netbox_port_id {
-            Ok(RearPort::fetch_by_id((netbox_port_id as u32).into()).await?)
+            Ok(RearPort::fetch_by_id((netbox_port_id as u32).into())
+                .await
+                .ok()
+                .flatten())
         } else {
             Ok(None)
         }

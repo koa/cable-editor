@@ -16,6 +16,7 @@ pub async fn connect() -> Result<DB, BackendError> {
     let db_url = std::env::var("DATABASE_URL").map_err(BackendError::CannotReadDatabaseUrl)?;
     let config = AsyncDieselConnectionManager::<AsyncPgConnection>::new(db_url);
     let pool = Pool::builder(config)
+        .max_size(15)
         .build()
         .map_err(BackendError::CannotConnectToDatabase)?;
     Ok(pool)

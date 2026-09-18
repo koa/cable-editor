@@ -1,14 +1,27 @@
-use crate::netbox::fetch_devices_and_ports;
+pub mod sync;
+
+use crate::graphql::authenticated::mutation::sync::{
+    AsymetricTargetConnectionEntry, InvalidTargetReferenceError,
+};
 use crate::{
     db::{
         entity::{
             cable::{Cable, UpdateCableChangeset},
-            panel::{InsertPanel, InsertPanelPort, PanelPortType, PortSide, PortUsage},
+            panel::{
+                InsertPanel, InsertPanelPort, Panel, PanelPort, PanelPortType, PortSide, PortUsage,
+            },
             plan::{InsertPlan, Plan, PlanStatusType},
         },
         schema,
     },
-    graphql::authenticated,
+    graphql::authenticated::{
+        self,
+        mutation::sync::{
+            AsymmetricDuplexError, BlindEndError, MissingNetboxReferenceError, PlannedCircuit,
+            RoutingLoopError, SyncIssue,
+        },
+        trace_fiber_path,
+    },
 };
 use async_graphql::{Context, InputObject, Object, OneofObject};
 use async_recursion::async_recursion;
@@ -17,7 +30,8 @@ use diesel::{
     associations::HasTable, dsl::max,
 };
 use diesel_async::{AsyncConnection, AsyncPgConnection, RunQueryDsl};
-use std::collections::HashMap;
+use log::info;
+use std::collections::{HashMap, HashSet};
 
 pub struct Mutation;
 
@@ -516,18 +530,168 @@ impl Mutation {
         &self,
         ctx: &Context<'_>,
         plan_id: i32,
-    ) -> async_graphql::Result<Plan> {
+    ) -> async_graphql::Result<Vec<SyncIssue>> {
         let mut connection = authenticated::get_connection(ctx).await?;
-        connection
-            .transaction(async move |conn| {
-                fetch_devices_and_ports().await?;
-                Ok(Plan::query()
-                    .filter(schema::plan::id.eq(plan_id))
-                    .first(conn)
-                    .await?)
+
+        let issues = connection
+            .transaction::<_, async_graphql::Error, _>(async move |conn| {
+                let mut issues = Vec::new();
+
+                // DB-Daten laden
+                let panels = schema::panel::table.load::<Panel>(conn).await?;
+                let mut remaining_connector_ports = schema::panel_port::table
+                    .filter(schema::panel_port::port_type.eq(PanelPortType::Connector))
+                    .load::<PanelPort>(conn)
+                    .await?
+                    .into_iter()
+                    .map(|port| ((port.id, port.port_order), port))
+                    .collect::<HashMap<_, _>>();
+                let mut port_pairs = HashMap::<_, HashMap<_, _>>::new();
+                while !remaining_connector_ports.is_empty() {
+                    if let Some(port) = remaining_connector_ports
+                        .keys()
+                        .copied()
+                        .next()
+                        .and_then(|k| remaining_connector_ports.remove(&k))
+                    {
+                        let mut error = false;
+                        let trace =
+                            trace_fiber_path(conn, port.panel_id, port.port_order, plan_id).await?;
+                        if trace.is_empty() {
+                            continue;
+                        }
+                        let last_node = trace.last().unwrap();
+                        let target_panel = last_node.to_panel;
+                        let target_port = last_node.to_port;
+
+                        if target_panel == port.panel_id && target_port == port.port_order {
+                            issues.push(SyncIssue::RoutingLoop(RoutingLoopError {
+                                port: port.clone(),
+                            }));
+                            error = true;
+                        }
+                        if let Some(remote_port) =
+                            remaining_connector_ports.remove(&(target_panel, target_port))
+                        {
+                            if port.netbox_port_id.is_none() {
+                                issues.push(SyncIssue::MissingNetboxReference(
+                                    MissingNetboxReferenceError { port: port.clone() },
+                                ));
+                                error = true;
+                            }
+                            if remote_port.netbox_port_id.is_none() {
+                                issues.push(SyncIssue::MissingNetboxReference(
+                                    MissingNetboxReferenceError {
+                                        port: remote_port.clone(),
+                                    },
+                                ));
+                                error = true;
+                            }
+                            if let Some(p1) = port.netbox_port_id
+                                && let Some(p2) = remote_port.netbox_port_id
+                            {
+                                port_pairs
+                                    .entry(p1)
+                                    .or_default()
+                                    .insert(p2, (port.clone(), remote_port.clone()));
+                                port_pairs
+                                    .entry(p2)
+                                    .or_default()
+                                    .insert(p1, (remote_port, port));
+                            }
+                        } else {
+                            let port = PanelPort::query()
+                                .filter(schema::panel_port::port_order.eq(target_port))
+                                .filter(schema::panel_port::panel_id.eq(target_panel))
+                                .first(conn)
+                                .await?;
+                            issues.push(SyncIssue::InvalidTargetReference(
+                                InvalidTargetReferenceError { port },
+                            ));
+                            error = true;
+                        }
+
+                        if error {
+                            continue;
+                        }
+                    }
+                }
+                let mut planned_circuits = Vec::new();
+
+                while !port_pairs.is_empty() {
+                    if let Some((start_netbox_id, r1)) = port_pairs
+                        .keys()
+                        .next()
+                        .copied()
+                        .and_then(|k| port_pairs.remove(&k).map(|e| (k, e)))
+                    {
+                        if r1.len() > 1 {
+                            issues.push(create_asymetric_duplex_error(start_netbox_id, r1))
+                        } else if let Some((end_netbox_id, (start_port, end_port))) =
+                            r1.into_iter().next()
+                        {
+                            if let Some(r2) = port_pairs.remove(&end_netbox_id) {
+                                if r2.len() > 1 {
+                                    issues.push(create_asymetric_duplex_error(end_netbox_id, r2))
+                                }
+                                planned_circuits.push(
+                                    PlannedCircuit {
+                                        start_netbox_id,
+                                        end_netbox_id,
+                                        start_port,
+                                        end_port,
+                                    }
+                                    .order(),
+                                );
+                            } else {
+                                panic!("Not possible, I swear :-)")
+                            }
+                        }
+                    }
+                }
+                // 4. Abbruch, falls fachliche Fehler gefunden wurden
+                if !issues.is_empty() {
+                    return Ok(issues);
+                }
+
+                // --- AB HIER: SOLL-ZUSTAND IST DEFINIERT UND FEHLERFREI ---
+                // planned_circuits enthält nun dedupliziert exakt die Circuits, die NetBox benötigt.
+                info!("Planned circuits: {planned_circuits:#?}");
+
+                for _circuit in planned_circuits {
+                    // Da NetBox GraphQL Read-Only ist, implementieren Sie hier die Reqwest-Aufrufe an die REST-API:
+                    // 1. POST /api/circuits/circuits/ mit { "cid": circuit.cid, ... }
+                    // 2. POST /api/circuits/circuit-terminations/ (Side A)
+                    // 3. POST /api/dcim/cables/ (Connect Termination Side A <-> circuit.netbox_a_port_id)
+                    // 4. POST /api/circuits/circuit-terminations/ (Side Z)
+                    // 5. POST /api/dcim/cables/ (Connect Termination Side Z <-> circuit.netbox_z_port_id)
+                }
+
+                Ok(Vec::default())
             })
-            .await
+            .await?;
+
+        Ok(issues)
     }
+}
+
+fn create_asymetric_duplex_error(
+    start_netbox_id: i32,
+    r1: HashMap<i32, (PanelPort, PanelPort)>,
+) -> SyncIssue {
+    SyncIssue::AsymmetricDuplex(AsymmetricDuplexError {
+        start_netbox_id,
+        connections: r1
+            .into_iter()
+            .map(
+                |(target_netbox_id, (source_port, target_port))| AsymetricTargetConnectionEntry {
+                    target_netbox_id,
+                    source_port,
+                    target_port,
+                },
+            )
+            .collect(),
+    })
 }
 
 #[derive(Debug, Clone, PartialEq, InputObject, Copy)]

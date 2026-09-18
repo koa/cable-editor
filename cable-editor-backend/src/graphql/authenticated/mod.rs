@@ -138,6 +138,7 @@ pub async fn trace_fiber_path(
     conn: &mut AsyncPgConnection,
     start_panel_id: i32,
     start_port_number: i32,
+    plan_id: i32,
 ) -> QueryResult<Vec<FiberPathNode>> {
     let raw_sql = r#"
     WITH RECURSIVE
@@ -203,6 +204,7 @@ pub async fn trace_fiber_path(
     sql_query(raw_sql)
         .bind::<Integer, _>(start_panel_id)
         .bind::<Integer, _>(start_port_number)
+        .bind::<Integer, _>(plan_id)
         .load::<FiberPathNode>(conn)
         .await
 }
