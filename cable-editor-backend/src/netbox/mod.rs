@@ -11,6 +11,7 @@ use crate::{
 };
 use cynic::{QueryBuilder as CQB, QueryFragment, http::ReqwestExt};
 use lazy_static::lazy_static;
+use log::info;
 use reqwest::header::{AUTHORIZATION, HeaderMap};
 use std::{collections::BTreeMap, sync::OnceLock};
 use tokio::sync::Semaphore;
@@ -26,7 +27,6 @@ pub async fn fetch_devices_and_ports() -> Result<Vec<DeviceWithRearPorts>, Backe
         types: Some(vec![PortTypeEnum::TypeLc, PortTypeEnum::TypeLcUpc]),
     })
     .await?;
-    //let config = ClientConfig::new(NETBOX_CONFIG.url(), NETBOX_CONFIG.token());
 
     Ok(netbox_data
         .device_list
@@ -47,28 +47,13 @@ pub async fn fetch_device_with_ports(
     .device)
 }
 
-fn reqwest_client() -> Result<reqwest::Client, BackendError> {
-    let access_token = NETBOX_CONFIG.token();
-    let mut headers = HeaderMap::new();
-    headers.insert(
-        AUTHORIZATION,
-        format!("Bearer {access_token}")
-            .parse()
-            .map_err(BackendError::CreateNetboxCynicClientHeaderError)?,
-    );
-    reqwest::Client::builder()
-        .default_headers(headers)
-        .build()
-        .map_err(BackendError::CreateNetboxCynicClientError)
-}
-
 lazy_static! {
     static ref NETBOX_SEMAPHORE: Semaphore = Semaphore::new(2);
 }
 
 static NETBOX_HTTP_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
 
-fn get_reqwest_client() -> Result<reqwest::Client, BackendError> {
+pub(crate) fn get_reqwest_client() -> Result<reqwest::Client, BackendError> {
     if let Some(client) = NETBOX_HTTP_CLIENT.get() {
         return Ok(client.clone());
     }
@@ -107,8 +92,10 @@ where
                 query: Q::name(),
                 error,
             })?;
+    let string = format!("{}graphql/", NETBOX_CONFIG.url());
+    info!("Graphql URL: {string}");
     let response = get_reqwest_client()?
-        .post(NETBOX_CONFIG.url())
+        .post(string)
         .run_graphql(Q::build(request))
         .await
         .map_err(|error| BackendError::ErrorCallingNetboxBackend {

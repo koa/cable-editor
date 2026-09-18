@@ -39,6 +39,8 @@ impl Settings {
 pub struct NetboxSettings {
     url: String,
     token: String,
+    provider_id: i64,
+    type_id: i64,
 }
 
 impl NetboxSettings {
@@ -48,6 +50,12 @@ impl NetboxSettings {
 
     pub fn token(&self) -> &str {
         &self.token
+    }
+    pub fn provider_id(&self) -> i64 {
+        self.provider_id
+    }
+    pub fn type_id(&self) -> i64 {
+        self.type_id
     }
 }
 

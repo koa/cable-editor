@@ -1,9 +1,11 @@
 pub mod sync;
 
+use crate::config::NETBOX_CONFIG;
 use crate::graphql::authenticated::mutation::sync::{
     AsymetricTargetConnectionEntry, CircuitMember, InvalidTargetReferenceError, PortPair,
 };
-use crate::netbox::fetch::RearPort;
+use crate::netbox::fetch::{CurrentCircuitData, RearPort};
+use crate::netbox::{get_reqwest_client, query};
 use crate::{
     db::{
         entity::{
@@ -662,16 +664,168 @@ impl Mutation {
                 // --- AB HIER: SOLL-ZUSTAND IST DEFINIERT UND FEHLERFREI ---
                 // planned_circuits enthält nun dedupliziert exakt die Circuits, die NetBox benötigt.
 
-                for circuit in planned_circuits {
-                    info!("{}: {}", circuit.cid(), circuit.description());
-                    // Da NetBox GraphQL Read-Only ist, implementieren Sie hier die Reqwest-Aufrufe an die REST-API:
-                    // 1. POST /api/circuits/circuits/ mit { "cid": circuit.cid, ... }
-                    // 2. POST /api/circuits/circuit-terminations/ (Side A)
-                    // 3. POST /api/dcim/cables/ (Connect Termination Side A <-> circuit.netbox_a_port_id)
-                    // 4. POST /api/circuits/circuit-terminations/ (Side Z)
-                    // 5. POST /api/dcim/cables/ (Connect Termination Side Z <-> circuit.netbox_z_port_id)
+                let mut existing_circuits = query::<CurrentCircuitData, _>(()).await?.circuit_list;
+
+                let mut to_create = Vec::new();
+                let mut to_delete = Vec::new();
+                let mut matching = Vec::new();
+
+                for planned in planned_circuits {
+                    let cid = planned.cid();
+                    let expected_ports = vec![planned.start_netbox_id, planned.end_netbox_id];
+
+                    if let Some(idx) = existing_circuits.iter().position(|c| c.cid == cid) {
+                        let existing = existing_circuits.remove(idx);
+
+                        let mut actual_ports = existing.connected_rear_port_ids();
+                        actual_ports.sort();
+                        let mut expected = expected_ports.clone();
+                        expected.sort();
+
+                        if actual_ports == expected {
+                            matching.push(planned);
+                        } else {
+                            // CID existiert, aber die Terminations sind falsch -> löschen und neu anlegen
+                            to_delete.push(existing);
+                            to_create.push(planned);
+                        }
+                    } else {
+                        // Circuit existiert noch gar nicht
+                        to_create.push(planned);
+                    }
+                }
+                for existing in existing_circuits {
+                    if existing.cid.starts_with("FIBER-") {
+                        to_delete.push(existing);
+                    }
                 }
 
+                info!("Matching circuits: {}", matching.len());
+                info!("Circuits to create: {}", to_create.len());
+                info!("Circuits to delete: {}", to_delete.len());
+
+                let client = get_reqwest_client()
+                    .map_err(|e| async_graphql::Error::new(e.to_string()))?;
+                let rest_base_url = format!("{}api",NETBOX_CONFIG
+                    .url()
+                    );
+
+                for circuit in to_delete {
+                    let id: u32 = circuit.id.into();
+                    info!("DELETE Circuit {} (NetBox ID: {})", circuit.cid, id);
+
+                    let res = client.delete(format!("{}/circuits/circuits/{}/", rest_base_url, id))
+                        .send()
+                        .await
+                        .map_err(|e| async_graphql::Error::new(e.to_string()))?;
+
+                    if !res.status().is_success() {
+                        return Err(async_graphql::Error::new(format!(
+                            "Fehler beim Löschen von Circuit {}: {:?}",
+                            id, res.text().await.unwrap_or_default()
+                        )));
+                    }
+                }
+
+                for circuit in to_create {
+                    info!("CREATE {}: {}", circuit.cid(), circuit.description());
+
+                    // --- 5.1 Circuit erstellen ---
+                    let provider_id = crate::config::NETBOX_CONFIG.provider_id();
+                    let type_id = crate::config::NETBOX_CONFIG.type_id();
+
+                    let circuit_payload = serde_json::json!({
+                        "cid": circuit.cid(),
+                        "description": circuit.description(),
+                        "provider": provider_id,
+                        "type": type_id,
+                        "status": "active"
+                    });
+
+                    let res = client.post(format!("{}/circuits/circuits/", rest_base_url))
+                        .json(&circuit_payload)
+                        .send()
+                        .await
+                        .map_err(|e| async_graphql::Error::new(e.to_string()))?;
+
+                    if !res.status().is_success() {
+                        return Err(async_graphql::Error::new(format!(
+                            "Fehler beim Erstellen des Circuits {}: {:?}",
+                            circuit.cid(), res.text().await.unwrap_or_default()
+                        )));
+                    }
+
+                    let created_circuit: serde_json::Value = res.json().await
+                        .map_err(|e| async_graphql::Error::new(e.to_string()))?;
+                    let new_circuit_id = created_circuit["id"].as_i64().unwrap();
+
+                    // --- 5.2 Dynamische Site-IDs für die RearPorts aus Netbox abfragen ---
+                    let start_rp = RearPort::fetch_by_id((circuit.start_netbox_id as u32).into())
+                        .await?
+                        .ok_or_else(|| async_graphql::Error::new(format!("Start RearPort {} nicht gefunden", circuit.start_netbox_id)))?;
+                    let end_rp = RearPort::fetch_by_id((circuit.end_netbox_id as u32).into())
+                        .await?
+                        .ok_or_else(|| async_graphql::Error::new(format!("End RearPort {} nicht gefunden", circuit.end_netbox_id)))?;
+
+                    for (side, rear_port_id, site_id, existing_cable_id) in [
+                        ("A", circuit.start_netbox_id, u32::from(start_rp.device.site.id), start_rp.cable.map(|c| u32::from(c.id))),
+                        ("Z", circuit.end_netbox_id, u32::from(end_rp.device.site.id), end_rp.cable.map(|c| u32::from(c.id))),
+                    ] {
+                        // 5.2.1 Termination mit dynamischer Site-ID erstellen
+                        let term_payload = serde_json::json!({
+                            "circuit": new_circuit_id,
+                            "term_side": side,
+                            "termination_type": "dcim.site",
+                            "termination_id": site_id
+                        });
+
+                        let term_res = client.post(format!("{}/circuits/circuit-terminations/", rest_base_url))
+                            .json(&term_payload)
+                            .send()
+                            .await
+                            .map_err(|e| async_graphql::Error::new(e.to_string()))?;
+
+                        if !term_res.status().is_success() {
+                            return Err(async_graphql::Error::new(format!(
+                                "Fehler beim Erstellen der Termination Seite {}: {:?}",
+                                side, term_res.text().await.unwrap_or_default()
+                            )));
+                        }
+
+                        let created_term: serde_json::Value = term_res.json().await
+                            .map_err(|e| async_graphql::Error::new(e.to_string()))?;
+                        let term_id = created_term["id"].as_i64().unwrap();
+
+                        // 5.2.2 Eventuell vorhandenes Kabel entfernen, das den Port blockiert
+                        if let Some(cable_id) = existing_cable_id {
+                            info!("Entferne blockierendes Kabel {} an Port {}", cable_id, rear_port_id);
+                            // Den Rückgabewert ignorieren wir bewusst: Falls es bereits durch das Löschen
+                            // des vorherigen Circuits kaskadierend mitgelöscht wurde (404), ist das für uns völlig ok.
+                            let _ = client.delete(format!("{}/dcim/cables/{}/", rest_base_url, cable_id))
+                                .send()
+                                .await;
+                        }
+
+                        // 5.2.3 Kabel vom Circuit-Termination zum RearPort patchen
+                        let cable_payload = serde_json::json!({
+                            "a_terminations": [{"object_type": "circuits.circuittermination", "object_id": term_id}],
+                            "b_terminations": [{"object_type": "dcim.rearport", "object_id": rear_port_id}],
+                            "status": "connected"
+                        });
+
+                        let cable_res = client.post(format!("{}/dcim/cables/", rest_base_url))
+                            .json(&cable_payload)
+                            .send()
+                            .await
+                            .map_err(|e| async_graphql::Error::new(e.to_string()))?;
+
+                        if !cable_res.status().is_success() {
+                            return Err(async_graphql::Error::new(format!(
+                                "Fehler beim Patchen des Kabels Seite {}: {:?}",
+                                side, cable_res.text().await.unwrap_or_default()
+                            )));
+                        }
+                    }                }
                 Ok(Vec::default())
             })
             .await?;

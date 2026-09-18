@@ -44,13 +44,10 @@ pub struct QueryRearPort {
 }
 
 #[derive(cynic::QueryFragment, Debug)]
-#[cynic(graphql_type = "Query", variables = DeviceFilterVariables)]
+#[cynic(graphql_type = "Query")]
 pub struct CurrentCircuitData {
     #[cynic(rename = "circuit_list")]
     pub circuit_list: Vec<CircuitType>,
-    #[arguments(filters: { rear_ports: { type: { in_list: $types } } })]
-    #[cynic(rename = "device_list")]
-    pub device_list: Vec<DeviceWithRearPorts>,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
@@ -64,10 +61,17 @@ pub struct DeviceWithRearPorts {
     #[arguments(filters: { type: { in_list: $types } })]
     pub rearports: Vec<RearPort>,
 }
+
+#[derive(cynic::QueryFragment, Debug, Copy, Clone)]
+#[cynic(graphql_type = "SiteType")]
+pub struct SiteWithId {
+    pub id: NumberId,
+}
 #[derive(cynic::QueryFragment, Debug, Copy, Clone)]
 #[cynic(graphql_type = "DeviceType")]
 pub struct DeviceWithId {
     pub id: NumberId,
+    pub site: SiteWithId,
 }
 #[Object]
 impl DeviceWithRearPorts {
@@ -89,12 +93,18 @@ impl DeviceWithRearPorts {
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone)]
+#[cynic(graphql_type = "CableType")]
+pub struct NetboxCable {
+    pub id: NumberId,
+}
+#[derive(cynic::QueryFragment, Debug, Clone)]
 #[cynic(graphql_type = "RearPortType")]
 pub struct RearPort {
     pub id: NumberId,
     pub name: String,
     #[cynic(rename = "cable_connector")]
     pub cable_connector: Option<i32>,
+    pub cable: Option<NetboxCable>,
     pub device: DeviceWithId,
 }
 
@@ -140,10 +150,27 @@ pub struct LocationType {
 #[derive(cynic::QueryFragment, Debug)]
 pub struct CircuitType {
     pub id: NumberId,
+    pub cid: String,
     pub display: String,
     pub terminations: Vec<CircuitTerminationType>,
 }
 
+impl CircuitType {
+    /// Sucht in allen Terminations nach den Netbox IDs der angeschlossenen RearPorts
+    pub fn connected_rear_port_ids(&self) -> Vec<i32> {
+        self.terminations
+            .iter()
+            .flat_map(|t| &t.link_peers)
+            .filter_map(|peer| match peer {
+                LinkPeerType::RearPortType2(rp) => {
+                    let id: u32 = rp.id.into();
+                    Some(id as i32)
+                }
+                _ => None,
+            })
+            .collect()
+    }
+}
 #[derive(cynic::QueryFragment, Debug)]
 pub struct CircuitTerminationType {
     pub __typename: String,
