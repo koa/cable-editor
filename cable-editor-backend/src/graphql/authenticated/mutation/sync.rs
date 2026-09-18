@@ -1,4 +1,5 @@
 use crate::db::entity::panel::{Panel, PanelPort};
+use crate::netbox::fetch::RearPort;
 use async_graphql::{SimpleObject, Union};
 
 /// Union-Typ für alle spezifischen Fehlerzustände
@@ -27,22 +28,20 @@ pub struct BlindEndError {
 
 #[derive(SimpleObject)]
 pub struct AsymmetricDuplexError {
-    pub start_netbox_id: i32,
+    pub start_netbox_port: RearPort,
     pub connections: Box<[AsymetricTargetConnectionEntry]>,
 }
 #[derive(SimpleObject)]
 pub struct AsymetricTargetConnectionEntry {
-    pub target_netbox_id: i32,
+    pub target_netbox_port: RearPort,
     pub source_port: PanelPort,
     pub target_port: PanelPort,
 }
 
 #[derive(SimpleObject)]
 pub struct PortBlockedInNetboxError {
-    pub panel_id: i32,
-    pub port_id: i32,
-    /// Die ID des NetBox-Ports, der fälschlicherweise schon belegt ist
-    pub netbox_port_id: i32,
+    pub port: PanelPort,
+    pub netbox_port: RearPort,
 }
 
 #[derive(SimpleObject)]

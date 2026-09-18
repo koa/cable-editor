@@ -3,6 +3,7 @@ pub mod sync;
 use crate::graphql::authenticated::mutation::sync::{
     AsymetricTargetConnectionEntry, InvalidTargetReferenceError,
 };
+use crate::netbox::fetch::RearPort;
 use crate::{
     db::{
         entity::{
@@ -621,13 +622,15 @@ impl Mutation {
                         .and_then(|k| port_pairs.remove(&k).map(|e| (k, e)))
                     {
                         if r1.len() > 1 {
-                            issues.push(create_asymetric_duplex_error(start_netbox_id, r1))
+                            issues.push(create_asymetric_duplex_error(start_netbox_id, r1).await?)
                         } else if let Some((end_netbox_id, (start_port, end_port))) =
                             r1.into_iter().next()
                         {
                             if let Some(r2) = port_pairs.remove(&end_netbox_id) {
                                 if r2.len() > 1 {
-                                    issues.push(create_asymetric_duplex_error(end_netbox_id, r2))
+                                    issues.push(
+                                        create_asymetric_duplex_error(end_netbox_id, r2).await?,
+                                    )
                                 }
                                 planned_circuits.push(
                                     PlannedCircuit {
@@ -670,25 +673,36 @@ impl Mutation {
     }
 }
 
-fn create_asymetric_duplex_error(
+async fn create_asymetric_duplex_error(
     start_netbox_id: i32,
     r1: HashMap<i32, (PanelPort, PanelPort)>,
-) -> SyncIssue {
-    SyncIssue::AsymmetricDuplex(AsymmetricDuplexError {
-        start_netbox_id,
-        connections: r1
-            .into_iter()
-            .map(
-                |(target_netbox_id, (source_port, target_port))| AsymetricTargetConnectionEntry {
-                    target_netbox_id,
-                    source_port,
-                    target_port,
-                },
-            )
-            .collect(),
-    })
-}
+) -> async_graphql::Result<SyncIssue> {
+    let start_netbox_port = RearPort::fetch_by_id((start_netbox_id as u32).into())
+        .await?
+        .ok_or_else(|| {
+            async_graphql::Error::new(format!("Netbox RearPort {} not found", start_netbox_id))
+        })?;
 
+    let mut connections = Vec::new();
+    for (target_netbox_id, (source_port, target_port)) in r1 {
+        let target_netbox_port = RearPort::fetch_by_id((target_netbox_id as u32).into())
+            .await?
+            .ok_or_else(|| {
+                async_graphql::Error::new(format!("Netbox RearPort {} not found", target_netbox_id))
+            })?;
+
+        connections.push(AsymetricTargetConnectionEntry {
+            target_netbox_port,
+            source_port,
+            target_port,
+        });
+    }
+
+    Ok(SyncIssue::AsymmetricDuplex(AsymmetricDuplexError {
+        start_netbox_port,
+        connections: connections.into_boxed_slice(),
+    }))
+}
 #[derive(Debug, Clone, PartialEq, InputObject, Copy)]
 struct PortUsageInput {
     port_id: i32,

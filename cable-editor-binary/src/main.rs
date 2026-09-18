@@ -78,14 +78,6 @@ async fn graphql(
     let schema = &context.schema;
     let histogram = context.graphql_request_histogram.clone();
 
-    // 1. Connection-Objekt aus dem Pool holen (Owned Type)
-    let mut connection = match context.pool.get().await {
-        Ok(connection) => connection,
-        Err(error) => {
-            return Response::from_errors(vec![ServerError::new(error.to_string(), None)]).into();
-        }
-    };
-
     let found_user = if let Some(DecodedInfo { jwt, payload: _ }) = user {
         match fetch_user_info(jwt).await {
             Ok(info) => info,
@@ -98,6 +90,12 @@ async fn graphql(
         return Response::from_errors(vec![ServerError::new("No user token found", None)]).into();
     };
 
+    let mut connection = match context.pool.get().await {
+        Ok(connection) => connection,
+        Err(error) => {
+            return Response::from_errors(vec![ServerError::new(error.to_string(), None)]).into();
+        }
+    };
     let request = request.into_inner();
     let timer = histogram
         .with_label_values(&[

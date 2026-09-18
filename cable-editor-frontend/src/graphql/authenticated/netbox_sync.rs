@@ -1,3 +1,4 @@
+use crate::graphql::authenticated::schema::PanelPort;
 use crate::{
     error::FrontendError,
     graphql::{authenticated::schema, mutate},
@@ -92,23 +93,45 @@ pub struct BlindEndError {
 #[derive(cynic::QueryFragment, Debug)]
 #[cynic(graphql_type = "AsymmetricDuplexError")]
 pub struct AsymmetricDuplexError {
-    pub start_netbox_id: i32,
+    pub start_netbox_port: RearPort,
     pub connections: Vec<AsymetricTargetConnectionEntry>,
+}
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
+#[cynic(graphql_type = "DeviceWithRearPorts")]
+pub struct NetboxDevice {
+    pub name: Option<String>,
+    pub location_name: Option<String>,
+}
+
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
+pub struct RearPort {
+    pub name: String,
+    pub device: NetboxDevice,
+}
+impl RearPort {
+    pub fn display_name(&self) -> String {
+        let location = self
+            .device
+            .location_name
+            .as_deref()
+            .unwrap_or("<kein name>");
+        let device = self.device.name.as_deref().unwrap_or("<kein name>");
+        format!("{}, {}, {}", location, device, self.name)
+    }
 }
 
 #[derive(cynic::QueryFragment, Debug)]
 #[cynic(graphql_type = "AsymetricTargetConnectionEntry")]
 pub struct AsymetricTargetConnectionEntry {
-    pub target_netbox_id: i32,
+    pub target_netbox_port: RearPort,
     pub source_port: PanelPortInfo,
     pub target_port: PanelPortInfo,
 }
 #[derive(cynic::QueryFragment, Debug)]
 #[cynic(graphql_type = "PortBlockedInNetboxError")]
 pub struct PortBlockedInNetboxError {
-    pub panel_id: i32,
-    pub port_id: i32,
-    pub netbox_port_id: i32,
+    pub port: PanelPortInfo,
+    pub netbox_port: RearPort,
 }
 
 #[derive(cynic::QueryFragment, Debug)]

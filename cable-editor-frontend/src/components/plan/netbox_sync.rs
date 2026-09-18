@@ -96,24 +96,29 @@ impl Component for NetboxSyncModal {
                 )
                 .into_prop_value(),
                 SyncIssue::AsymmetricDuplex(AsymmetricDuplexError {
-                    start_netbox_id,
+                    start_netbox_port,
                     connections,
                 }) => {
                     let endpoints = connections.iter().map(
                         |AsymetricTargetConnectionEntry {
-                             target_netbox_id,
+                             target_netbox_port,
                              source_port,
                              target_port,
                          }| {
                             let msg = format!(
-                                "{target_netbox_id}: {} -> {}",
+                                "{}: {} -> {}",
+                                target_netbox_port.display_name(),
                                 source_port.port_label(),
                                 target_port.port_label()
                             );
                             html!(<dd>{msg}</dd>)
                         },
                     );
-                    let msg = format!("Verschiedene Netbox-Gegenstellen zu {}", start_netbox_id);
+
+                    let msg = format!(
+                        "Verschiedene Netbox-Gegenstellen zu {}",
+                        start_netbox_port.display_name()
+                    );
                     html! {
                         <>
                         <dt>{msg}</dt>
@@ -123,8 +128,9 @@ impl Component for NetboxSyncModal {
                 }
                 SyncIssue::PortBlockedInNetbox(err) => {
                     let msg = format!(
-                        "Port blockiert in Netbox: Panel ID {}, Port ID {}, Netbox Port ID {}",
-                        err.panel_id, err.port_id, err.netbox_port_id
+                        "Port {} blockiert in Netbox: Netbox Port {}",
+                        err.port.port_label(),
+                        err.netbox_port.display_name()
                     );
                     html!(msg)
                 }
