@@ -43,8 +43,7 @@ enum SlotState {
 struct SlotEdit {
     port_id: i32,
     side: PortSide,
-    cable: Option<CableEnd>,
-    bundle: Option<i32>,
+    cable_bundle: Option<CableBundleSelectEntry>, // Geändert: Kabel und Bündel kombiniert
 }
 
 #[derive(Clone, PartialEq)]
@@ -84,8 +83,7 @@ pub enum Msg {
     FetchData,
     DataFetched(Option<PlannedPanel>),
     StartEdit(i32, PortSide),
-    SelectCable(CableEnd),
-    SelectBundle(i32),
+    SelectCableBundle(CableBundleSelectEntry),
     SelectFiber(i32),
     CancelEdit,
     ClearSlot(i32, PortSide),
@@ -117,6 +115,7 @@ impl Component for AttachFiber {
                 self.loading = true;
                 let plan_id = ctx.props().plan_id;
                 let panel_id = ctx.props().panel_id;
+
                 let scope = ctx.link().clone();
                 spawn_local(async move {
                     let credentials = get_credentials(&scope);
@@ -145,32 +144,23 @@ impl Component for AttachFiber {
                 self.edit_slot = Some(SlotEdit {
                     port_id,
                     side,
-                    cable: None,
-                    bundle: None,
+                    cable_bundle: None, // Geändert
                 });
                 true
             }
-            Msg::SelectCable(cable) => {
+            Msg::SelectCableBundle(cable_bundle) => {
                 if let Some(edit) = &mut self.edit_slot {
-                    edit.cable = Some(cable);
-                    edit.bundle = None;
-                }
-                true
-            }
-            Msg::SelectBundle(bundle) => {
-                if let Some(edit) = &mut self.edit_slot {
-                    edit.bundle = Some(bundle);
+                    edit.cable_bundle = Some(cable_bundle);
                 }
                 true
             }
             Msg::SelectFiber(fiber) => {
                 if let Some(edit) = self.edit_slot.take()
-                    && let Some(cable) = edit.cable
-                    && let Some(bundle) = edit.bundle
+                    && let Some(cable_bundle) = edit.cable_bundle
                 {
                     let key = FiberKeyInput {
-                        cable_id: cable.cable.id,
-                        bundle,
+                        cable_id: cable_bundle.cable.cable.id, // Geändert
+                        bundle: cable_bundle.bundle,           // Geändert
                         fiber,
                     };
                     self.slot_states
@@ -191,7 +181,7 @@ impl Component for AttachFiber {
             Msg::ResetPort(port_id) => {
                 self.reset_ports.insert(port_id);
 
-                // Setze UI-State auf initialen Zustand zurück
+                // Setze UI-State auf initialen Zustand zur
                 if let Some(situation) = &self.current_situation
                     && let Some(port) = situation.ports.iter().find(|p| p.id == port_id)
                 {
@@ -231,7 +221,6 @@ impl Component for AttachFiber {
                         if port.port_type == PortType::Loop {
                             continue;
                         }
-
                         if self.reset_ports.contains(&port.id) {
                             usages.push(PortUsageInput {
                                 port_id: port.id,
@@ -249,6 +238,7 @@ impl Component for AttachFiber {
                                 .slot_states
                                 .get(&(port.id, side))
                                 .unwrap_or(&SlotState::Empty);
+
                             let initial_key =
                                 current_usage.as_ref().and_then(|u| u.fiber).map(|f| {
                                     FiberKeyInput {
@@ -316,7 +306,9 @@ impl Component for AttachFiber {
 
         let validation_errors = self.validate();
         let has_changes = self.has_changes();
+
         let can_save = has_changes && validation_errors.is_empty();
+
         let title = self
             .current_situation
             .as_ref()
@@ -333,11 +325,9 @@ impl Component for AttachFiber {
                 <div class="pf-v6-c-panel__main">
                     <div class="pf-v6-c-panel__main-body">
                         {title}
-
                         if let Some(err) = &self.error {
                             <Alert title={err.to_string()} r#type={AlertType::Danger} inline=true />
                         }
-
                         { for validation_errors.iter().map(|err| html! {
                             <Alert title={err.clone()} r#type={AlertType::Warning} inline=true />
                         }) }
@@ -370,6 +360,7 @@ impl Component for AttachFiber {
 impl AttachFiber {
     fn validate(&self) -> Vec<String> {
         let mut errors = Vec::new();
+
         if let Some(situation) = &self.current_situation {
             for port in &situation.ports {
                 if port.port_type == PortType::Loop {
@@ -384,6 +375,7 @@ impl AttachFiber {
                     .slot_states
                     .get(&(port.id, PortSide::BACK))
                     .unwrap_or(&SlotState::Empty);
+
                 let port_label = port.label.as_deref().unwrap_or("Unbenannt");
 
                 match port.port_type {
@@ -406,6 +398,7 @@ impl AttachFiber {
                 }
             }
         }
+
         errors
     }
 
@@ -429,6 +422,7 @@ impl AttachFiber {
         ports.sort_by_key(|p| p.order_number);
 
         let mut entries = Vec::with_capacity(ports.len());
+
         for port in ports {
             entries.push(PortRow {
                 front: self.view_slot(ctx, port, PortSide::FRONT),
@@ -465,13 +459,14 @@ impl AttachFiber {
             .label
             .clone()
             .unwrap_or_else(|| format!("Port {}", port.order_number));
+
         let type_text = match port.port_type {
             PortType::Splice => "Spleiss",
             PortType::Connector => "Stecker",
             PortType::Loop => "Loop",
         };
-
         let is_loop = port.port_type == PortType::Loop;
+
         let is_modified = (port
             .front_usage
             .as_ref()
@@ -595,52 +590,39 @@ impl AttachFiber {
         let edit = self.edit_slot.as_ref().unwrap();
         let situation = self.current_situation.as_ref().unwrap();
 
-        let all_cables = situation.panel.schacht.cables.clone();
+        // 1. Sammle alle verf gbaren Kombinationen aus Kabel + B ndel, die noch freie Fasern haben
+        let mut available_bundles = Vec::new();
+        for cable in &situation.panel.schacht.cables {
+            let free_fibers = self.get_free_fibers(cable);
+            let mut distinct_bundles: Vec<i32> =
+                free_fibers.iter().map(|f| f.bundle).unique().collect();
+            distinct_bundles.sort();
 
-        let cable_select = html! {
-            <SimpleSelect<CableEnd>
-                entries={all_cables}
-                selected={edit.cable.clone()}
-                onselect={ctx.link().callback(Msg::SelectCable)}
-                placeholder="Kabel wählen"
+            for bundle in distinct_bundles {
+                let count = free_fibers.iter().filter(|f| f.bundle == bundle).count();
+                available_bundles.push(CableBundleSelectEntry {
+                    cable: cable.clone(),
+                    bundle,
+                    free_count: count,
+                });
+            }
+        }
+
+        let cable_bundle_select = html! {
+            <SimpleSelect<CableBundleSelectEntry>
+                entries={available_bundles}
+                selected={edit.cable_bundle.clone()}
+                onselect={ctx.link().callback(Msg::SelectCableBundle)}
+                placeholder="Kabel & Bündel wählen"
             />
         };
 
-        let bundle_select = if let Some(cable) = &edit.cable {
-            let free_fibers = self.get_free_fibers(cable);
-            let mut distinct_bundles: Vec<BundleSelectEntry> = free_fibers
+        let fiber_select = if let Some(cable_bundle) = &edit.cable_bundle {
+            let free_fibers = self.get_free_fibers(&cable_bundle.cable);
+            let fibers_in_bundle: Vec<_> = free_fibers
                 .iter()
-                .counts_by(|f| f.bundle)
-                .into_iter()
-                .map(|(idx, count)| BundleSelectEntry(idx, count))
+                .filter(|f| f.bundle == cable_bundle.bundle)
                 .collect();
-            distinct_bundles.sort_by_key(|e| e.0);
-            let scope = ctx.link().clone();
-            let onselect = Callback::from(move |entry: BundleSelectEntry| {
-                scope.send_message(Msg::SelectBundle(entry.0))
-            });
-            let selected = edit
-                .bundle
-                .and_then(|idx| distinct_bundles.iter().find(|e| e.0 == idx).cloned());
-
-            html! {
-                <SimpleSelect<BundleSelectEntry>
-                    entries={distinct_bundles}
-                    {selected}
-                    {onselect}
-                    placeholder="Bündel wählen"
-                />
-            }
-        } else {
-            Html::default()
-        };
-
-        let fiber_select = if let Some(cable) = &edit.cable
-            && let Some(bundle) = edit.bundle
-        {
-            let free_fibers = self.get_free_fibers(cable);
-            let fibers_in_bundle: Vec<_> =
-                free_fibers.iter().filter(|f| f.bundle == bundle).collect();
 
             let scope = ctx.link().clone();
 
@@ -687,8 +669,7 @@ impl AttachFiber {
         html! {
             <div style="display: flex; gap: 8px; align-items: center;">
                 <div style="display: flex; flex-direction: column; gap: 4px; min-width: 200px;">
-                    {cable_select}
-                    {bundle_select}
+                    {cable_bundle_select}
                     {fiber_select}
                 </div>
                 <Button variant={ButtonVariant::Plain} icon={Icon::Times} onclick={ctx.link().callback(|_| Msg::CancelEdit)} />
@@ -706,10 +687,7 @@ impl AttachFiber {
         })
     }
 
-    fn get_free_fibers<'a>(
-        &self,
-        cable: &'a CableEnd,
-    ) -> Vec<&'a crate::graphql::authenticated::connections::FiberOwnEnd> {
+    fn get_free_fibers<'a>(&self, cable: &'a CableEnd) -> Vec<&'a FiberOwnEnd> {
         let currently_assigned_keys: HashSet<FiberKeyInput> = self
             .slot_states
             .values()
@@ -759,15 +737,51 @@ fn calculate_current_states(data: &PlannedPanel) -> BTreeMap<(i32, PortSide), Sl
     states
 }
 
+// Geändert: Neuer Typ f r die kombinierte Auswahl
 #[derive(Clone, Eq, PartialEq)]
-struct BundleSelectEntry(i32, usize);
-impl SelectItemRenderer for BundleSelectEntry {
+struct CableBundleSelectEntry {
+    cable: CableEnd,
+    bundle: i32,
+    free_count: usize,
+}
+
+impl SelectItemRenderer for CableBundleSelectEntry {
     type Item = i32;
 
     fn label(&self) -> String {
-        format!("{} ({} frei)", self.0, self.1)
+        format!(
+            "{} - Bündel {} ({} frei)",
+            self.cable.cable.name, self.bundle, self.free_count
+        )
     }
 }
+
+#[derive(Clone, Eq, PartialEq)]
+struct FiberSelectEntry(FiberOwnEnd);
+
+impl SelectItemRenderer for FiberSelectEntry {
+    type Item = i32;
+
+    fn label(&self) -> String {
+        let idx = self.0.fiber;
+        if let Some(end_port) = self
+            .0
+            .other_end
+            .as_ref()
+            .and_then(|e| e.used_port.as_ref())
+            .and_then(|u| u.panel_side_end_port.as_ref())
+            .map(|u| &u.port)
+        {
+            let port = end_port.label.as_deref().unwrap_or_default();
+            let panel = end_port.panel.name.as_deref().unwrap_or_default();
+            let schacht = end_port.panel.schacht.name.as_str();
+            format!("{idx} ({schacht} {panel} {port})")
+        } else {
+            idx.to_string()
+        }
+    }
+}
+
 fn cable_end_label(option: Option<&FiberOwnEnd>) -> Option<String> {
     option
         .and_then(|f| f.other_end.as_ref())
