@@ -13,8 +13,8 @@ use crate::{
 };
 use itertools::Itertools;
 use patternfly_yew::prelude::{
-    Alert, AlertType, Button, ButtonVariant, Cell, CellContext, ExpansionState, Icon,
-    MemoizedTableModel, SelectItemRenderer, SimpleSelect, Spinner, Table, TableColumn,
+    Alert, AlertType, Button, ButtonVariant, Cell, CellContext, Dropdown, ExpansionState, Icon,
+    MemoizedTableModel, MenuAction, SelectItemRenderer, SimpleSelect, Spinner, Table, TableColumn,
     TableEntryRenderer, TableGridMode, TableHeader, TableMode, Title,
 };
 use std::{
@@ -639,28 +639,51 @@ impl AttachFiber {
             && let Some(bundle) = edit.bundle
         {
             let free_fibers = self.get_free_fibers(cable);
-            let fibers_in_bundle: Vec<FiberSelectEntry> = free_fibers
-                .iter()
-                .filter(|f| f.bundle == bundle)
-                .map(|f| FiberSelectEntry((*f).clone()))
-                .collect();
+            let fibers_in_bundle: Vec<_> =
+                free_fibers.iter().filter(|f| f.bundle == bundle).collect();
+
             let scope = ctx.link().clone();
-            let onselect = Callback::from(move |f: FiberSelectEntry| {
-                scope.send_message(Msg::SelectFiber(f.0.fiber))
+
+            let entries = fibers_in_bundle.iter().map(|f| {
+                let fiber_num = f.fiber;
+                let onselect = {
+                    let scope = scope.clone();
+                    Callback::from(move |_| scope.send_message(Msg::SelectFiber(fiber_num)))
+                };
+
+                let extra_text = if let Some(end_port) = f
+                    .other_end
+                    .as_ref()
+                    .and_then(|e| e.used_port.as_ref())
+                    .and_then(|u| u.panel_side_end_port.as_ref())
+                    .map(|u| &u.port)
+                {
+                    let port = end_port.label.as_deref().unwrap_or_default();
+                    let panel = end_port.panel.name.as_deref().unwrap_or_default();
+                    let schacht = end_port.panel.schacht.name.as_str();
+                    format!(" ({schacht} {panel} {port})")
+                } else {
+                    String::new()
+                };
+
+                html_nested! {
+                    <MenuAction onclick={onselect}>
+                        <FiberLabel fiber={fiber_num as u8}>
+                            {fiber_num.to_string()}
+                        </FiberLabel>
+                        {extra_text}
+                    </MenuAction>
+                }
             });
 
             html! {
-                <SimpleSelect<FiberSelectEntry>
-                    entries={fibers_in_bundle}
-                    selected={None}
-                    {onselect}
-                    placeholder="Faser wählen"
-                />
+                <Dropdown text="Faser wählen">
+                    {for entries}
+                </Dropdown>
             }
         } else {
             Html::default()
         };
-
         html! {
             <div style="display: flex; gap: 8px; align-items: center;">
                 <div style="display: flex; flex-direction: column; gap: 4px; min-width: 200px;">
@@ -745,32 +768,6 @@ impl SelectItemRenderer for BundleSelectEntry {
         format!("{} ({} frei)", self.0, self.1)
     }
 }
-
-#[derive(Clone, Eq, PartialEq)]
-struct FiberSelectEntry(FiberOwnEnd);
-impl SelectItemRenderer for FiberSelectEntry {
-    type Item = i32;
-
-    fn label(&self) -> String {
-        let idx = self.0.fiber;
-        if let Some(end_port) = self
-            .0
-            .other_end
-            .as_ref()
-            .and_then(|e| e.used_port.as_ref())
-            .and_then(|u| u.panel_side_end_port.as_ref())
-            .map(|u| &u.port)
-        {
-            let port = end_port.label.as_deref().unwrap_or_default();
-            let panel = end_port.panel.name.as_deref().unwrap_or_default();
-            let schacht = end_port.panel.schacht.name.as_str();
-            format!("{idx} ({schacht} {panel} {port})")
-        } else {
-            idx.to_string()
-        }
-    }
-}
-
 fn cable_end_label(option: Option<&FiberOwnEnd>) -> Option<String> {
     option
         .and_then(|f| f.other_end.as_ref())

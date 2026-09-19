@@ -38,7 +38,6 @@ spec:
               port: http-mgmt
             initialDelaySeconds: 3
             periodSeconds: 10
-          # Umgebungsvariablen injizieren
           env:
             # Struct-Feld: auth_client_id
             - name: APP__OAUTH__AUTH_CLIENT_ID
@@ -63,7 +62,6 @@ spec:
               value: {{ .Values.config.netboxProviderId | quote }}
             - name: APP__NETBOX__TYPE_ID
               value: {{ .Values.config.netboxTypeId | quote }}
-            # Wenn du die DB noch brauchst (ist nicht im Settings-Struct, aber vielleicht in config.yaml?)
             - name: DATABASE_URL
               {{- if .Values.config.databaseSecret}}
               valueFrom:

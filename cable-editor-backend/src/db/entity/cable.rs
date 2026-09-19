@@ -255,7 +255,7 @@ impl FiberEnd {
         plan_id: i32,
     ) -> async_graphql::Result<Option<PortUsage>> {
         let mut connection = get_connection(ctx).await?;
-        Ok(PortUsage::query()
+        let found_usage: Option<PortUsage> = PortUsage::query()
             .filter(schema::port_usage::cable.eq(self.cable.cable.id))
             .filter(schema::port_usage::bundle.eq(self.bundle))
             .filter(schema::port_usage::fiber.eq(self.fiber))
@@ -265,7 +265,27 @@ impl FiberEnd {
             .order(schema::port_usage::plan_id.desc())
             .first(&mut connection)
             .await
-            .optional()?)
+            .optional()?;
+
+        if let Some(usage) = found_usage {
+            if usage.plan_id == 0 && plan_id != 0 {
+                let override_exists: bool = diesel::select(diesel::dsl::exists(
+                    schema::port_usage::table
+                        .filter(schema::port_usage::port_id.eq(usage.port_id))
+                        .filter(schema::port_usage::side.eq(usage.side))
+                        .filter(schema::port_usage::plan_id.eq(plan_id)),
+                ))
+                .get_result(&mut connection)
+                .await?;
+
+                if override_exists {
+                    return Ok(None);
+                }
+            }
+
+            return Ok(Some(usage));
+        }
+        Ok(None)
     }
     async fn other_end(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<FiberEnd>> {
         let mut connection = get_connection(ctx).await?;
