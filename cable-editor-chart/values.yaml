@@ -43,3 +43,11 @@ config:
   serverBindAddress: "0.0.0.0"
   serverPort: "8080"
   serverMgmtPort: "9090"
+  # URL der Netbox-Instanz (ohne /graphql)"
+  netboxUrl: "http://netbox.local/"
+  # Token der netbox instanz
+  netboxToken: "Veryverysecret"
+  # Provider ID für die Circuits (Transportnetze)
+  netboxProviderId: 1
+  # Typ der Circuits
+  netboxTypeId: 1

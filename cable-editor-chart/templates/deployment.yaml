@@ -55,6 +55,14 @@ spec:
             # Struct-Feld: server_bind_address
             - name: APP__OAUTH__SERVER_BIND_ADDRESS
               value: {{ .Values.config.serverBindAddress | quote }}
+            - name: APP__NETBOX__URL
+              value: {{ .Values.config.netboxUrl | quote }}
+            - name: APP__NETBOX__TOKEN
+              value: {{ .Values.config.netboxToken | quote }}
+            - name: APP__NETBOX__PROVIDER_ID
+              value: {{ .Values.config.netboxProviderId | quote }}
+            - name: APP__NETBOX__TYPE_ID
+              value: {{ .Values.config.netboxTypeId | quote }}
             # Wenn du die DB noch brauchst (ist nicht im Settings-Struct, aber vielleicht in config.yaml?)
             - name: DATABASE_URL
               {{- if .Values.config.databaseSecret}}
