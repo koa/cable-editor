@@ -540,8 +540,25 @@ impl Mutation {
             .transaction::<_, async_graphql::Error, _>(async move |conn| {
                 let mut issues = Vec::new();
 
+                // calculate length of all cables
+                let cable_lengths_vec = schema::kabel_trasse::table
+                    .inner_join(schema::trassen_mit_endpunkten::table)
+                    .group_by(schema::kabel_trasse::kabel)
+                    .select((
+                        schema::kabel_trasse::kabel,
+                        diesel::dsl::sum(crate::db::entity::st_length(
+                            schema::trassen_mit_endpunkten::geom,
+                        )),
+                    ))
+                    .load::<(i32, Option<f64>)>(conn)
+                    .await?;
+
+                let cable_lengths: HashMap<i32, f64> = cable_lengths_vec
+                    .into_iter()
+                    .map(|(kabel_id, len)| (kabel_id, len.unwrap_or(0.0)))
+                    .collect();
+
                 // DB-Daten laden
-                //let panels = schema::panel::table.load::<Panel>(conn).await?;
                 let mut remaining_connector_ports = schema::panel_port::table
                     .filter(schema::panel_port::port_type.eq(PanelPortType::Connector))
                     .load::<PanelPort>(conn)
@@ -564,6 +581,14 @@ impl Mutation {
                         }
                         let last_node = trace.last().unwrap();
                         let target_port_id = last_node.to_port_id;
+
+                        let mut trace_length = 0.0;
+                        let mut seen_cables = std::collections::HashSet::new();
+                        for node in &trace {
+                            if seen_cables.insert(node.kabel) {
+                                trace_length += cable_lengths.get(&node.kabel).copied().unwrap_or(0.0);
+                            }
+                        }
 
                         if target_port_id == port.id {
                             issues.push(SyncIssue::RoutingLoop(RoutingLoopError {
@@ -595,13 +620,13 @@ impl Mutation {
                                     .or_default()
                                     .entry(p2)
                                     .or_default()
-                                    .push((port.clone(), remote_port.clone()));
+                                    .push((port.clone(), remote_port.clone(), trace_length));
                                 port_pairs
                                     .entry(p2)
                                     .or_default()
                                     .entry(p1)
                                     .or_default()
-                                    .push((remote_port, port));
+                                    .push((remote_port, port,trace_length));
                             }
                         } else {
                             let port = PanelPort::query()
@@ -636,17 +661,19 @@ impl Mutation {
                                         create_asymetric_duplex_error(end_netbox_id, r2).await?,
                                     )
                                 }
+                                let distance = connections.iter().map(|(_,_,d)|*d).sum::<f64>()/connections.len() as f64;
                                 planned_circuits.push(
                                     PlannedCircuit {
                                         start_netbox_id,
                                         end_netbox_id,
                                         members: connections
                                             .into_iter()
-                                            .map(|(start_port, end_port)| CircuitMember {
+                                            .map(|(start_port, end_port, _)| CircuitMember {
                                                 start_port,
                                                 end_port,
                                             })
                                             .collect(),
+                                        distance,
                                     }
                                     .order(),
                                 );
@@ -668,7 +695,7 @@ impl Mutation {
 
                 let mut to_create = Vec::new();
                 let mut to_delete = Vec::new();
-                let mut matching = Vec::new();
+                let mut to_update = Vec::new();
 
                 for planned in planned_circuits {
                     let cid = planned.cid();
@@ -683,7 +710,8 @@ impl Mutation {
                         expected.sort();
 
                         if actual_ports == expected {
-                            matching.push(planned);
+                            let existing_id: u32 = existing.id.into();
+                            to_update.push((planned, existing_id));
                         } else {
                             // CID existiert, aber die Terminations sind falsch -> löschen und neu anlegen
                             to_delete.push(existing);
@@ -700,7 +728,7 @@ impl Mutation {
                     }
                 }
 
-                info!("Matching circuits: {}", matching.len());
+                info!("Matching circuits: {}", to_update.len());
                 info!("Circuits to create: {}", to_create.len());
                 info!("Circuits to delete: {}", to_delete.len());
 
@@ -739,7 +767,9 @@ impl Mutation {
                         "description": circuit.description(),
                         "provider": provider_id,
                         "type": type_id,
-                        "status": "active"
+                        "status": "active",
+                        "distance": (circuit.distance * 100.0).round() / 100.0, // Gerundet auf 2 Nachkommastellen
+                        "distance_unit": "m"
                     });
 
                     let res = client.post(format!("{}/circuits/circuits/", rest_base_url))
@@ -826,6 +856,30 @@ impl Mutation {
                             )));
                         }
                     }                }
+                // 6. BESTEHENDE CIRCUITS AKTUALISIEREN (Länge und Beschreibung)
+                for (circuit, netbox_id) in to_update {
+                    info!("UPDATE {} (NetBox ID {}): {}", circuit.cid(), netbox_id, circuit.description());
+
+                    let update_payload = serde_json::json!({
+                        "description": circuit.description(),
+                        "distance": (circuit.distance * 100.0).round() / 100.0,
+                        "distance_unit": "m"
+                    });
+
+                    // PATCH aktualisiert nur die mitgegebenen Felder
+                    let res = client.patch(format!("{}/circuits/circuits/{}/", rest_base_url, netbox_id))
+                        .json(&update_payload)
+                        .send()
+                        .await
+                        .map_err(|e| async_graphql::Error::new(e.to_string()))?;
+
+                    if !res.status().is_success() {
+                        return Err(async_graphql::Error::new(format!(
+                            "Fehler beim Aktualisieren des Circuits {}: {:?}",
+                            circuit.cid(), res.text().await.unwrap_or_default()
+                        )));
+                    }
+                }
                 Ok(Vec::default())
             })
             .await?;
@@ -836,7 +890,7 @@ impl Mutation {
 
 async fn create_asymetric_duplex_error(
     start_netbox_id: i32,
-    r1: HashMap<i32, Vec<(PanelPort, PanelPort)>>,
+    r1: HashMap<i32, Vec<(PanelPort, PanelPort, f64)>>,
 ) -> async_graphql::Result<SyncIssue> {
     let start_netbox_port = RearPort::fetch_by_id((start_netbox_id as u32).into())
         .await?
@@ -854,7 +908,7 @@ async fn create_asymetric_duplex_error(
 
         let pairs: Vec<PortPair> = port_pairs
             .into_iter()
-            .map(|(source_port, target_port)| PortPair {
+            .map(|(source_port, target_port, _)| PortPair {
                 source_port,
                 target_port,
             })

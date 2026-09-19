@@ -78,11 +78,12 @@ pub struct CircuitMember {
     pub end_port: PanelPort,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PlannedCircuit {
     pub start_netbox_id: i32,
     pub end_netbox_id: i32,
     pub members: Vec<CircuitMember>,
+    pub distance: f64,
 }
 impl PlannedCircuit {
     pub fn order(mut self) -> PlannedCircuit {
