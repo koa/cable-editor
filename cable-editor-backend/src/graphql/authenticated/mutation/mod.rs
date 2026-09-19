@@ -514,8 +514,15 @@ impl Mutation {
                             .await?;
                     }
                 }
+                diesel::delete(
+                    schema::port_usage::table.filter(schema::port_usage::plan_id.eq(plan_id)),
+                )
+                .execute(conn)
+                .await?;
+                diesel::delete(schema::plan::table.filter(schema::plan::id.eq(plan_id)))
+                    .execute(conn)
+                    .await?;
                 plan.status = PlanStatusType::Implemented;
-                diesel::update(&plan).set(&plan).execute(conn).await?;
                 Ok(plan)
             })
             .await
