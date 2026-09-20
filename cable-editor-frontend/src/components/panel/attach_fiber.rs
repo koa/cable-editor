@@ -467,6 +467,15 @@ impl AttachFiber {
         };
         let is_loop = port.port_type == PortType::Loop;
 
+        let loop_fiber = if is_loop {
+            port.front_usage
+                .as_ref()
+                .and_then(|u| u.fiber.as_ref())
+                .or_else(|| port.back_usage.as_ref().and_then(|u| u.fiber.as_ref()))
+        } else {
+            None
+        };
+
         let is_modified = (port
             .front_usage
             .as_ref()
@@ -497,10 +506,38 @@ impl AttachFiber {
             None
         };
 
+        let port_display = if is_loop {
+            if let Some(fiber_info) = loop_fiber {
+                html! {
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <FiberLabel fiber={fiber_info.fiber as u8}>
+                            {format!("{}-{}", fiber_info.bundle, fiber_info.fiber)}
+                        </FiberLabel>
+                        <span class="pf-v6-u-font-size-xs pf-v6-u-color-200">
+                            {format!("(#{})", port.order_number)}
+                        </span>
+                    </div>
+                }
+            } else {
+                html! {
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <strong>{"Loop"}</strong>
+                        <span class="pf-v6-u-font-size-xs pf-v6-u-color-200">
+                            {format!("(#{})", port.order_number)}
+                        </span>
+                    </div>
+                }
+            }
+        } else {
+            html! {
+                <strong>{label}</strong>
+            }
+        };
+
         html! {
             <div style="display: flex; align-items: center; justify-content: space-between;">
                 <div>
-                    <strong>{label}</strong> {status_icon}
+                    {port_display} {status_icon}
                     <div class="pf-v6-u-font-size-sm">{type_text}</div>
                     {loop_hint}
                 </div>

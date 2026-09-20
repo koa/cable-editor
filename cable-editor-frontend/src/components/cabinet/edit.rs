@@ -161,6 +161,14 @@ impl TreeTableColumn<IdOrNew, PanelEntry, PanelEditAction> for PanelColumn {
                     buttons.push(
                         html!(<Link<AppRoute>{to} class={class.clone()}>{format!("{} Ports ändern",context.row.port_count)}</Link<AppRoute>>),
                     );
+                    let to = AppRoute::Plan {
+                        plan_id: *plan_id,
+                        view: PlanView::Panel {
+                            id: *id,
+                            view: PanelView::Show,
+                        },
+                    };
+                    buttons.push(html!(<Link<AppRoute>{to} class={class.clone()}>{"Übersicht"}</Link<AppRoute>>));
                     if *plan_id > 0 {
                         if context.row.has_loop {
                             let to = AppRoute::Plan {

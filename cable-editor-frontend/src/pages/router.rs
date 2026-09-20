@@ -1,5 +1,5 @@
 use crate::{
-    components::panel::{attach_fiber::AttachFiber, loop_editor::LoopPortEditor},
+    components::panel::{attach_fiber::AttachFiber, loop_editor::LoopPortEditor, show::ShowPanel},
     error::FrontendError,
     graphql::authenticated::plan_details::PlanDetails,
     pages::{
@@ -179,6 +179,7 @@ pub enum PanelView {
     Edit,
     Loop,
     Attach,
+    Show,
 }
 
 impl PanelView {
@@ -192,6 +193,9 @@ impl PanelView {
             }
             PanelView::Attach => {
                 html!(<AttachFiber {plan_id} {panel_id}/>)
+            }
+            PanelView::Show => {
+                html!(<ShowPanel {plan_id} {panel_id}/>)
             }
         }
     }

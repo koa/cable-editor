@@ -94,3 +94,487 @@ div.pf-v6-c-page__main-container {
   );
   pointer-events: none;
 }
+
+/* =========================================================================
+   Panel Verbindungsübersicht & Dokumentation Styles
+   ========================================================================= */
+
+.print-only {
+  display: none !important;
+}
+
+.panel-overview-container {
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+
+  .overview-header-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .overview-header-badges {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .overview-action-buttons {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .stat-box {
+    background: #f5f5f5;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 12px;
+    text-align: center;
+
+    .stat-value {
+      font-size: 1.6rem;
+      font-weight: bold;
+      color: #151515;
+    }
+
+    .stat-label {
+      font-size: 0.85rem;
+      color: #6a6e73;
+      margin-top: 2px;
+    }
+  }
+
+  .panel-hierarchy-tree {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+
+    .panel-tree-node {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 12px;
+      border-radius: 4px;
+      background: #fafafa;
+      border: 1px solid #e0e0e0;
+      color: #151515;
+      text-decoration: none;
+      transition: background 0.15s ease-in-out;
+
+      &:hover {
+        background: #e8f0fe;
+        border-color: #7098da;
+      }
+
+      .port-count-tag {
+        font-size: 0.8rem;
+        color: #6a6e73;
+      }
+    }
+  }
+
+  .panel-overview-section {
+    background: #ffffff;
+    border: 1px solid #d2d2d2;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+
+    &.child-panel-section {
+      border-left: 5px solid #0066cc;
+    }
+
+    &.hierarchy-level-2 {
+      border-left-color: #009596;
+    }
+
+    &.hierarchy-level-3 {
+      border-left-color: #5752d1;
+    }
+
+    .panel-section-header {
+      background: #f8f8f8;
+      border-bottom: 1px solid #e0e0e0;
+      padding: 12px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+
+      &.child-header {
+        background: #f0f7ff;
+      }
+
+      .panel-section-title-wrapper {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .panel-section-title {
+        margin: 0;
+        font-weight: 600;
+      }
+
+      .panel-section-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+    }
+  }
+
+  .panel-connections-wrapper {
+    width: 100%;
+  }
+
+  .panel-connections-table {
+    width: 100%;
+    border-collapse: collapse;
+
+    th {
+      background: #fafafa;
+      font-weight: 600;
+      padding: 10px 14px;
+      border-bottom: 2px solid #d2d2d2;
+      font-size: 0.9rem;
+      color: #4f5255;
+    }
+
+    td {
+      padding: 10px 14px;
+      border-bottom: 1px solid #e0e0e0;
+      vertical-align: top;
+    }
+
+    .port-row {
+      transition: background 0.1s ease-in-out;
+
+      &:hover {
+        background: #fcfcfc;
+      }
+
+      &.modified-row {
+        background: #fff8f0;
+
+        &:hover {
+          background: #fff1e0;
+        }
+      }
+    }
+
+    .port-identity {
+      .port-name-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .port-number-badge {
+        font-size: 0.75rem;
+        background: #e0e0e0;
+        color: #151515;
+        padding: 1px 5px;
+        border-radius: 3px;
+        font-weight: bold;
+      }
+
+      .port-label-text {
+        font-size: 0.95rem;
+      }
+
+      .modified-dot {
+        width: 8px;
+        height: 8px;
+        background: #ec7a08;
+        border-radius: 50%;
+        display: inline-block;
+      }
+    }
+
+    .flow-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      font-size: 0.85rem;
+
+      &.connected-flow {
+        background: #e7f5e8;
+        color: #1e7e34;
+      }
+
+      &.loop-flow {
+        background: #f2e6f9;
+        color: #6f2da8;
+      }
+
+      &.partial-flow {
+        background: #fef5e7;
+        color: #ec7a08;
+      }
+
+      &.empty-flow {
+        background: #f0f0f0;
+        color: #8a8d90;
+      }
+    }
+
+    .slot-assigned {
+      .slot-cable-row {
+        font-weight: 600;
+        font-size: 0.9rem;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+
+      .slot-fiber-row {
+        margin: 4px 0;
+      }
+
+      .slot-destination-row {
+        color: #4f5255;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        margin-top: 2px;
+      }
+    }
+
+    .slot-empty {
+      color: #8a8d90;
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 0;
+    }
+  }
+
+  .panel-connections-mobile {
+    display: none;
+  }
+}
+
+/* =========================================================================
+   Mobile Viewport Styles (max-width: 768px)
+   ========================================================================= */
+
+@media (max-width: 768px) {
+  .panel-overview-container {
+    .overview-stats-grid {
+      .pf-v6-l-grid__item {
+        grid-column: span 6 !important;
+        margin-bottom: 8px;
+      }
+    }
+
+    .panel-connections-table {
+      display: none !important;
+    }
+
+    .panel-connections-mobile {
+      display: flex !important;
+      flex-direction: column;
+      gap: 12px;
+      padding: 12px;
+
+      .port-mobile-card {
+        background: #ffffff;
+        border: 1px solid #d2d2d2;
+        border-radius: 6px;
+        padding: 12px;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+
+        &.modified-card {
+          border-color: #ec7a08;
+          background: #fffcf8;
+        }
+
+        .mobile-card-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding-bottom: 8px;
+          border-bottom: 1px solid #f0f0f0;
+          margin-bottom: 10px;
+
+          .mobile-port-title {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+          }
+
+          .port-number-badge {
+            font-size: 0.8rem;
+            background: #e0e0e0;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-weight: bold;
+          }
+        }
+
+        .mobile-card-body {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+
+          .mobile-slot {
+            background: #f9f9f9;
+            border: 1px solid #e8e8e8;
+            border-radius: 4px;
+            padding: 8px 10px;
+
+            .slot-side-label {
+              font-size: 0.75rem;
+              text-transform: uppercase;
+              font-weight: bold;
+              color: #6a6e73;
+              margin-bottom: 4px;
+            }
+          }
+
+          .mobile-slot-divider {
+            text-align: center;
+            color: #8a8d90;
+            font-size: 0.9rem;
+            margin: -2px 0;
+          }
+        }
+      }
+    }
+  }
+}
+
+/* =========================================================================
+   Print Stylesheet (@media print)
+   ========================================================================= */
+
+@media print {
+  @page {
+    margin: 1cm;
+    size: auto;
+  }
+
+  html,
+  body {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .pf-v6-c-page,
+  .pf-v6-c-page__main,
+  div.pf-v6-c-page__main-container,
+  .pf-v6-c-page__main-section,
+  .pf-v6-c-page__main-body {
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+    margin: 0 0 12px 0 !important;
+    padding: 0 !important;
+  }
+
+  .no-print,
+  .pf-v6-c-page__sidebar,
+  .pf-v6-c-masthead,
+  .pf-v6-c-page__header,
+  header,
+  nav,
+  aside,
+  button,
+  .pf-v6-c-button,
+  .panel-toc-card {
+    display: none !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    box-shadow: none !important;
+  }
+
+  .panel-overview-container {
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+
+    .panel-summary-card {
+      border: 1px solid #000000 !important;
+      margin-bottom: 12px !important;
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
+
+    .panel-overview-section {
+      border: 1px solid #666666 !important;
+      margin-bottom: 16px !important;
+      page-break-inside: auto !important;
+      break-inside: auto !important;
+
+      .panel-section-header {
+        background: #eaeaea !important;
+        border-bottom: 1px solid #666666 !important;
+        page-break-after: avoid !important;
+        break-after: avoid !important;
+      }
+    }
+
+    .panel-connections-table {
+      display: table !important;
+      width: 100% !important;
+      border: 1px solid #666666 !important;
+
+      thead {
+        display: table-header-group !important;
+      }
+
+      th {
+        background: #f0f0f0 !important;
+        border-bottom: 2px solid #000000 !important;
+        color: #000000 !important;
+      }
+
+      td {
+        border-bottom: 1px solid #cccccc !important;
+      }
+
+      .port-row,
+      tr {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+    }
+
+    .panel-connections-mobile {
+      display: none !important;
+    }
+  }
+}
