@@ -451,9 +451,7 @@ impl Mutation {
     }
     async fn implement_plan(&self, ctx: &Context<'_>, plan_id: i32) -> async_graphql::Result<Plan> {
         if plan_id <= 0 {
-            return Err(
-                format!("Cannot implement plan {plan_id}").into(),
-            );
+            return Err(format!("Cannot implement plan {plan_id}").into());
         }
         implement::implement_plan(plan_id, authenticated::get_connection(ctx).await?).await
     }

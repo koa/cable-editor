@@ -17,9 +17,7 @@ use patternfly_yew::prelude::{
     Alert, AlertType, Button, ButtonVariant, Card, CardBody, CardTitle, Divider, Icon, Spinner,
     Title,
 };
-use yew::{
-    Component, Context, Html, Properties, classes, html, platform::spawn_local,
-};
+use yew::{Component, Context, Html, Properties, classes, html, platform::spawn_local};
 use yew_nested_router::components::Link;
 
 #[derive(Properties, PartialEq, Clone)]
@@ -155,9 +153,21 @@ impl Component for ShowPanel {
 
         // Calculate summary metrics
         let total_panels = (if has_root_ports { 1 } else { 0 }) + child_panels_with_ports.len();
-        let mut total_ports = if has_root_ports { root_planned.ports.len() } else { 0 };
-        let mut used_ports = if has_root_ports { count_used_ports(&root_planned.ports) } else { 0 };
-        let mut modified_ports = if has_root_ports { count_modified_ports(&root_planned.ports) } else { 0 };
+        let mut total_ports = if has_root_ports {
+            root_planned.ports.len()
+        } else {
+            0
+        };
+        let mut used_ports = if has_root_ports {
+            count_used_ports(&root_planned.ports)
+        } else {
+            0
+        };
+        let mut modified_ports = if has_root_ports {
+            count_modified_ports(&root_planned.ports)
+        } else {
+            0
+        };
 
         for child in &child_panels_with_ports {
             total_ports += child.ports.len();
@@ -515,13 +525,18 @@ impl ShowPanel {
             PortType::Connector => ("Stecker", "pf-m-cyan"),
             PortType::Loop => ("Loop", "pf-m-purple"),
         };
-        let is_loop = port.port_type == PortType::Loop;
-
-        let loop_fiber = if is_loop {
-            port.front_usage
+        let loop_fiber = if port.port_type == PortType::Loop {
+            if let Some(loop_fiber) = port
+                .front_usage
                 .as_ref()
                 .and_then(|u| u.fiber.as_ref())
                 .or_else(|| port.back_usage.as_ref().and_then(|u| u.fiber.as_ref()))
+            {
+                Some(loop_fiber)
+            } else {
+                // hide unused loops
+                return Html::default();
+            }
         } else {
             None
         };
@@ -530,10 +545,7 @@ impl ShowPanel {
             .front_usage
             .as_ref()
             .is_some_and(|u| u.modified_in_plan)
-            || port
-                .back_usage
-                .as_ref()
-                .is_some_and(|u| u.modified_in_plan);
+            || port.back_usage.as_ref().is_some_and(|u| u.modified_in_plan);
 
         let row_class = if is_modified {
             "port-row modified-row"
@@ -544,7 +556,10 @@ impl ShowPanel {
         let flow_icon = match port.port_type {
             PortType::Loop => {
                 let title = if let Some(fiber_info) = loop_fiber {
-                    format!("Schleife / Loop: Bündel {}, Faser {}", fiber_info.bundle, fiber_info.fiber)
+                    format!(
+                        "Schleife / Loop: Bündel {}, Faser {}",
+                        fiber_info.bundle, fiber_info.fiber
+                    )
                 } else {
                     "Schleife / Loop".to_string()
                 };
@@ -579,47 +594,26 @@ impl ShowPanel {
             }
         };
 
-        let port_identity = if is_loop {
-            if let Some(fiber_info) = loop_fiber {
-                html! {
-                    <div class="port-identity">
-                        <div class="port-name-wrapper">
-                            <FiberLabel fiber={fiber_info.fiber as u8}>
-                                {format!("{}-{}", fiber_info.bundle, fiber_info.fiber)}
-                            </FiberLabel>
-                            if is_modified {
-                                <span class="modified-dot" title="In dieser Planung geändert" />
-                            }
-                        </div>
-                        <div class="pf-v6-u-mt-xs pf-v6-u-display-flex pf-v6-u-align-items-center">
-                            <span class={classes!("pf-v6-c-label", type_class, "port-type-label")}>
-                                <span class="pf-v6-c-label__content">{type_text}</span>
-                            </span>
-                            <span class="pf-v6-u-font-size-xs pf-v6-u-color-200 pf-v6-u-ml-xs">
-                                {format!("(#{})", port.order_number)}
-                            </span>
-                        </div>
+        let port_identity = if let Some(fiber_info) = loop_fiber {
+            html! {
+                <div class="port-identity">
+                    <div class="port-name-wrapper">
+                        <FiberLabel fiber={fiber_info.fiber as u8}>
+                            {format!("{}-{}", fiber_info.bundle, fiber_info.fiber)}
+                        </FiberLabel>
+                        if is_modified {
+                            <span class="modified-dot" title="In dieser Planung geändert" />
+                        }
                     </div>
-                }
-            } else {
-                html! {
-                    <div class="port-identity">
-                        <div class="port-name-wrapper">
-                            <strong class="port-label-text">{"Loop"}</strong>
-                            if is_modified {
-                                <span class="modified-dot" title="In dieser Planung geändert" />
-                            }
-                        </div>
-                        <div class="pf-v6-u-mt-xs pf-v6-u-display-flex pf-v6-u-align-items-center">
-                            <span class={classes!("pf-v6-c-label", type_class, "port-type-label")}>
-                                <span class="pf-v6-c-label__content">{type_text}</span>
-                            </span>
-                            <span class="pf-v6-u-font-size-xs pf-v6-u-color-200 pf-v6-u-ml-xs">
-                                {format!("(#{})", port.order_number)}
-                            </span>
-                        </div>
+                    <div class="pf-v6-u-mt-xs pf-v6-u-display-flex pf-v6-u-align-items-center">
+                        <span class={classes!("pf-v6-c-label", type_class, "port-type-label")}>
+                            <span class="pf-v6-c-label__content">{type_text}</span>
+                        </span>
+                        <span class="pf-v6-u-font-size-xs pf-v6-u-color-200 pf-v6-u-ml-xs">
+                            {format!("(#{})", port.order_number)}
+                        </span>
                     </div>
-                }
+                </div>
             }
         } else {
             html! {
@@ -673,13 +667,19 @@ impl ShowPanel {
             PortType::Connector => ("Stecker", "pf-m-cyan"),
             PortType::Loop => ("Loop", "pf-m-purple"),
         };
-        let is_loop = port.port_type == PortType::Loop;
 
-        let loop_fiber = if is_loop {
-            port.front_usage
+        let loop_fiber = if port.port_type == PortType::Loop {
+            if let Some(loop_fiber) = port
+                .front_usage
                 .as_ref()
                 .and_then(|u| u.fiber.as_ref())
                 .or_else(|| port.back_usage.as_ref().and_then(|u| u.fiber.as_ref()))
+            {
+                Some(loop_fiber)
+            } else {
+                // hide unused loops
+                return Html::default();
+            }
         } else {
             None
         };
@@ -688,32 +688,18 @@ impl ShowPanel {
             .front_usage
             .as_ref()
             .is_some_and(|u| u.modified_in_plan)
-            || port
-                .back_usage
-                .as_ref()
-                .is_some_and(|u| u.modified_in_plan);
+            || port.back_usage.as_ref().is_some_and(|u| u.modified_in_plan);
 
-        let mobile_port_title = if is_loop {
-            if let Some(fiber_info) = loop_fiber {
-                html! {
-                    <div class="mobile-port-title">
-                        <FiberLabel fiber={fiber_info.fiber as u8}>
-                            {format!("{}-{}", fiber_info.bundle, fiber_info.fiber)}
-                        </FiberLabel>
-                        <span class="pf-v6-u-font-size-xs pf-v6-u-color-200 pf-v6-u-ml-xs">
-                            {format!("(#{})", port.order_number)}
-                        </span>
-                    </div>
-                }
-            } else {
-                html! {
-                    <div class="mobile-port-title">
-                        <strong>{"Loop"}</strong>
-                        <span class="pf-v6-u-font-size-xs pf-v6-u-color-200 pf-v6-u-ml-xs">
-                            {format!("(#{})", port.order_number)}
-                        </span>
-                    </div>
-                }
+        let mobile_port_title = if let Some(loop_fiber) = loop_fiber {
+            html! {
+                <div class="mobile-port-title">
+                    <FiberLabel fiber={loop_fiber.fiber as u8}>
+                        {format!("{}-{}", loop_fiber.bundle, loop_fiber.fiber)}
+                    </FiberLabel>
+                    <span class="pf-v6-u-font-size-xs pf-v6-u-color-200 pf-v6-u-ml-xs">
+                        {format!("(#{})", port.order_number)}
+                    </span>
+                </div>
             }
         } else {
             html! {

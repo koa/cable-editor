@@ -1,6 +1,5 @@
-use crate::components::plan::netbox_sync::NetboxSyncModal;
 use crate::{
-    components::table::ListModel,
+    components::{plan::netbox_sync::NetboxSyncModal, table::ListModel},
     error::FrontendError,
     graphql::authenticated::{
         PortSide,
@@ -363,7 +362,7 @@ impl Component for EditPlan {
                                 <Button variant={ButtonVariant::Secondary} label="Sync Netbox" disabled={!can_sync_netbox} onclick={sync_netbox}/>
                             </ActionGroup>
                         </Form>
-            
+
                         if is_open {
                             <div class="pf-v6-u-mt-xl">
                                 <Title size={patternfly_yew::prelude::Size::Large}>{"Geplante Änderungen"}</Title>

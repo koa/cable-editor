@@ -31,7 +31,10 @@ pub struct PlanOverview {
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone)]
-#[cynic(graphql_type = "PlannedPanel", variables = "FetchPanelOverviewVariables")]
+#[cynic(
+    graphql_type = "PlannedPanel",
+    variables = "FetchPanelOverviewVariables"
+)]
 pub struct PlannedPanelOverview {
     pub panel: PanelOverviewDetail,
     pub ports: Vec<PlannedPortOverview>,
@@ -61,7 +64,10 @@ impl PlannedPanelOverview {
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone)]
-#[cynic(graphql_type = "PlannedPanel", variables = "FetchPanelOverviewVariables")]
+#[cynic(
+    graphql_type = "PlannedPanel",
+    variables = "FetchPanelOverviewVariables"
+)]
 pub struct PlannedChildPanelOverview {
     pub panel: ChildPanelDetail,
     pub ports: Vec<PlannedPortOverview>,
