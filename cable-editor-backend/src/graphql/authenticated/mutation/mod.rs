@@ -1,3 +1,4 @@
+pub mod implement;
 pub mod sync;
 
 use crate::{
@@ -5,7 +6,7 @@ use crate::{
         entity::{
             cable::{Cable, UpdateCableChangeset},
             panel::{InsertPanel, InsertPanelPort, PanelPort, PanelPortType, PortSide, PortUsage},
-            plan::{InsertPlan, Plan, PlanStatusType},
+            plan::{InsertPlan, Plan},
         },
         schema,
     },
@@ -451,92 +452,18 @@ impl Mutation {
     async fn implement_plan(&self, ctx: &Context<'_>, plan_id: i32) -> async_graphql::Result<Plan> {
         if plan_id <= 0 {
             return Err(
-                format!("Cannot implement plan {plan_id}, it is already implemented").into(),
+                format!("Cannot implement plan {plan_id}").into(),
             );
         }
-        let mut connection = authenticated::get_connection(ctx).await?;
-        connection
-            .transaction::<_, async_graphql::Error, _>(async move |conn| {
-                let mut plan = Plan::query()
-                    .for_update()
-                    .filter(schema::plan::id.eq(plan_id))
-                    .first(conn)
-                    .await?;
-                if plan.status != PlanStatusType::Open {
-                    return Err(async_graphql::Error::new(format!(
-                        "Invalid status of plan {:?}",
-                        plan.status
-                    )));
-                }
-                let ports_to_apply = PortUsage::query()
-                    .filter(schema::port_usage::plan_id.eq(plan_id))
-                    .load(conn)
-                    .await?;
-                for PortUsage {
-                    port_id,
-                    plan_id: _,
-                    side,
-                    cable,
-                    fiber,
-                    bundle,
-                } in ports_to_apply
-                {
-                    if let (Some(cable), Some(bundle), Some(fiber)) = (cable, bundle, fiber) {
-                        let usage = PortUsage {
-                            port_id,
-                            plan_id: 0,
-                            side,
-                            cable: Some(cable),
-                            fiber: Some(fiber),
-                            bundle: Some(bundle),
-                        };
-                        diesel::insert_into(schema::port_usage::dsl::port_usage::table())
-                            .values(&usage)
-                            .on_conflict((
-                                schema::port_usage::port_id,
-                                schema::port_usage::plan_id,
-                                schema::port_usage::side,
-                            ))
-                            .do_update()
-                            .set((
-                                schema::port_usage::cable.eq(cable),
-                                schema::port_usage::fiber.eq(fiber),
-                                schema::port_usage::bundle.eq(bundle),
-                            ))
-                            .execute(conn)
-                            .await?;
-                    } else {
-                        diesel::delete(schema::port_usage::dsl::port_usage::table())
-                            .filter(schema::port_usage::port_id.eq(port_id))
-                            .filter(schema::port_usage::plan_id.eq(0))
-                            .filter(schema::port_usage::side.eq(side))
-                            .execute(conn)
-                            .await?;
-                    }
-                }
-                diesel::delete(
-                    schema::port_usage::table.filter(schema::port_usage::plan_id.eq(plan_id)),
-                )
-                .execute(conn)
-                .await?;
-                diesel::delete(schema::plan::table.filter(schema::plan::id.eq(plan_id)))
-                    .execute(conn)
-                    .await?;
-                plan.status = PlanStatusType::Implemented;
-                Ok(plan)
-            })
-            .await
+        implement::implement_plan(plan_id, authenticated::get_connection(ctx).await?).await
     }
+
     async fn sync_plan_to_netbox(
         &self,
         ctx: &Context<'_>,
         plan_id: i32,
     ) -> async_graphql::Result<Vec<SyncIssue>> {
-        let mut connection = authenticated::get_connection(ctx).await?;
-
-        let issues = sync_plan_to_netbox(plan_id, connection).await?;
-
-        Ok(issues)
+        sync_plan_to_netbox(plan_id, authenticated::get_connection(ctx).await?).await
     }
 }
 
