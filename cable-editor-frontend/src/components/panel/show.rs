@@ -108,7 +108,7 @@ impl Component for ShowPanel {
             ctx.link().send_message(Msg::FetchData);
         }
     }
-
+    
     fn view(&self, ctx: &Context<Self>) -> Html {
         if self.loading {
             return html! {
@@ -150,6 +150,14 @@ impl Component for ShowPanel {
             .filter(|c| !c.ports.is_empty())
             .collect();
         let has_root_ports = !root_planned.ports.is_empty();
+        let root_has_direct_ports = root_planned
+            .ports
+            .iter()
+            .any(|p| p.port_type == PortType::Splice || p.port_type == PortType::Connector);
+        let root_has_direct_loops = root_planned
+            .ports
+            .iter()
+            .any(|p| p.port_type == PortType::Loop);
 
         // Calculate summary metrics
         let total_panels = (if has_root_ports { 1 } else { 0 }) + child_panels_with_ports.len();
@@ -174,12 +182,6 @@ impl Component for ShowPanel {
             used_ports += count_used_ports(&child.ports);
             modified_ports += count_modified_ports(&child.ports);
         }
-
-        let has_any_loop = root_planned
-            .ports
-            .iter()
-            .chain(child_panels_with_ports.iter().flat_map(|c| c.ports.iter()))
-            .any(|p| p.port_type == PortType::Loop);
 
         html! {
             <div class="panel-overview-container pf-v6-u-p-md pf-v6-u-p-lg-on-lg">
@@ -222,36 +224,6 @@ impl Component for ShowPanel {
                                     label="Drucken / PDF"
                                     onclick={ctx.link().callback(|_| Msg::Print)}
                                 />
-                                if self.plan_id > 0 {
-                                    <Link<AppRoute>
-                                        to={AppRoute::Plan {
-                                            plan_id: self.plan_id,
-                                            view: PlanView::Panel {
-                                                id: self.panel_id,
-                                                view: PanelView::Attach,
-                                            },
-                                        }}
-                                        class="pf-v6-c-button pf-m-secondary"
-                                    >
-                                        <IconLink/>
-                                        <span class="pf-v6-u-ml-xs">{"Fasern auflegen"}</span>
-                                    </Link<AppRoute>>
-                                    if has_any_loop {
-                                        <Link<AppRoute>
-                                            to={AppRoute::Plan {
-                                                plan_id: self.plan_id,
-                                                view: PlanView::Panel {
-                                                    id: self.panel_id,
-                                                    view: PanelView::Loop,
-                                                },
-                                            }}
-                                            class="pf-v6-c-button pf-m-secondary"
-                                        >
-                                            {Icon::Redo}
-                                            <span class="pf-v6-u-ml-xs">{"Loops verbinden"}</span>
-                                        </Link<AppRoute>>
-                                    }
-                                }
                                 <Link<AppRoute>
                                     to={AppRoute::Plan {
                                         plan_id: self.plan_id,
@@ -388,18 +360,36 @@ impl Component for ShowPanel {
                                     <span class="pf-v6-c-label__content">{format!("{} Ports", root_planned.ports.len())}</span>
                                 </span>
                                 if self.plan_id > 0 {
-                                    <Link<AppRoute>
-                                        to={AppRoute::Plan {
-                                            plan_id: self.plan_id,
-                                            view: PlanView::Panel {
-                                                id: root_panel.id,
-                                                view: PanelView::Attach,
-                                            },
-                                        }}
-                                        class="no-print pf-v6-c-button pf-m-plain pf-v6-u-ml-sm"
-                                    >
-                                        <IconLink/>
-                                    </Link<AppRoute>>
+                                    if root_has_direct_ports {
+                                        <Link<AppRoute>
+                                            to={AppRoute::Plan {
+                                                plan_id: self.plan_id,
+                                                view: PlanView::Panel {
+                                                    id: root_panel.id,
+                                                    view: PanelView::Attach,
+                                                },
+                                            }}
+                                            class="no-print pf-v6-c-button pf-m-secondary"
+                                        >
+                                            <IconLink/>
+                                            <span class="pf-v6-u-ml-xs">{"Fasern auflegen"}</span>
+                                        </Link<AppRoute>>
+                                    }
+                                    if root_has_direct_loops {
+                                        <Link<AppRoute>
+                                            to={AppRoute::Plan {
+                                                plan_id: self.plan_id,
+                                                view: PlanView::Panel {
+                                                    id: root_panel.id,
+                                                    view: PanelView::Loop,
+                                                },
+                                            }}
+                                            class="no-print pf-v6-c-button pf-m-secondary"
+                                        >
+                                            {Icon::Redo}
+                                            <span class="pf-v6-u-ml-xs">{"Loops verbinden"}</span>
+                                        </Link<AppRoute>>
+                                    }
                                 }
                             </div>
                         </div>
@@ -413,6 +403,14 @@ impl Component for ShowPanel {
                     let anchor_id = format!("panel-child-{}", child.panel.id);
                     let level = child.panel.parent_chain.len().max(1);
                     let child_id = child.panel.id;
+                    let has_direct_ports = child
+                        .ports
+                        .iter()
+                        .any(|p| p.port_type == PortType::Splice || p.port_type == PortType::Connector);
+                    let has_direct_loops = child
+                        .ports
+                        .iter()
+                        .any(|p| p.port_type == PortType::Loop);
 
                     html! {
                         <div id={anchor_id} class={classes!("panel-overview-section", "child-panel-section", format!("hierarchy-level-{}", level), "pf-v6-u-mb-xl")}>
@@ -430,18 +428,36 @@ impl Component for ShowPanel {
                                         <span class="pf-v6-c-label__content">{format!("{} Ports", child.ports.len())}</span>
                                     </span>
                                     if self.plan_id > 0 {
-                                        <Link<AppRoute>
-                                            to={AppRoute::Plan {
-                                                plan_id: self.plan_id,
-                                                view: PlanView::Panel {
-                                                    id: child_id,
-                                                    view: PanelView::Attach,
-                                                },
-                                            }}
-                                            class="no-print pf-v6-c-button pf-m-plain pf-v6-u-ml-sm"
-                                        >
-                                            <IconLink/>
-                                        </Link<AppRoute>>
+                                        if has_direct_ports {
+                                            <Link<AppRoute>
+                                                to={AppRoute::Plan {
+                                                    plan_id: self.plan_id,
+                                                    view: PlanView::Panel {
+                                                        id: child_id,
+                                                        view: PanelView::Attach,
+                                                    },
+                                                }}
+                                                class="no-print pf-v6-c-button pf-m-secondary"
+                                            >
+                                                <IconLink/>
+                                                <span class="pf-v6-u-ml-xs">{"Fasern auflegen"}</span>
+                                            </Link<AppRoute>>
+                                        }
+                                        if has_direct_loops {
+                                            <Link<AppRoute>
+                                                to={AppRoute::Plan {
+                                                    plan_id: self.plan_id,
+                                                    view: PlanView::Panel {
+                                                        id: child_id,
+                                                        view: PanelView::Loop,
+                                                    },
+                                                }}
+                                                class="no-print pf-v6-c-button pf-m-secondary"
+                                            >
+                                                {Icon::Redo}
+                                                <span class="pf-v6-u-ml-xs">{"Loops verbinden"}</span>
+                                            </Link<AppRoute>>
+                                        }
                                     }
                                 </div>
                             </div>
