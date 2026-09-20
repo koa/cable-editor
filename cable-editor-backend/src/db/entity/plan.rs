@@ -76,7 +76,7 @@ WITH RECURSIVE affected_panels AS (
     INNER JOIN affected_panels child ON child.parent_panel = parent.id
 )
 -- 3. Finale Ausgabe: Root-Panels filtern
-SELECT p.id, p.name, p.schacht_id, p.parent_panel, p.parent_order
+SELECT p.id, p.name, p.schacht_id, p.parent_panel, p.parent_order, p.netbox_device_id
 FROM affected_panels a
 JOIN panel p ON a.id = p.id
 WHERE a.parent_panel IS NULL;

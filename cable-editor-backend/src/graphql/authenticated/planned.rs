@@ -92,7 +92,7 @@ impl PlannedPanel {
         let raw_sql = r#"
         WITH RECURSIVE panel_tree AS (
             SELECT
-                id, name, schacht_id, parent_panel, parent_order,
+                id, name, schacht_id, parent_panel, parent_order, netbox_device_id,
                 1 as level
             FROM panel
             WHERE parent_panel = $1
@@ -100,13 +100,13 @@ impl PlannedPanel {
             UNION ALL
 
             SELECT
-                p.id, p.name, p.schacht_id, p.parent_panel, p.parent_order,
+                p.id, p.name, p.schacht_id, p.parent_panel, p.parent_order, p.netbox_device_id,
                 pt.level + 1 as level
             FROM panel p
             INNER JOIN panel_tree pt ON p.parent_panel = pt.id
         )
         SELECT
-            id, name, schacht_id, parent_panel, parent_order
+            id, name, schacht_id, parent_panel, parent_order, netbox_device_id
         FROM panel_tree
         ORDER BY level, parent_order;
     "#;
