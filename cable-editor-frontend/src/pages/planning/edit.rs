@@ -363,18 +363,17 @@ impl Component for EditPlan {
                                 <Button variant={ButtonVariant::Secondary} label="Sync Netbox" disabled={!can_sync_netbox} onclick={sync_netbox}/>
                             </ActionGroup>
                         </Form>
-
-                        <div class="pf-v6-u-mt-xl">
-                            <Title size={patternfly_yew::prelude::Size::Large}>{"Geplante Änderungen"}</Title>
-                            <Table<UsageColumn, ListModel<UsageColumn, MemoizedTableModel<PortUsageRow>>>
-                                mode={TableMode::Compact}
-                                grid={TableGridMode::Medium}
-                                {header}
-                                entries={table_model}
-                            />
-                        </div>
-
+            
                         if is_open {
+                            <div class="pf-v6-u-mt-xl">
+                                <Title size={patternfly_yew::prelude::Size::Large}>{"Geplante Änderungen"}</Title>
+                                <Table<UsageColumn, ListModel<UsageColumn, MemoizedTableModel<PortUsageRow>>>
+                                    mode={TableMode::Compact}
+                                    grid={TableGridMode::Medium}
+                                    {header}
+                                    entries={table_model}
+                                />
+                            </div>
                             <div class="pf-v6-u-mt-xl">
                                 <ActionGroup>
                                     <Button
