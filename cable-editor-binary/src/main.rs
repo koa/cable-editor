@@ -30,6 +30,7 @@ use mime_guess::from_path;
 use prometheus::{HistogramVec, histogram_opts};
 use reqwest::Client;
 use rust_embed::RustEmbed;
+use std::borrow::Cow;
 use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
 use tokio::sync::Mutex;
@@ -137,8 +138,13 @@ async fn graphql(
 async fn fetch_user_info(access_token_str: String) -> Result<UserInfo, BackendError> {
     let client = Client::new();
     let issuer = CONFIG.auth_issuer();
+
+    let user_info_url = CONFIG
+        .user_info_url()
+        .map(Cow::Borrowed)
+        .unwrap_or_else(|| format!("{issuer}/protocol/openid-connect/userinfo").into());
     let response = client
-        .get(format!("{issuer}/api/oidc/userinfo"))
+        .get(user_info_url.as_ref())
         .bearer_auth(access_token_str)
         .send()
         .await?;

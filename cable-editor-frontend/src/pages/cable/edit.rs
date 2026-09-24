@@ -497,7 +497,7 @@ impl Component for EditCable {
                         html!(<Spinner/>)
                     } else {
                         let scope = ctx.link().clone();
-                        let delete_button = get_backdrop(ctx.link()).map(|(backdropper)| {
+                        let delete_button = get_backdrop(ctx.link()).map(|backdropper| {
                             let onclick = {
                                 let backdropper = backdropper.clone();
                                 let scope = scope.clone();
@@ -574,7 +574,7 @@ impl Component for EditCable {
                         });
                     }
                     let credentials = get_credentials(ctx.link());
-                    if let Some((backdrop)) = get_backdrop(ctx.link()) {
+                    if let Some(backdrop) = get_backdrop(ctx.link()) {
                         for (idx, end) in [(0, PathEnd::Front), (entries.len() - 1, PathEnd::Tail)] {
                             if let Some(first_schacht) = entries.get_mut(idx) && let DuctPathEntry::Schacht { on_extend, schacht, .. } = first_schacht {
                                 let backdrop = backdrop.clone();
@@ -652,7 +652,7 @@ impl Component for EditCable {
                             </FormGroup>
                         }
                     }).unwrap_or_else(|| {
-                    if let Some((backdrop)) = get_backdrop(ctx.link()) {
+                    if let Some(backdrop) = get_backdrop(ctx.link()) {
                         let scope=ctx.link().clone();
                         let onclick = Callback::from(move |_| {
                             let scope=scope.clone();
@@ -750,8 +750,8 @@ fn update_cable(
         fiber_count.parse::<i32>().ok(),
     )
     .and_then(|(bundle_count, fiber_count)| {
-        if (fiber_count == current_details.fiber_count
-            && bundle_count == current_details.bundle_count)
+        if fiber_count == current_details.fiber_count
+            && bundle_count == current_details.bundle_count
         {
             None
         } else {
@@ -766,7 +766,7 @@ fn update_cable(
         .path
         .as_ref()
         .map(|p| p.duct_sequence().collect::<Vec<_>>());
-    let path_update = if (current_path != target_path) {
+    let path_update = if current_path != target_path {
         Some(target_path.unwrap_or_default())
     } else {
         None

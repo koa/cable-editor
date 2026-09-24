@@ -34,6 +34,9 @@ impl Settings {
         self.server_bind_address
             .unwrap_or_else(|| IpAddr::from([0u8; 16]))
     }
+    pub fn user_info_url(&self) -> Option<&str> {
+        self.user_info_url.as_deref()
+    }
 }
 #[derive(Deserialize)]
 pub struct NetboxSettings {

@@ -108,7 +108,7 @@ impl Component for ShowPanel {
             ctx.link().send_message(Msg::FetchData);
         }
     }
-    
+
     fn view(&self, ctx: &Context<Self>) -> Html {
         if self.loading {
             return html! {

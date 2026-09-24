@@ -118,7 +118,7 @@ pub fn main_oauth2(props: &MainOAuth2Props) -> Html {
     let scopes = vec![
         "openid".to_string(),
         "profile".to_string(),
-        "groups".to_string(),
+        //"groups".to_string(),
     ];
     html! {
      <OAuth2 config={oauth2_config.clone()} {scopes}>

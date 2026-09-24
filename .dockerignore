@@ -4,3 +4,4 @@ target
 config.yaml
 cable-editor-frontend/node/node_modules/
 .git/
+.env

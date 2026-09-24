@@ -13,10 +13,7 @@ use crate::{
     },
 };
 use async_graphql::{SimpleObject, Union};
-use diesel::{
-    AsChangeset, BoolExpressionMethods, ExpressionMethods, HasQuery, OptionalExtension, QueryDsl,
-    associations::HasTable, dsl::max,
-};
+use diesel::{ExpressionMethods, HasQuery, QueryDsl};
 use diesel_async::pooled_connection::deadpool::Object;
 use diesel_async::{AsyncConnection, AsyncPgConnection, RunQueryDsl};
 
