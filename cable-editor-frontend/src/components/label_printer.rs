@@ -19,6 +19,8 @@ use yew::{
 const ZONE_HEIGHT_INCH: f64 = 0.5;
 const DEFAULT_DPI: f64 = 300.0;
 const SUPPLY_TIMEOUT: Duration = Duration::from_secs(10);
+const LAMINATED_WIDTH_INCH: f64 = 1.25;
+const M211_HEAD_WIDTH_INCH: f64 = 0.63;
 
 /// Printer connection and status, shown above the labels.
 #[function_component]
@@ -125,9 +127,22 @@ async fn print_label(sdk: Rc<BradySdk>, text: AttrValue) -> Result<(), FrontendE
         sdk.connect().await?;
     }
     wait_for_supply(&sdk).await?;
-    let dpi = sdk.status().dots_per_inch.unwrap_or(DEFAULT_DPI);
+    let status = sdk.status();
+    let dpi = status.dots_per_inch.unwrap_or(DEFAULT_DPI);
     let image = image_from_canvas(&render_label(&text, dpi)?).await?;
-    Ok(sdk.print(&image).await?)
+    let x_offset = zone_correction(status.supply_width);
+    Ok(sdk
+        .print_all_offset(std::slice::from_ref(&image), x_offset, 0.0)
+        .await?)
+}
+
+/// The SDK places the print zone of the 1.25" laminated tape (0.81" in) without
+/// subtracting the part the M211 head does not cover, so nothing gets printed.
+fn zone_correction(supply_width: Option<f64>) -> f64 {
+    match supply_width {
+        Some(width) if (width - LAMINATED_WIDTH_INCH).abs() < 0.01 => M211_HEAD_WIDTH_INCH - width,
+        _ => 0.0,
+    }
 }
 
 /// Waits until the printer reported its supply, the SDK fails printing before.

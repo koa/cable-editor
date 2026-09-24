@@ -746,7 +746,7 @@ dependencies = [
 [[package]]
 name = "brady-web-sdk"
 version = "0.1.0"
-source = "git+https://git.panter.ch/open-source/brady-web-sdk-rs.git#aa8ea85093518e833430c5a715b3991eaf5859e0"
+source = "git+https://git.panter.ch/open-source/brady-web-sdk-rs.git#90e203d5f35b6cc468fdd4e85cc745aab379ee54"
 dependencies = [
  "js-sys",
  "thiserror 2.0.20",
