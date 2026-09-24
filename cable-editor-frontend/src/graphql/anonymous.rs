@@ -9,6 +9,7 @@ mod schema {}
 pub struct AuthenticationData {
     pub client_id: String,
     pub issuer_url: String,
+    pub scopes: Vec<String>,
 }
 
 #[derive(cynic::QueryFragment, Debug)]

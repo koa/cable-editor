@@ -10,6 +10,7 @@ pub struct Settings {
     auth_token_url: Option<String>,
     user_info_url: Option<String>,
     auth_url: Option<String>,
+    auth_scopes: Option<String>,
 
     server_port: Option<u16>,
     server_mgmt_port: Option<u16>,
@@ -24,6 +25,16 @@ impl Settings {
         self.auth_issuer.trim_end_matches('/')
     }
 
+    /// OIDC scopes the frontend requests, space separated like the `scope` parameter.
+    /// `groups` needs a matching scope at the provider.
+    pub fn auth_scopes(&self) -> Vec<String> {
+        self.auth_scopes
+            .as_deref()
+            .unwrap_or("openid profile groups")
+            .split_whitespace()
+            .map(String::from)
+            .collect()
+    }
     pub fn server_port(&self) -> u16 {
         self.server_port.unwrap_or(8080)
     }
