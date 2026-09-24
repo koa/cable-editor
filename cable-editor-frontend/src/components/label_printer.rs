@@ -1,5 +1,5 @@
 use crate::error::FrontendError;
-use brady_web_sdk::{BradySdk, image_from_canvas, use_brady};
+use brady_web_sdk::{BradySdk, PrinterStatus, image_from_canvas, use_brady};
 use futures::{
     StreamExt,
     future::{Either, ready, select},
@@ -19,8 +19,6 @@ use yew::{
     use_effect_with, use_state,
 };
 
-/// Print zone of the M21-1250-427 across the tape, the SDK scales the label height to it.
-const ZONE_HEIGHT_INCH: f64 = 0.43;
 /// Text height relative to the print zone without a cable diameter.
 const MAX_TEXT_RATIO: f64 = 0.8;
 /// Text height relative to the cable diameter, readable from one side.
@@ -30,8 +28,11 @@ const MM_PER_INCH: f64 = 25.4;
 const DIAMETER_KEY: &str = "cable-label-diameter-mm";
 const DEFAULT_DPI: f64 = 300.0;
 const SUPPLY_TIMEOUT: Duration = Duration::from_secs(10);
-const LAMINATED_WIDTH_INCH: f64 = 1.25;
-const M211_HEAD_WIDTH_INCH: f64 = 0.63;
+// Print head widths and label feeds hard-coded in the SDK
+const M211_HEAD_INCH: f64 = 0.63;
+const M511_HEAD_INCH: f64 = 1.44;
+const M211_FEED_INCH: f64 = 0.87;
+const DEFAULT_FEED_INCH: f64 = 0.125;
 
 /// Printer connection and status, shown above the labels.
 #[function_component]
@@ -99,7 +100,7 @@ pub struct PrintLabelButtonProps {
     pub text: AttrValue,
 }
 
-/// Asks for the cable diameter and prints `text` as cable label.
+/// Connects, asks for the cable diameter and prints `text` as cable label.
 #[function_component]
 pub fn PrintLabelButton(props: &PrintLabelButtonProps) -> Html {
     let brady = use_brady().expect("Missing BradyProvider");
@@ -113,29 +114,31 @@ pub fn PrintLabelButton(props: &PrintLabelButtonProps) -> Html {
             let Some(backdrop) = backdrop.clone() else {
                 return;
             };
-            let onsubmit = {
-                let (backdrop, sdk, text) = (backdrop.clone(), sdk.clone(), text.clone());
-                let (error, busy) = (error.clone(), busy.clone());
-                Callback::from(move |diameter| {
-                    backdrop.close();
-                    run(
-                        &error,
-                        &busy,
-                        print_label(sdk.clone(), text.clone(), diameter),
-                    );
-                })
-            };
-            let oncancel = {
-                let backdrop = backdrop.clone();
-                Callback::from(move |_| backdrop.close())
-            };
-            backdrop.open(Backdrop::new(html! {
-                <Bullseye>
-                    <Modal title="Etikett drucken" variant={ModalVariant::Small}>
-                        <DiameterForm {onsubmit} {oncancel}/>
-                    </Modal>
-                </Bullseye>
-            }));
+            let (sdk, text) = (sdk.clone(), text.clone());
+            let (print_error, print_busy) = (error.clone(), busy.clone());
+            run(&error, &busy, async move {
+                let geometry = prepare(&sdk).await?;
+                let onsubmit = {
+                    let (backdrop, text) = (backdrop.clone(), text.clone());
+                    Callback::from(move |diameter| {
+                        backdrop.close();
+                        let task = print_label(sdk.clone(), text.clone(), diameter, geometry);
+                        run(&print_error, &print_busy, task);
+                    })
+                };
+                let oncancel = {
+                    let backdrop = backdrop.clone();
+                    Callback::from(move |_| backdrop.close())
+                };
+                backdrop.open(Backdrop::new(html! {
+                    <Bullseye>
+                        <Modal title="Etikett drucken" variant={ModalVariant::Small}>
+                            <DiameterForm {onsubmit} {oncancel}/>
+                        </Modal>
+                    </Bullseye>
+                }));
+                Ok(())
+            });
         })
     };
     html! {
@@ -216,32 +219,68 @@ fn run(
     });
 }
 
-async fn print_label(
-    sdk: Rc<BradySdk>,
-    text: AttrValue,
-    diameter_mm: Option<f64>,
-) -> Result<(), FrontendError> {
+/// Label layout for the installed tape, mirroring how the SDK places the image.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct LabelGeometry {
+    /// Width across the tape the SDK scales the image height to.
+    band_inch: f64,
+    /// Print offset across the tape.
+    x_offset_inch: f64,
+    /// Blank tape fed per label.
+    feed_inch: f64,
+    dpi: f64,
+}
+
+impl LabelGeometry {
+    fn from_status(status: &PrinterStatus) -> Result<Self, FrontendError> {
+        let width = status.supply_width.ok_or(FrontendError::PrinterNoSupply)?;
+        if status.media_is_die_cut {
+            return Err(FrontendError::UnsupportedTape);
+        }
+        let model = status.printer_model.as_deref();
+        let covered = match model {
+            Some("M211") => width.min(M211_HEAD_INCH),
+            Some("M511") => width.min(M511_HEAD_INCH),
+            _ => width,
+        };
+        let (band_inch, x_offset_inch) = match status.print_zone {
+            // SDK places the zone without subtracting the tape left of the head
+            Some(zone) => (zone.width, covered - width),
+            None => (covered, 0.0),
+        };
+        Ok(LabelGeometry {
+            band_inch,
+            x_offset_inch,
+            feed_inch: match model {
+                Some("M211") => M211_FEED_INCH,
+                _ => DEFAULT_FEED_INCH,
+            },
+            dpi: status.dots_per_inch.unwrap_or(DEFAULT_DPI),
+        })
+    }
+}
+
+/// Connects if needed and derives the label layout from the reported tape.
+async fn prepare(sdk: &BradySdk) -> Result<LabelGeometry, FrontendError> {
     // Connect within the click, Web Bluetooth requires a user gesture
     if !sdk.is_connected() {
         sdk.connect().await?;
     }
-    wait_for_supply(&sdk).await?;
-    let status = sdk.status();
-    let dpi = status.dots_per_inch.unwrap_or(DEFAULT_DPI);
-    let image = image_from_canvas(&render_label(&text, dpi, diameter_mm)?).await?;
-    let x_offset = zone_correction(status.supply_width);
-    Ok(sdk
-        .print_all_offset(std::slice::from_ref(&image), x_offset, 0.0)
-        .await?)
+    wait_for_supply(sdk).await?;
+    LabelGeometry::from_status(&sdk.status())
 }
 
-/// The SDK places the print zone of the 1.25" laminated tape (0.81" in) without
-/// subtracting the part the M211 head does not cover, so nothing gets printed.
-fn zone_correction(supply_width: Option<f64>) -> f64 {
-    match supply_width {
-        Some(width) if (width - LAMINATED_WIDTH_INCH).abs() < 0.01 => M211_HEAD_WIDTH_INCH - width,
-        _ => 0.0,
-    }
+async fn print_label(
+    sdk: Rc<BradySdk>,
+    text: AttrValue,
+    diameter_mm: Option<f64>,
+    geometry: LabelGeometry,
+) -> Result<(), FrontendError> {
+    log::debug!("Label {text:?} with {geometry:?} on {:?}", sdk.status());
+    let image = image_from_canvas(&render_label(&text, diameter_mm, &geometry)?).await?;
+    Ok(sdk
+        .print_all_offset(std::slice::from_ref(&image), geometry.x_offset_inch, 0.0)
+        .await?)
 }
 
 /// Waits until the printer reported its supply, the SDK fails printing before.
@@ -255,16 +294,17 @@ async fn wait_for_supply(sdk: &BradySdk) -> Result<(), FrontendError> {
     }
 }
 
-/// One line of black text on the print zone, cropped to the glyphs. The text height is
-/// capped to a share of the cable diameter. The M211 feeds blank tape around each label.
+/// One line of black text on the print band, cropped to the glyphs. The text height is
+/// capped to a share of the cable diameter. The printer feeds blank tape around each label.
 fn render_label(
     text: &str,
-    dpi: f64,
     diameter_mm: Option<f64>,
+    geometry: &LabelGeometry,
 ) -> Result<HtmlCanvasElement, brady_web_sdk::Error> {
-    let height = (ZONE_HEIGHT_INCH * dpi).round();
+    let band = geometry.band_inch;
+    let height = (band * geometry.dpi).round();
     let ratio = diameter_mm.map_or(MAX_TEXT_RATIO, |d| {
-        (DIAMETER_TEXT_RATIO * d / MM_PER_INCH / ZONE_HEIGHT_INCH).min(MAX_TEXT_RATIO)
+        (DIAMETER_TEXT_RATIO * d / MM_PER_INCH / band).min(MAX_TEXT_RATIO)
     });
     let font = |size: f64| format!("bold {size:.1}px sans-serif");
     let canvas: HtmlCanvasElement = window()

@@ -26,6 +26,8 @@ pub enum FrontendError {
     Printer(#[from] brady_web_sdk::Error),
     #[error("Printer did not report its supply")]
     PrinterNoSupply,
+    #[error("Unsupported tape, only continuous tape is supported")]
+    UnsupportedTape,
 }
 
 impl IntoPropValue<Html> for &FrontendError {
@@ -82,6 +84,9 @@ impl IntoPropValue<Html> for &FrontendError {
             }
             FrontendError::PrinterNoSupply => {
                 html!(<Alert inline=true title={"Drucker hat kein Etikett gemeldet".to_string()} r#type={AlertType::Danger} />)
+            }
+            FrontendError::UnsupportedTape => {
+                html!(<Alert inline=true title={"Etikettentyp wird nicht unterstützt (nur Endlosband)".to_string()} r#type={AlertType::Danger} />)
             }
         }
     }
