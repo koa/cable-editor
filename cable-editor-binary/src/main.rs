@@ -57,8 +57,16 @@ async fn static_handler(req: HttpRequest) -> impl Responder {
     };
     let hash = content.metadata.sha256_hash();
     let etag = EntityTag::new_strong(hash.iter().map(|b| format!("{b:02x}")).collect());
-    // Always revalidate, unchanged files are answered with 304 without body
-    let cache_control = CacheControl(vec![CacheDirective::NoCache]);
+    // Hashed files never change, others are revalidated and answered with 304 if unchanged
+    let cache_control = CacheControl(if is_hashed(path) {
+        vec![
+            CacheDirective::Public,
+            CacheDirective::MaxAge(31_536_000),
+            CacheDirective::Extension("immutable".into(), None),
+        ]
+    } else {
+        vec![CacheDirective::NoCache]
+    });
     let unchanged = match req.get_header::<IfNoneMatch>() {
         Some(IfNoneMatch::Any) => true,
         Some(IfNoneMatch::Items(tags)) => tags.iter().any(|tag| tag.weak_eq(&etag)),
@@ -75,6 +83,18 @@ async fn static_handler(req: HttpRequest) -> impl Responder {
         .insert_header(ETag(etag))
         .insert_header(cache_control)
         .body(content.data.into_owned())
+}
+
+/// Trunk output with a content hash in its name, e.g. `app-525c874bfe2010a5_bg.wasm`.
+fn is_hashed(path: &str) -> bool {
+    let Some((stem, _)) = path.rsplit_once('.') else {
+        return false;
+    };
+    let stem = stem.strip_suffix("_bg").unwrap_or(stem);
+    !path.contains('/')
+        && stem
+            .rsplit_once('-')
+            .is_some_and(|(_, hash)| hash.len() >= 8 && hash.chars().all(|c| c.is_ascii_hexdigit()))
 }
 
 async fn graphql(
