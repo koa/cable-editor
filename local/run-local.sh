@@ -5,7 +5,7 @@ echo DATABASE_URL="postgres://postgres:postgres@localhost:5432/cable" >.env
 cargo install --locked trunk
 
 
-(cd cable-editor-frontent; trunk build)
+(cd cable-editor-frontend; trunk build)
 
 cargo build
 
@@ -36,4 +36,4 @@ podman run --name auth-server \
   -p 8081:8080 \
   -d quay.io/keycloak/keycloak:latest start-dev --import-realm
 
-(cd cable-editor-frontent; trunk serve)
+(cd cable-editor-frontend; trunk serve)
