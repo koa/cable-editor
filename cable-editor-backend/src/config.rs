@@ -19,8 +19,9 @@ impl Settings {
     pub fn auth_client_id(&self) -> &str {
         &self.auth_client_id
     }
+    /// Without trailing slash, it is appended to for discovery and must match the token `iss`.
     pub fn auth_issuer(&self) -> &str {
-        &self.auth_issuer
+        self.auth_issuer.trim_end_matches('/')
     }
 
     pub fn server_port(&self) -> u16 {

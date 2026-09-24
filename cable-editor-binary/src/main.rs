@@ -183,7 +183,7 @@ async fn user_info_url() -> Result<String, BackendError> {
     if let Some(url) = CONFIG.user_info_url() {
         return Ok(url.to_string());
     }
-    let issuer = CONFIG.auth_issuer().trim_end_matches('/');
+    let issuer = CONFIG.auth_issuer();
     let discovery: OidcDiscovery = Client::new()
         .get(format!("{issuer}/.well-known/openid-configuration"))
         .send()
