@@ -51,7 +51,7 @@ pub struct SchachtCablePath {
 impl SchachtCableEnd {
     /// Cable label text: "<cable>-<destination>".
     pub fn label_text(&self) -> String {
-        format!("{}-{}", self.cable.name, self.path.far_schacht.name)
+        format!("{} - {}", self.cable.name, self.path.far_schacht.name)
     }
 }
 
