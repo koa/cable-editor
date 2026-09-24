@@ -1,7 +1,7 @@
 use crate::{
     components::{
         cabinet::edit::EditCabinet,
-        label_printer::{LabelPrinter, PrintLabelButton},
+        label_printer::{LabelPrinter, PrintLabelButton, use_printer_supported},
         plan_link::PlanLink,
     },
     graphql::authenticated::schacht_cables::{SchachtCableEnd, SchachtCables},
@@ -64,6 +64,7 @@ fn CabinetContent(props: &CabinetOverviewProps) -> HtmlResult {
         cables
     });
     let (entries, _) = use_table_data(MemoizedTableModel::new(cables));
+    let printing = use_printer_supported();
     let schacht = match &*schacht {
         Ok(schacht) => schacht,
         Err(e) => return Ok(e.into_prop_value()),
@@ -78,7 +79,7 @@ fn CabinetContent(props: &CabinetOverviewProps) -> HtmlResult {
             <TableColumn<Columns> label="Kabel" index={Columns::Cable}/>
             <TableColumn<Columns> label="Ziel" index={Columns::Destination}/>
             <TableColumn<Columns> label="Etikett" index={Columns::Label}/>
-            <TableColumn<Columns> index={Columns::Print}/>
+            { for printing.then(|| html_nested!(<TableColumn<Columns> index={Columns::Print}/>)) }
         </TableHeader<Columns>>
     };
     Ok(html! {
@@ -97,7 +98,9 @@ fn CabinetContent(props: &CabinetOverviewProps) -> HtmlResult {
             </nav>
             <Title>{schacht.name.as_str()}</Title>
             <EditCabinet {plan_id} {cabinet_id}/>
-            <LabelPrinter/>
+            if printing {
+                <LabelPrinter/>
+            }
             <Table<Columns, UseTableData<Columns, MemoizedTableModel<SchachtCableEnd>>>
                 mode={TableMode::Compact}
                 grid={TableGridMode::Medium}

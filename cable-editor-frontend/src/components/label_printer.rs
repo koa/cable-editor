@@ -5,14 +5,14 @@ use futures::{
     future::{Either, ready, select},
 };
 use patternfly_yew::prelude::{
-    ActionGroup, Alert, AlertType, Backdrop, Bullseye, Button, ButtonType, ButtonVariant, Form,
-    FormGroup, Modal, ModalVariant, TextInput, TextInputType, use_backdrop,
+    ActionGroup, Backdrop, Bullseye, Button, ButtonType, ButtonVariant, Form, FormGroup, Modal,
+    ModalVariant, TextInput, TextInputType, use_backdrop,
 };
 use std::{future::Future, pin::pin, rc::Rc, time::Duration};
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, Storage, window};
 use yew::{
-    AttrValue, Callback, Html, Properties, UseStateHandle, function_component, html,
+    AttrValue, Callback, Html, Properties, UseStateHandle, function_component, hook, html,
     html::IntoPropValue,
     platform::{spawn_local, time::sleep},
     prelude::SubmitEvent,
@@ -34,23 +34,26 @@ const M511_HEAD_INCH: f64 = 1.44;
 const M211_FEED_INCH: f64 = 0.87;
 const DEFAULT_FEED_INCH: f64 = 0.125;
 
-/// Printer connection and status, shown above the labels.
-#[function_component]
-pub fn LabelPrinter() -> Html {
+/// Whether the browser can talk to the printer (Web Bluetooth), false until checked.
+#[hook]
+pub fn use_printer_supported() -> bool {
     let brady = use_brady().expect("Missing BradyProvider");
-    let error = use_state(|| None);
-    let busy = use_state(|| false);
-    let supported = use_state(|| true);
+    let supported = use_state(|| false);
     {
         let (sdk, supported) = (brady.sdk.clone(), supported.clone());
         use_effect_with((), move |_| {
             spawn_local(async move { supported.set(sdk.is_supported_browser().await) });
         });
     }
-    if !*supported {
-        return html!(<Alert inline=true title="Dieser Browser unterstützt kein Web Bluetooth (Chrome oder Edge verwenden)" r#type={AlertType::Info}/>);
-    }
+    *supported
+}
 
+/// Printer connection and status, shown above the labels.
+#[function_component]
+pub fn LabelPrinter() -> Html {
+    let brady = use_brady().expect("Missing BradyProvider");
+    let error = use_state(|| None);
+    let busy = use_state(|| false);
     let status = &brady.status;
     let toggle = {
         let (sdk, connected) = (brady.sdk.clone(), status.connected);
