@@ -1,7 +1,10 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-
+    <!-- Must precede any module script -->
+    <script type="importmap">
+        { "imports": { "brady-web-sdk": "/brady-web-sdk/bundle.js" } }
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link data-trunk rel="scss" href="assets/style.scss">
     <!-- This path needs to be here, otherwise icons won't render correctly -->
@@ -11,6 +14,8 @@
     <link data-trunk rel="copy-dir" href="node/node_modules/leaflet/dist/images">
     <link data-trunk rel="css" href="node/node_modules/leaflet/dist/leaflet.css">
     <script data-trunk src="node/node_modules/leaflet/dist/leaflet.js"></script>
+    <!-- Brady SDK loads its wasm and pdf.js relative to bundle.js -->
+    <link data-trunk rel="copy-dir" href="node/node_modules/@bradycorporation/brady-web-sdk/dist" data-target-path="brady-web-sdk">
 
 </head>
 <body>

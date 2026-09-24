@@ -744,6 +744,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "brady-web-sdk"
+version = "0.1.0"
+source = "git+https://git.panter.ch/open-source/brady-web-sdk-rs.git#fb71580fc2951cfc73ac9a68eab8ee1cb65188ac"
+dependencies = [
+ "js-sys",
+ "thiserror 2.0.20",
+ "tokio",
+ "tokio-stream",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "yew",
+]
+
+[[package]]
 name = "brotli"
 version = "8.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -855,6 +870,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
+ "brady-web-sdk",
  "cable-editor-backend",
  "console_error_panic_hook",
  "cynic",
@@ -5231,6 +5247,7 @@ dependencies = [
  "futures-core",
  "pin-project-lite",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]

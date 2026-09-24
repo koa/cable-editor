@@ -22,6 +22,8 @@ pub enum FrontendError {
     PlanNotFound(i32),
     #[error("Expected data not found")]
     NotFound,
+    #[error("Printer error: {0}")]
+    Printer(#[from] brady_web_sdk::Error),
 }
 
 impl IntoPropValue<Html> for &FrontendError {
@@ -72,6 +74,9 @@ impl IntoPropValue<Html> for &FrontendError {
             }
             FrontendError::NotFound => {
                 html!(<Alert inline=true title={"Daten nicht gefunden".to_string()} r#type={AlertType::Danger} />)
+            }
+            FrontendError::Printer(e) => {
+                html!(<Alert inline=true title={format!("Druckfehler: {e}")} r#type={AlertType::Danger} />)
             }
         }
     }

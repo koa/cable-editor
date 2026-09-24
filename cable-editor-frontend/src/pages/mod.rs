@@ -8,6 +8,7 @@ pub mod planning;
 pub mod router;
 
 use crate::icons::IconBlueprintNode;
+use brady_web_sdk::BradyProvider;
 use crate::{
     error::FrontendError,
     graphql::{
@@ -125,13 +126,15 @@ pub fn main_oauth2(props: &MainOAuth2Props) -> Html {
         <BackdropViewer>
             <ToastViewer>
                 <Authenticated>
-                    <Router<AppRoute>>
-                        <Page {brand} sidebar={html_nested! {<PageSidebar><Sidebar/></PageSidebar>}}>
-                            <Switch<AppRoute>
-                                render = { AppRoute::content}
-                            />
-                        </Page>
-                    </Router<AppRoute>>
+                    <BradyProvider>
+                        <Router<AppRoute>>
+                            <Page {brand} sidebar={html_nested! {<PageSidebar><Sidebar/></PageSidebar>}}>
+                                <Switch<AppRoute>
+                                    render = { AppRoute::content}
+                                />
+                            </Page>
+                        </Router<AppRoute>>
+                    </BradyProvider>
                 </Authenticated>
                 <NotAuthenticated>
                     <AutoLogin/>

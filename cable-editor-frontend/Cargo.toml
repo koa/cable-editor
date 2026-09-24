@@ -34,6 +34,7 @@ ouroboros = "0.18"
 uuid = { version = "1.24.0", features = ["v4", "js"] }
 strum = { version = "0.28.0", features = ["derive"] }
 itertools = "0.15"
+brady-web-sdk = { git = "https://git.panter.ch/open-source/brady-web-sdk-rs.git" }
 
 [build-dependencies]
 cable-editor-backend = { path = "../cable-editor-backend" }

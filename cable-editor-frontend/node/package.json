@@ -8,6 +8,7 @@
   "dependencies": {
     "@patternfly/patternfly": "^6.4.0",
     "@fortawesome/fontawesome-free": "7.2.0",
-    "leaflet": "1.9.4"
+    "leaflet": "1.9.4",
+    "@bradycorporation/brady-web-sdk": "3.3.2"
   }
 }
