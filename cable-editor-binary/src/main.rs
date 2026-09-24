@@ -3,8 +3,9 @@ use actix_4_jwt_auth::{
     biscuit::{Validation, ValidationOptions},
 };
 use actix_web::{
-    App, HttpRequest, HttpResponse, HttpServer, Responder, get,
+    App, HttpMessage, HttpRequest, HttpResponse, HttpServer, Responder, get,
     guard::Post,
+    http::header::{CacheControl, CacheDirective, ETag, EntityTag, IfNoneMatch},
     middleware::Logger,
     web,
     web::{Data, resource},
@@ -42,32 +43,38 @@ struct Assets;
 
 async fn static_handler(req: HttpRequest) -> impl Responder {
     // Den Pfad aus der URL extrahieren (catch-all)
-    let mut path = req.match_info().query("filename");
-
-    if path.is_empty() {
-        path = "index.html";
+    let path = match req.match_info().query("filename") {
+        "" => "index.html",
+        path => path,
+    };
+    // Fallback für Yew (SPA): Wenn eine Route nicht gefunden wird,
+    // liefere die index.html aus, damit der Yew-Router übernehmen kann.
+    let Some((path, content)) = Assets::get(path)
+        .map(|content| (path, content))
+        .or_else(|| Assets::get("index.html").map(|content| ("index.html", content)))
+    else {
+        return HttpResponse::NotFound().body("404 Not Found");
+    };
+    let hash = content.metadata.sha256_hash();
+    let etag = EntityTag::new_strong(hash.iter().map(|b| format!("{b:02x}")).collect());
+    // Always revalidate, unchanged files are answered with 304 without body
+    let cache_control = CacheControl(vec![CacheDirective::NoCache]);
+    let unchanged = match req.get_header::<IfNoneMatch>() {
+        Some(IfNoneMatch::Any) => true,
+        Some(IfNoneMatch::Items(tags)) => tags.iter().any(|tag| tag.weak_eq(&etag)),
+        None => false,
+    };
+    if unchanged {
+        return HttpResponse::NotModified()
+            .insert_header(ETag(etag))
+            .insert_header(cache_control)
+            .finish();
     }
-
-    // Versuchen, die Datei zu laden
-    match Assets::get(path) {
-        Some(content) => {
-            let mime = from_path(path).first_or_octet_stream();
-            HttpResponse::Ok()
-                .content_type(mime.as_ref())
-                .body(content.data.into_owned())
-        }
-        None => {
-            // Fallback für Yew (SPA): Wenn eine Route nicht gefunden wird,
-            // liefere die index.html aus, damit der Yew-Router übernehmen kann.
-            if let Some(index) = Assets::get("index.html") {
-                HttpResponse::Ok()
-                    .content_type("text/html")
-                    .body(index.data.into_owned())
-            } else {
-                HttpResponse::NotFound().body("404 Not Found")
-            }
-        }
-    }
+    HttpResponse::Ok()
+        .content_type(from_path(path).first_or_octet_stream().as_ref())
+        .insert_header(ETag(etag))
+        .insert_header(cache_control)
+        .body(content.data.into_owned())
 }
 
 async fn graphql(
