@@ -142,7 +142,7 @@ async fn fetch_user_info(access_token_str: String) -> Result<UserInfo, BackendEr
     let user_info_url = CONFIG
         .user_info_url()
         .map(Cow::Borrowed)
-        .unwrap_or_else(|| format!("{issuer}/protocol/openid-connect/userinfo").into());
+        .unwrap_or_else(|| format!("{issuer}/api/oidc/userinfo").into());
     let response = client
         .get(user_info_url.as_ref())
         .bearer_auth(access_token_str)
