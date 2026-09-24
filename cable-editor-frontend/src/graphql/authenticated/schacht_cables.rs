@@ -48,6 +48,13 @@ pub struct SchachtCablePath {
     pub far_schacht: CableSegmentEndSchacht,
 }
 
+impl SchachtCableEnd {
+    /// Cable label text: "<cable>-<destination>".
+    pub fn label_text(&self) -> String {
+        format!("{}-{}", self.cable.name, self.path.far_schacht.name)
+    }
+}
+
 impl SchachtCables {
     pub async fn fetch(
         credentials: Option<&OAuth2Context>,

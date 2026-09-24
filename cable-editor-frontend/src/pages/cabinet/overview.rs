@@ -1,5 +1,9 @@
 use crate::{
-    components::{cabinet::edit::EditCabinet, plan_link::PlanLink},
+    components::{
+        cabinet::edit::EditCabinet,
+        label_printer::{LabelPrinter, PrintLabelButton},
+        plan_link::PlanLink,
+    },
     graphql::authenticated::schacht_cables::{SchachtCableEnd, SchachtCables},
     pages::router::{AppRoute, CableView, PlanView},
 };
@@ -24,6 +28,8 @@ pub struct CabinetOverviewProps {
 enum Columns {
     Cable,
     Destination,
+    Label,
+    Print,
 }
 
 impl TableEntryRenderer<Columns> for SchachtCableEnd {
@@ -37,6 +43,8 @@ impl TableEntryRenderer<Columns> for SchachtCableEnd {
                 Cell::new(html! {<PlanLink {to}>{self.cable.name.as_str()}</PlanLink>})
             }
             Columns::Destination => Cell::new(self.path.far_schacht.name.as_str().into()),
+            Columns::Label => Cell::new(self.label_text().into_prop_value()),
+            Columns::Print => Cell::new(html!(<PrintLabelButton text={self.label_text()}/>)),
         }
     }
 }
@@ -69,6 +77,8 @@ fn CabinetContent(props: &CabinetOverviewProps) -> HtmlResult {
         <TableHeader<Columns>>
             <TableColumn<Columns> label="Kabel" index={Columns::Cable}/>
             <TableColumn<Columns> label="Ziel" index={Columns::Destination}/>
+            <TableColumn<Columns> label="Etikett" index={Columns::Label}/>
+            <TableColumn<Columns> index={Columns::Print}/>
         </TableHeader<Columns>>
     };
     Ok(html! {
@@ -87,6 +97,7 @@ fn CabinetContent(props: &CabinetOverviewProps) -> HtmlResult {
             </nav>
             <Title>{schacht.name.as_str()}</Title>
             <EditCabinet {plan_id} {cabinet_id}/>
+            <LabelPrinter/>
             <Table<Columns, UseTableData<Columns, MemoizedTableModel<SchachtCableEnd>>>
                 mode={TableMode::Compact}
                 grid={TableGridMode::Medium}
