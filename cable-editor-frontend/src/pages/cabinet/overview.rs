@@ -1,0 +1,110 @@
+use crate::{
+    components::{cabinet::edit::EditCabinet, plan_link::PlanLink},
+    graphql::authenticated::schacht_cables::{SchachtCableEnd, SchachtCables},
+    pages::router::{AppRoute, CableView, PlanView},
+};
+use patternfly_yew::prelude::{
+    Cell, CellContext, MemoizedTableModel, Spinner, Table, TableColumn, TableEntryRenderer,
+    TableGridMode, TableHeader, TableMode, Title, UseTableData, use_table_data,
+};
+use yew::{
+    Html, HtmlResult, Properties, Suspense, function_component, html, html::IntoPropValue,
+    html_nested, suspense::use_future_with, use_memo,
+};
+use yew_nested_router::components::Link;
+use yew_oauth2::hook::use_auth_state;
+
+#[derive(Properties, PartialEq)]
+pub struct CabinetOverviewProps {
+    pub plan_id: i32,
+    pub cabinet_id: i32,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+enum Columns {
+    Cable,
+    Destination,
+}
+
+impl TableEntryRenderer<Columns> for SchachtCableEnd {
+    fn render_cell(&self, context: CellContext<'_, Columns>) -> Cell {
+        match context.column {
+            Columns::Cable => {
+                let to = PlanView::Cable {
+                    id: self.cable.id,
+                    view: CableView::Edit,
+                };
+                Cell::new(html! {<PlanLink {to}>{self.cable.name.as_str()}</PlanLink>})
+            }
+            Columns::Destination => Cell::new(self.path.far_schacht.name.as_str().into()),
+        }
+    }
+}
+
+#[function_component]
+fn CabinetContent(props: &CabinetOverviewProps) -> HtmlResult {
+    let auth_state = use_auth_state();
+    let schacht = use_future_with((auth_state, props.cabinet_id), |deps| async move {
+        SchachtCables::fetch(deps.0.as_ref(), deps.1).await
+    })?;
+    let cables = use_memo((*schacht).as_ref().ok().cloned(), |schacht| {
+        let mut cables = schacht
+            .as_ref()
+            .map(|s| s.cables.clone())
+            .unwrap_or_default();
+        cables.sort_by(|a, b| a.cable.name.cmp(&b.cable.name));
+        cables
+    });
+    let (entries, _) = use_table_data(MemoizedTableModel::new(cables));
+    let schacht = match &*schacht {
+        Ok(schacht) => schacht,
+        Err(e) => return Ok(e.into_prop_value()),
+    };
+
+    let CabinetOverviewProps {
+        plan_id,
+        cabinet_id,
+    } = *props;
+    let header = html_nested! {
+        <TableHeader<Columns>>
+            <TableColumn<Columns> label="Kabel" index={Columns::Cable}/>
+            <TableColumn<Columns> label="Ziel" index={Columns::Destination}/>
+        </TableHeader<Columns>>
+    };
+    Ok(html! {
+        <>
+            <nav class="pf-v6-c-breadcrumb" aria-label="breadcrumb">
+                <ol class="pf-v6-c-breadcrumb__list">
+                    <li class="pf-v6-c-breadcrumb__item">
+                        <Link<AppRoute> to={AppRoute::Plan { plan_id, view: PlanView::ListOfCabinets }} class="pf-v6-c-breadcrumb__link">
+                            {"Schächte"}
+                        </Link<AppRoute>>
+                    </li>
+                    <li class="pf-v6-c-breadcrumb__item">
+                        <span class="pf-v6-c-breadcrumb__link pf-m-current">{schacht.name.as_str()}</span>
+                    </li>
+                </ol>
+            </nav>
+            <Title>{schacht.name.as_str()}</Title>
+            <EditCabinet {plan_id} {cabinet_id}/>
+            <Table<Columns, UseTableData<Columns, MemoizedTableModel<SchachtCableEnd>>>
+                mode={TableMode::Compact}
+                grid={TableGridMode::Medium}
+                caption="Kabel"
+                {header}
+                {entries}
+            />
+        </>
+    })
+}
+
+/// Schacht overview: panels and cables ending here.
+#[function_component]
+pub fn CabinetOverview(props: &CabinetOverviewProps) -> Html {
+    let fallback = html!(<Spinner/>);
+    html! {
+        <Suspense {fallback}>
+            <CabinetContent plan_id={props.plan_id} cabinet_id={props.cabinet_id}/>
+        </Suspense>
+    }
+}

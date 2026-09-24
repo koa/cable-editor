@@ -12,6 +12,7 @@ pub mod list_schacht_typ;
 pub mod netbox_sync;
 pub mod panel_overview;
 pub mod plan_details;
+pub mod schacht_cables;
 pub mod select_duct;
 
 #[cynic::schema("authenticated")]

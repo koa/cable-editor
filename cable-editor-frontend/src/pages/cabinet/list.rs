@@ -1,7 +1,8 @@
 use crate::{
-    components::{cabinet::edit::EditCabinet, table::ListModel},
+    components::{cabinet::edit::EditCabinet, plan_link::PlanLink, table::ListModel},
     error::FrontendError,
     graphql::authenticated::list_schacht::{SchachtListEntry, fetch_schacht_list},
+    pages::router::{CabinetView, PlanView},
     util::get_credentials,
 };
 use patternfly_yew::prelude::{
@@ -151,7 +152,13 @@ enum Columns {
 impl TableEntryRenderer<Columns> for (SchachtListEntry, i32) {
     fn render_cell(&self, context: CellContext<'_, Columns>) -> Cell {
         match context.column {
-            Columns::Name => Cell::new(self.0.name.as_str().into_prop_value()),
+            Columns::Name => {
+                let to = PlanView::Cabinet {
+                    id: self.0.id,
+                    view: CabinetView::Overview,
+                };
+                Cell::new(html! {<PlanLink {to}>{self.0.name.as_str()}</PlanLink>})
+            }
             Columns::Cabinets => Cell::new(self.0.root_panels.len().into_prop_value()),
         }
     }

@@ -3,7 +3,7 @@ use crate::{
     error::FrontendError,
     graphql::authenticated::plan_details::PlanDetails,
     pages::{
-        cabinet::list::ListOfCabinets,
+        cabinet::{list::ListOfCabinets, overview::CabinetOverview},
         cable::edit::EditCable,
         list_of_cables::ListOfCables,
         panel::EditPanel,
@@ -172,7 +172,7 @@ pub enum CableView {
 
 #[derive(Debug, Clone, PartialEq, Eq, Target)]
 pub enum CabinetView {
-    Edit,
+    Overview,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Target)]
 pub enum PanelView {
@@ -264,7 +264,7 @@ impl CableView {
 impl CabinetView {
     fn content(self, plan_id: i32, cabinet_id: i32) -> Html {
         match self {
-            CabinetView::Edit => format!("Edit Cabinet {cabinet_id}").into_prop_value(),
+            CabinetView::Overview => html!(<CabinetOverview {plan_id} {cabinet_id}/>),
         }
     }
 }
