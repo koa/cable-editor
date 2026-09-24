@@ -9,9 +9,7 @@ use yew::{
     html::IntoPropValue, platform::spawn_local, use_effect_with, use_state,
 };
 
-/// Self-laminating cable label tape the layout is made for.
-const SUPPLY: &str = "M21-1250-427";
-/// Height of the white print zone of SUPPLY.
+/// Height of the white print zone of the M21-1250-427 self-laminating tape.
 const ZONE_HEIGHT_INCH: f64 = 0.5;
 const DEFAULT_DPI: f64 = 300.0;
 
@@ -65,18 +63,12 @@ pub fn LabelPrinter() -> Html {
     } else {
         ("Drucker verbinden", "Kein Drucker verbunden".to_string())
     };
-    let wrong_supply = status
-        .supply_y_number
-        .as_deref()
-        .filter(|y| !y.contains(SUPPLY))
-        .map(|y| html!(<Alert inline=true title={format!("Eingelegtes Etikett {y} statt {SUPPLY}")} r#type={AlertType::Warning}/>));
     html! {
         <>
             <div style="display: flex; align-items: center; gap: 12px;">
                 <Button variant={ButtonVariant::Secondary} {label} onclick={toggle} disabled={*busy}/>
                 <span>{description}</span>
             </div>
-            {wrong_supply}
             {error.as_ref().map(IntoPropValue::<Html>::into_prop_value)}
         </>
     }
@@ -125,7 +117,12 @@ async fn print_label(sdk: Rc<BradySdk>, text: AttrValue) -> Result<(), FrontendE
     if !sdk.is_connected() {
         sdk.connect().await?;
     }
-    let dpi = sdk.status().dots_per_inch.unwrap_or(DEFAULT_DPI);
+    // SDK defaults to 0 if the printer did not report it
+    let dpi = sdk
+        .status()
+        .dots_per_inch
+        .filter(|dpi| *dpi > 0.0)
+        .unwrap_or(DEFAULT_DPI);
     let image = image_from_canvas(&render_label(&text, dpi)?).await?;
     Ok(sdk.print(&image).await?)
 }
