@@ -12,7 +12,7 @@ Cargo workspace (`default-members = cable-editor-binary`):
 
 - `cable-editor-backend` — library: Diesel models/migrations, async-graphql schemas, NetBox client, INTERLIS2 export (`export.rs`).
 - `cable-editor-binary` — actix-web server (`main.rs`): wires OIDC/JWT auth, DB pool, Prometheus, and embeds `cable-editor-frontend/dist` via `rust-embed` (SPA fallback to `index.html`).
-- `cable-editor-frontend` — Yew + PatternFly + Leaflet SPA, built with Trunk for `wasm32-unknown-unknown`. Not built by plain `cargo build` from the root.
+- `cable-editor-frontend` — Yew + PatternFly + Leaflet SPA, built with Trunk for `wasm32-unknown-unknown`. Not built by plain `cargo build` from the root. Label printing uses the external `brady-web-sdk` crate (git dependency, `https://git.panter.ch/open-source/brady-web-sdk-rs.git`, pinned in `Cargo.lock`).
 - `cable-editor-chart` — Helm chart; CI (`.github/workflows/build-and-publish.yml`) pushes the Docker image and chart to GHCR on pushes to `master`.
 
 ## Commands
@@ -30,6 +30,7 @@ trunk build [--release]           # outputs dist/, which the binary embeds
 cargo run                         # API on :8080, metrics/health on :9080 (port + 1000)
 cargo build -p cable-editor-frontend --target wasm32-unknown-unknown   # typecheck frontend
 cargo clippy --workspace          # (frontend needs the wasm target to compile cleanly)
+# The frontend build script links the backend, so libpq must be installed (-lpq) even for wasm checks.
 
 # Release container
 docker build .
@@ -62,4 +63,15 @@ Changes to panels/ports are made inside a `plan` (status `Open` / `Implemented` 
 Diesel 2 with `diesel-async` + deadpool; PostGIS geometries via `postgis_diesel`. Table definitions are in `backend/src/db/schema.rs`, entities in `backend/src/db/entity/`. Note `diesel.toml` points `print_schema` at `src/schema.rs`, but the live file is `src/db/schema.rs` — move/merge the output if you regenerate with `diesel migration run`.
 
 ### Frontend
-`pages/router.rs` defines `AppRoute` (yew-nested-router) and the sidebar; plan-scoped views are nested under `AppRoute::Plan { plan_id, view }`. Pages live in `pages/`, reusable pieces in `components/`. Auth uses `yew-oauth2` (OpenID); `graphql::query`/`mutate` attach the bearer token from `OAuth2Context`. The GraphQL URL is derived from `window.location`, which is why `trunk serve` proxies to the backend.
+`pages/router.rs` defines `AppRoute` (yew-nested-router) and the sidebar; plan-scoped views are nested under `AppRoute::Plan { plan_id, view }`. Pages live in `pages/`, reusable pieces in `components/`. `PlanView::Cabinet { view: CabinetView::Overview }` (`pages/cabinet/overview.rs`) is the Schacht overview: panel editor plus the cables ending there, with label printing. Auth uses `yew-oauth2` (OpenID); `graphql::query`/`mutate` attach the bearer token from `OAuth2Context`. The GraphQL URL is derived from `window.location`, which is why `trunk serve` proxies to the backend.
+
+### Cable label printing (Brady M211)
+- Printer: Brady M211 over Web Bluetooth (Chrome/Edge only), tape M21-1250-427 (self-laminating, 1.25" wide, continuous). Label text is `"<cable> - <far schacht>"` (`graphql/authenticated/schacht_cables.rs`; `Schacht.cables` paths are oriented from that Schacht, so `farSchacht` is the destination).
+- Wiring: `@bradycorporation/brady-web-sdk` in `node/package.json`; `index.html` maps it with an importmap (must precede any module script) and copies its whole `dist/` to `/brady-web-sdk/` (the bundle loads its wasm/pdf.js relative to itself). `BradyProvider` wraps the router in `pages/mod.rs` so the connection survives navigation.
+- `components/label_printer.rs`: printer toolbar, print button with a cable diameter dialog (last value in `localStorage`), label rendering on a canvas. Text height is capped at 70% of the diameter, the label is cropped to the glyphs.
+- SDK quirks handled there, verify on hardware before changing:
+  - Printing before the printer reported its supply fails (`Invalid typed array length: -1`), so it waits for `supply_width`.
+  - The SDK scales the image height to the 0.43" print zone; label length follows the image aspect ratio. The M211 adds ~0.87" blank feed per label (hard-coded in the SDK).
+  - On the 1.25" tape the SDK places the zone (0.81" in) without subtracting the 0.62" the 0.63" head does not cover, which yields an empty job and a print timeout; `zone_correction` shifts it back via the x print offset.
+  - `supplyYNumber` is numeric (e.g. `4900577`), not the part name.
+- Updating the crate: push it, then change only its rev in `Cargo.lock` (`cargo update -p brady-web-sdk` also churns unrelated `windows-sys` entries). To test local crate changes before pushing: `--config 'patch."https://git.panter.ch/open-source/brady-web-sdk-rs.git".brady-web-sdk.path="../brady-web-sdk"'` (revert `Cargo.lock` afterwards).
