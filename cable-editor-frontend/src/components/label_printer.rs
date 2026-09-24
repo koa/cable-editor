@@ -156,10 +156,10 @@ async fn wait_for_supply(sdk: &BradySdk) -> Result<(), FrontendError> {
     }
 }
 
-/// One line of black text filling the print zone height, as long as the text needs.
+/// One line of black text filling the print zone height, cropped to the glyphs.
+/// The M211 already feeds blank tape before and after each label.
 fn render_label(text: &str, dpi: f64) -> Result<HtmlCanvasElement, brady_web_sdk::Error> {
     let height = (ZONE_HEIGHT_INCH * dpi).round();
-    let margin = (height * 0.2).round();
     let font = format!("bold {}px sans-serif", (height * 0.8).round());
     let canvas: HtmlCanvasElement = window()
         .and_then(|w| w.document())
@@ -172,7 +172,9 @@ fn render_label(text: &str, dpi: f64) -> Result<HtmlCanvasElement, brady_web_sdk
         .and_then(|c| c.dyn_into().ok())
         .expect("Missing 2d context");
     context.set_font(&font);
-    let width = (context.measure_text(text)?.width() + 2.0 * margin).ceil();
+    let metrics = context.measure_text(text)?;
+    let left = metrics.actual_bounding_box_left();
+    let width = (left + metrics.actual_bounding_box_right()).ceil();
     canvas.set_width(width as u32);
     canvas.set_height(height as u32);
     // Resizing resets the context state
@@ -181,6 +183,6 @@ fn render_label(text: &str, dpi: f64) -> Result<HtmlCanvasElement, brady_web_sdk
     context.fill_rect(0.0, 0.0, width, height);
     context.set_fill_style_str("black");
     context.set_text_baseline("middle");
-    context.fill_text(text, margin, height / 2.0)?;
+    context.fill_text(text, left, height / 2.0)?;
     Ok(canvas)
 }
