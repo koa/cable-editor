@@ -1,17 +1,24 @@
 use crate::error::FrontendError;
 use brady_web_sdk::{BradySdk, image_from_canvas, use_brady};
+use futures::{
+    StreamExt,
+    future::{Either, ready, select},
+};
 use patternfly_yew::prelude::{Alert, AlertType, Button, ButtonVariant};
-use std::{future::Future, rc::Rc};
+use std::{future::Future, pin::pin, rc::Rc, time::Duration};
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, window};
 use yew::{
     AttrValue, Callback, Html, Properties, UseStateHandle, function_component, html,
-    html::IntoPropValue, platform::spawn_local, use_effect_with, use_state,
+    html::IntoPropValue,
+    platform::{spawn_local, time::sleep},
+    use_effect_with, use_state,
 };
 
 /// Height of the white print zone of the M21-1250-427 self-laminating tape.
 const ZONE_HEIGHT_INCH: f64 = 0.5;
 const DEFAULT_DPI: f64 = 300.0;
+const SUPPLY_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Printer connection and status, shown above the labels.
 #[function_component]
@@ -117,14 +124,21 @@ async fn print_label(sdk: Rc<BradySdk>, text: AttrValue) -> Result<(), FrontendE
     if !sdk.is_connected() {
         sdk.connect().await?;
     }
-    // SDK defaults to 0 if the printer did not report it
-    let dpi = sdk
-        .status()
-        .dots_per_inch
-        .filter(|dpi| *dpi > 0.0)
-        .unwrap_or(DEFAULT_DPI);
+    wait_for_supply(&sdk).await?;
+    let dpi = sdk.status().dots_per_inch.unwrap_or(DEFAULT_DPI);
     let image = image_from_canvas(&render_label(&text, dpi)?).await?;
     Ok(sdk.print(&image).await?)
+}
+
+/// Waits until the printer reported its supply, the SDK fails printing before.
+async fn wait_for_supply(sdk: &BradySdk) -> Result<(), FrontendError> {
+    let supply = sdk
+        .updates()
+        .any(|status| ready(status.supply_width.is_some()));
+    match select(pin!(supply), pin!(sleep(SUPPLY_TIMEOUT))).await {
+        Either::Left((true, _)) => Ok(()),
+        _ => Err(FrontendError::PrinterNoSupply),
+    }
 }
 
 /// One line of black text filling the print zone height, as long as the text needs.
