@@ -859,6 +859,7 @@ dependencies = [
  "prometheus",
  "reqwest 0.13.4",
  "rust-embed",
+ "serde",
  "thiserror 2.0.20",
  "tokio",
  "tracing-actix-web",

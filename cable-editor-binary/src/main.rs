@@ -31,7 +31,7 @@ use mime_guess::from_path;
 use prometheus::{HistogramVec, histogram_opts};
 use reqwest::Client;
 use rust_embed::RustEmbed;
-use std::borrow::Cow;
+use serde::Deserialize;
 use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
 use tokio::sync::Mutex;
@@ -163,20 +163,36 @@ async fn graphql(
 }
 #[cached(ttl = 30)]
 async fn fetch_user_info(access_token_str: String) -> Result<UserInfo, BackendError> {
-    let client = Client::new();
-    let issuer = CONFIG.auth_issuer();
-
-    let user_info_url = CONFIG
-        .user_info_url()
-        .map(Cow::Borrowed)
-        .unwrap_or_else(|| format!("{issuer}/api/oidc/userinfo").into());
-    let response = client
-        .get(user_info_url.as_ref())
+    let response = Client::new()
+        .get(user_info_url().await?)
         .bearer_auth(access_token_str)
         .send()
-        .await?;
-
+        .await?
+        .error_for_status()?;
     Ok(response.json().await?)
+}
+
+#[derive(Deserialize)]
+struct OidcDiscovery {
+    userinfo_endpoint: String,
+}
+
+/// Configured userinfo endpoint, else the one from the issuer's discovery document.
+#[cached]
+async fn user_info_url() -> Result<String, BackendError> {
+    if let Some(url) = CONFIG.user_info_url() {
+        return Ok(url.to_string());
+    }
+    let issuer = CONFIG.auth_issuer().trim_end_matches('/');
+    let discovery: OidcDiscovery = Client::new()
+        .get(format!("{issuer}/.well-known/openid-configuration"))
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    info!("Userinfo endpoint: {}", discovery.userinfo_endpoint);
+    Ok(discovery.userinfo_endpoint)
 }
 
 async fn graphql_anonymous(
