@@ -16,7 +16,7 @@ use yew::{
     html::IntoPropValue,
     platform::{spawn_local, time::sleep},
     prelude::SubmitEvent,
-    use_effect_with, use_state,
+    use_effect_with, use_memo, use_state,
 };
 
 /// Text height relative to the print zone without a cable diameter.
@@ -133,7 +133,7 @@ pub fn PrintLabelButton(props: &PrintLabelButtonProps) -> Html {
                 backdrop.open(Backdrop::new(html! {
                     <Bullseye>
                         <Modal title="Etikett drucken" variant={ModalVariant::Small}>
-                            <DiameterForm {onsubmit} {oncancel}/>
+                            <DiameterForm {text} {geometry} {onsubmit} {oncancel}/>
                         </Modal>
                     </Bullseye>
                 }));
@@ -151,11 +151,13 @@ pub fn PrintLabelButton(props: &PrintLabelButtonProps) -> Html {
 
 #[derive(Properties, PartialEq)]
 struct DiameterFormProps {
+    text: AttrValue,
+    geometry: LabelGeometry,
     onsubmit: Callback<Option<f64>>,
     oncancel: Callback<()>,
 }
 
-/// Asks for the cable diameter in mm, empty for the largest text.
+/// Asks for the cable diameter in mm (empty for the largest text) and previews the label.
 #[function_component]
 fn DiameterForm(props: &DiameterFormProps) -> Html {
     let value = use_state(|| {
@@ -163,7 +165,26 @@ fn DiameterForm(props: &DiameterFormProps) -> Html {
             .and_then(|s| s.get_item(DIAMETER_KEY).ok().flatten())
             .unwrap_or_default()
     });
-    let valid = value.trim().is_empty() || parse_diameter(&value).is_some();
+    let diameter = parse_diameter(&value);
+    let valid = value.trim().is_empty() || diameter.is_some();
+    let preview = use_memo(
+        (props.text.clone(), diameter, props.geometry),
+        |(text, diameter, geometry)| {
+            let canvas = render_label(text, *diameter, geometry)?;
+            let length =
+                f64::from(canvas.width()) / f64::from(canvas.height()) * geometry.band_inch;
+            Ok::<_, brady_web_sdk::Error>((canvas.to_data_url()?, length * MM_PER_INCH))
+        },
+    );
+    let preview = match &*preview {
+        Ok((src, length)) => html! {
+            <>
+                <img src={src.clone()} alt={props.text.clone()} style="display: block; max-width: 100%; max-height: 48px; border: 1px solid #8a8d90;"/>
+                {format!("Etikett ca. {length:.0} mm (+{:.0} mm Vorschub)", props.geometry.feed_inch * MM_PER_INCH)}
+            </>
+        },
+        Err(e) => (&FrontendError::from(e.clone())).into_prop_value(),
+    };
     let onsubmit = {
         let (onsubmit, value) = (props.onsubmit.clone(), value.clone());
         Callback::from(move |event: SubmitEvent| {
@@ -183,6 +204,9 @@ fn DiameterForm(props: &DiameterFormProps) -> Html {
         <Form {onsubmit}>
             <FormGroup label="Kabeldurchmesser (mm)">
                 <TextInput r#type={TextInputType::Number} autofocus=true value={(*value).clone()} {onchange} placeholder="leer = maximale Schrift"/>
+            </FormGroup>
+            <FormGroup label="Vorschau">
+                {preview}
             </FormGroup>
             <ActionGroup>
                 <Button variant={ButtonVariant::Primary} r#type={ButtonType::Submit} label="Drucken" disabled={!valid}/>
