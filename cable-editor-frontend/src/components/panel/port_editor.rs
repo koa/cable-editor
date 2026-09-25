@@ -8,11 +8,11 @@ use crate::{
     util::get_credentials,
 };
 use patternfly_yew::prelude::{
-    ActionGroup, Button, ButtonVariant, Dropdown, Icon, MenuAction, Spinner, TextInput,
+    ActionGroup, Button, ButtonVariant, FormSelect, FormSelectOption, Icon, Spinner, TextInput,
     ToggleGroup, ToggleGroupItem,
 };
 use yew::{
-    Callback, Component, Context, Html, Properties, html, html::IntoPropValue, html_nested,
+    Component, Context, Html, Properties, html, html::IntoPropValue, html_nested,
     platform::spawn_local,
 };
 
@@ -327,8 +327,6 @@ impl PortEditor {
             .map(|(i, _)| i)
             .collect();
 
-        let has_netbox = !self.netbox_ports.is_empty();
-
         let rows = visible_indices.iter().enumerate().map(|(pos, &idx)| {
             let is_first = pos == 0;
             let is_last = pos == visible_indices.len() - 1;
@@ -348,23 +346,9 @@ impl PortEditor {
             let on_down = ctx.link().callback(move |_| Msg::MoveDown(idx));
             let selected=port.port_type;
 
-            let text = port.netbox_port.and_then(|p| self.netbox_ports.iter().find(|np| np.id == p)).map(|p| p.name.as_str()).unwrap_or(" - ");
-            let scope=ctx.link().clone();
-            let onclick={
-                let scope=scope.clone();
-                Callback::from(move |_|{
-                    scope.send_message(Msg::UpdateNetboxId{idx, port_id: None })
-                })
-            };
-            let entries = self.netbox_ports.iter().map(|np|{
-                let port_id = Some(np.id);
-                let onclick={
-                    let scope=scope.clone();
-                    Callback::from(move |_|{
-                        scope.send_message(Msg::UpdateNetboxId{idx, port_id })
-                    })
-                };
-                html_nested!(<MenuAction {onclick}>{np.name.as_str()}</MenuAction>)
+            let on_netbox_change = ctx.link().callback(move |port_id| Msg::UpdateNetboxId { idx, port_id });
+            let netbox_options = self.netbox_ports.iter().map(|np| html_nested! {
+                <FormSelectOption<i32> value={np.id} description={np.name.clone()}/>
             });
 
             html! {
@@ -396,7 +380,9 @@ impl PortEditor {
                         </ToggleGroup>
                     </td>
                     <td class="pf-v6-c-table__td">
-                        <Dropdown {text} disabled={!has_netbox}><MenuAction {onclick}>{" - "}</MenuAction>{for entries}</Dropdown>
+                        <FormSelect<i32> value={port.netbox_port} onchange={on_netbox_change} placeholder=" - ">
+                            {for netbox_options}
+                        </FormSelect<i32>>
                     </td>
                     <td class="pf-v6-c-table__td">
                         <Button icon={Icon::AngleUp} variant={ButtonVariant::Plain} onclick={on_up} disabled={is_first} />

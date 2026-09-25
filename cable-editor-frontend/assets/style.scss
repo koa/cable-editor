@@ -672,8 +672,8 @@ body {
     }
   }
 }
-// Dropdown in a breadcrumb item (components/menu/mod.rs); always opens downwards, so no popper
-.breadcrumb-menu {
+// Dropdown menu (components/menu/popup.rs); always opens downwards, so no popper
+.popup-menu {
   position: relative;
   display: inline-block;
 
@@ -684,5 +684,10 @@ body {
     z-index: var(--pf-t--global--z-index--sm);
     min-width: max-content;
     margin-block-start: var(--pf-t--global--spacer--xs);
+  }
+
+  &.popup-menu--end > .pf-v6-c-menu {
+    inset-inline-start: auto;
+    inset-inline-end: 0;
   }
 }

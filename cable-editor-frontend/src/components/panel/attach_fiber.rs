@@ -1,3 +1,4 @@
+use crate::components::menu::popup::{MenuActionItem, PopupMenu};
 use crate::components::page_layout::{PageLayout, object_title};
 use crate::{
     components::{fiber::FiberLabel, table::ListModel},
@@ -14,8 +15,8 @@ use crate::{
 };
 use itertools::Itertools;
 use patternfly_yew::prelude::{
-    Alert, AlertType, Button, ButtonVariant, Cell, CellContext, Dropdown, ExpansionState, Icon,
-    MemoizedTableModel, MenuAction, SelectItemRenderer, SimpleSelect, Spinner, Table, TableColumn,
+    Alert, AlertType, Button, ButtonVariant, Cell, CellContext, ExpansionState, FormSelect,
+    FormSelectOption, Icon, MemoizedTableModel, SelectItemRenderer, Spinner, Table, TableColumn,
     TableEntryRenderer, TableGridMode, TableHeader, TableMode,
 };
 use std::{
@@ -23,9 +24,7 @@ use std::{
     collections::{BTreeMap, HashMap, HashSet},
     rc::Rc,
 };
-use yew::{
-    Callback, Component, Context, Html, Properties, html, html_nested, platform::spawn_local,
-};
+use yew::{Component, Context, Html, Properties, html, html_nested, platform::spawn_local};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 enum AttachColumn {
@@ -640,13 +639,26 @@ impl AttachFiber {
             }
         }
 
+        // Options keyed by their index in `available_bundles`
+        let selected_bundle = edit
+            .cable_bundle
+            .as_ref()
+            .and_then(|selected| available_bundles.iter().position(|b| b == selected));
+        let bundle_options = available_bundles
+            .iter()
+            .enumerate()
+            .map(|(idx, b)| {
+                html_nested!(<FormSelectOption<usize> value={idx} description={b.label()}/>)
+            })
+            .collect::<Vec<_>>();
+        let onchange = ctx.link().batch_callback(move |idx: Option<usize>| {
+            idx.and_then(|idx| available_bundles.get(idx).cloned())
+                .map(Msg::SelectCableBundle)
+        });
         let cable_bundle_select = html! {
-            <SimpleSelect<CableBundleSelectEntry>
-                entries={available_bundles}
-                selected={edit.cable_bundle.clone()}
-                onselect={ctx.link().callback(Msg::SelectCableBundle)}
-                placeholder="Kabel & Bündel wählen"
-            />
+            <FormSelect<usize> value={selected_bundle} {onchange} placeholder="Kabel & Bündel wählen">
+                {for bundle_options}
+            </FormSelect<usize>>
         };
 
         let fiber_select = if let Some(cable_bundle) = &edit.cable_bundle {
@@ -656,14 +668,9 @@ impl AttachFiber {
                 .filter(|f| f.bundle == cable_bundle.bundle)
                 .collect();
 
-            let scope = ctx.link().clone();
-
             let entries = fibers_in_bundle.iter().map(|f| {
                 let fiber_num = f.fiber;
-                let onselect = {
-                    let scope = scope.clone();
-                    Callback::from(move |_| scope.send_message(Msg::SelectFiber(fiber_num)))
-                };
+                let onclick = ctx.link().callback(move |()| Msg::SelectFiber(fiber_num));
 
                 let extra_text = if let Some(end_port) = f
                     .other_end
@@ -680,20 +687,20 @@ impl AttachFiber {
                     String::new()
                 };
 
-                html_nested! {
-                    <MenuAction onclick={onselect}>
+                html! {
+                    <MenuActionItem key={fiber_num} {onclick}>
                         <FiberLabel fiber={fiber_num as u8}>
                             {fiber_num.to_string()}
                         </FiberLabel>
                         {extra_text}
-                    </MenuAction>
+                    </MenuActionItem>
                 }
             });
 
             html! {
-                <Dropdown text="Faser wählen">
+                <PopupMenu text={html!("Faser wählen")}>
                     {for entries}
-                </Dropdown>
+                </PopupMenu>
             }
         } else {
             Html::default()

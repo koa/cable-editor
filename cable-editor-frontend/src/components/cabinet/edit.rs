@@ -6,16 +6,15 @@ use crate::{
     pages::router::{AppRoute, PanelView, PlanView},
     util::get_credentials,
 };
-use std::borrow::Cow;
 
 use crate::graphql::authenticated::edit_cabinet::{
     FlatPanelInput, OverviewNetboxDevice, update_panels_in_cabinet,
 };
 use log::info;
 use patternfly_yew::prelude::{
-    ActionGroup, Button, ButtonType, ButtonVariant, Cell, Dropdown, Form, FormGroup, Icon, Level,
-    MenuAction, Modal, Spinner, TableColumn, TableHeader, TableMode, TextInput, TextModifier,
-    Title,
+    ActionGroup, Button, ButtonType, ButtonVariant, Cell, Form, FormGroup, FormSelect,
+    FormSelectOption, Icon, Level, Modal, Spinner, TableColumn, TableHeader, TableMode, TextInput,
+    TextModifier, Title,
 };
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
@@ -215,34 +214,21 @@ impl TreeTableColumn<IdOrNew, PanelEntry, PanelEditAction> for PanelColumn {
                 IdOrNew::Temporary(_) => String::from("neu").into_prop_value(),
             }),
             PanelColumn::SelectNetbox(devices) => {
-                let text = context
-                    .row
-                    .netbox_device_id
-                    .and_then(|id| devices.iter().find(|d| d.id == id))
-                    .map(|d| Cow::Owned(d.to_string()))
-                    .unwrap_or(" - ".into());
-                let disabled = devices.is_empty();
-                let callback = context.callback.clone();
                 let id = *context.key;
-                let entries = devices.iter().map(|e| {
-                    let callback = callback.clone();
-                    let netbox_id = Some(e.id);
-                    let onclick = Callback::from(move |_| {
-                        callback.emit(PanelEditAction::SetNetboxId { id, netbox_id });
-                    });
-
-                    html_nested!(<MenuAction {onclick}>{e.to_string()}</MenuAction>)
-                });
-                let callback = callback.clone();
-                let onclick = Callback::from(move |_| {
-                    callback.emit(PanelEditAction::SetNetboxId {
-                        id,
-                        netbox_id: None,
-                    });
-                });
-                Cell::new(
-                    html!(<Dropdown {text} {disabled}><MenuAction {onclick}>{" - "}</MenuAction>{for entries}</Dropdown>),
-                )
+                let onchange = context
+                    .callback
+                    .reform(move |netbox_id| PanelEditAction::SetNetboxId { id, netbox_id });
+                Cell::new(html! {
+                    <FormSelect<i32>
+                        value={context.row.netbox_device_id}
+                        {onchange}
+                        placeholder=" - "
+                    >
+                        {for devices.iter().map(|device| html_nested! {
+                            <FormSelectOption<i32> value={device.id} description={device.to_string()}/>
+                        })}
+                    </FormSelect<i32>>
+                })
             }
         }
     }

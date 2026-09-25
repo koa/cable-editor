@@ -4,7 +4,7 @@ use crate::graphql::authenticated::list_plans::PlanListEntry;
 use crate::pages::router::{AppRoute, PlanView};
 use crate::util::get_credentials;
 use log::info;
-use patternfly_yew::prelude::{Dropdown, ListDivider, MenuAction, Raw, Spinner};
+use patternfly_yew::prelude::Spinner;
 use std::borrow::Cow;
 use yew::html::IntoPropValue;
 use yew::platform::spawn_local;

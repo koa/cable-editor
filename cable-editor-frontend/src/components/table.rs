@@ -1,10 +1,10 @@
+use crate::components::menu::popup::PopupMenu;
 use patternfly_yew::{
     ouia,
     prelude::{
-        Button, ButtonVariant, Caption, Cell, ComposableTable, Dropdown, ExpansionState, Icon,
-        MenuChildVariant, MenuToggleVariant, Ouia, OuiaComponentType, OuiaSafe, StateModel,
-        StateModelIter, TableBody, TableData, TableDataModel, TableGridMode, TableHeader,
-        TableMode, TableModel,
+        Button, ButtonVariant, Caption, Cell, ComposableTable, ExpansionState, Icon,
+        MenuToggleVariant, Ouia, OuiaComponentType, OuiaSafe, StateModel, StateModelIter,
+        TableBody, TableData, TableDataModel, TableGridMode, TableHeader, TableMode, TableModel,
     },
 };
 use std::{
@@ -496,7 +496,8 @@ pub struct TreeTableContext<'a, Key, Row, Msg> {
 
 pub trait TreeTableColumn<Key, Row, Msg> {
     fn render_cell(&self, context: TreeTableContext<Key, Row, Msg>) -> Cell;
-    fn actions(context: TreeTableContext<Key, Row, Msg>) -> Vec<MenuChildVariant> {
+    /// `MenuActionItem`s for the row's kebab menu
+    fn actions(context: TreeTableContext<Key, Row, Msg>) -> Vec<Html> {
         Vec::new()
     }
 }
@@ -611,7 +612,7 @@ where
 
 #[derive(PartialEq, Properties)]
 struct RowActionsProperties {
-    actions: Vec<MenuChildVariant>,
+    actions: Vec<Html>,
 }
 
 #[function_component(RowActions)]
@@ -620,9 +621,14 @@ fn row_actions(props: &RowActionsProperties) -> Html {
         <>
             if !props.actions.is_empty() {
                 <TableData action=true>
-                    <Dropdown variant={MenuToggleVariant::Plain} icon={Icon::EllipsisV}>
-                        { props.actions.clone() }
-                    </Dropdown>
+                    <PopupMenu
+                        variant={MenuToggleVariant::Plain}
+                        icon={Icon::EllipsisV}
+                        aria_label="Aktionen"
+                        align_end=true
+                    >
+                        {for props.actions.iter().cloned()}
+                    </PopupMenu>
                 </TableData>
             }
         </>

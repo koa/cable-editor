@@ -43,7 +43,7 @@ enum LoopColumn {
 ///
 /// A native `FormSelect` instead of patternfly-yew's `SimpleSelect`: that one is built on its
 /// popper-based `Dropdown`, which logged errors to the console when opened here (see
-/// `components/menu/mod.rs`).
+/// `components/menu/popup.rs`).
 fn cable_option(cable: &CableEnd) -> VChild<FormSelectOption<i32>> {
     html_nested! {
         <FormSelectOption<i32>
