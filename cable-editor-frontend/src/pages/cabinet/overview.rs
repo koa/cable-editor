@@ -5,7 +5,7 @@ use crate::{
         plan_link::PlanLink,
     },
     graphql::authenticated::schacht_cables::{SchachtCableEnd, SchachtCables},
-    pages::router::{AppRoute, CableView, PlanView},
+    pages::router::{CableView, PlanView},
 };
 use patternfly_yew::prelude::{
     Cell, CellContext, MemoizedTableModel, Spinner, Table, TableColumn, TableEntryRenderer,
@@ -15,7 +15,6 @@ use yew::{
     Html, HtmlResult, Properties, Suspense, function_component, html, html::IntoPropValue,
     html_nested, suspense::use_future_with, use_memo,
 };
-use yew_nested_router::components::Link;
 use yew_oauth2::hook::use_auth_state;
 
 #[derive(Properties, PartialEq)]
@@ -86,18 +85,6 @@ fn CabinetContent(props: &CabinetOverviewProps) -> HtmlResult {
     };
     Ok(html! {
         <>
-            <nav class="pf-v6-c-breadcrumb" aria-label="breadcrumb">
-                <ol class="pf-v6-c-breadcrumb__list">
-                    <li class="pf-v6-c-breadcrumb__item">
-                        <Link<AppRoute> to={AppRoute::Plan { plan_id, view: PlanView::ListOfCabinets }} class="pf-v6-c-breadcrumb__link">
-                            {"Schächte"}
-                        </Link<AppRoute>>
-                    </li>
-                    <li class="pf-v6-c-breadcrumb__item">
-                        <span class="pf-v6-c-breadcrumb__link pf-m-current">{schacht.name.as_str()}</span>
-                    </li>
-                </ol>
-            </nav>
             <Title>{schacht.name.as_str()}</Title>
             <EditCabinet {plan_id} {cabinet_id}/>
             <Table<Columns, UseTableData<Columns, MemoizedTableModel<SchachtCableEnd>>>
