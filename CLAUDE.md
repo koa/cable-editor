@@ -40,6 +40,15 @@ There are currently no tests in the repo.
 
 **Build order matters:** the binary embeds `cable-editor-frontend/dist` at compile time, so run `trunk build` before building the binary (the Dockerfile does frontend first, then the musl backend build).
 
+## Commits
+
+- One focused commit per logical change; split unrelated work (e.g. a refactor and the feature built on it) into separate commits.
+- Subject: short, lowercase, imperative, no trailing period (e.g. `print panel labels`).
+- Body: why the change was needed and anything non-obvious, wrapped at ~72 columns.
+- Update CLAUDE.md in the same commit as the change it describes.
+- Commits by Claude end with the `Co-Authored-By: Claude …` trailer, without a session link.
+- Pushing to `master` publishes the image and chart (CI), so only push when asked.
+
 ## Configuration
 
 - `DATABASE_URL` env var (`.env`, loaded by dotenvy). Migrations in `cable-editor-backend/migrations` are embedded and run automatically at startup (`run_sync_migrations`).
