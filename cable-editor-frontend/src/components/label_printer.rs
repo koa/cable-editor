@@ -27,6 +27,8 @@ use yew::{
 const MAX_TEXT_RATIO: f64 = 0.8;
 /// Text height relative to the cable diameter, readable from one side.
 const DIAMETER_TEXT_RATIO: f64 = 0.7;
+/// Gap between text copies relative to the text height.
+const COPY_GAP_RATIO: f64 = 0.5;
 const MM_PER_INCH: f64 = 25.4;
 /// Last entered cable diameter, kept per browser.
 const DIAMETER_KEY: &str = "cable-label-diameter-mm";
@@ -231,14 +233,19 @@ fn LabelForm(props: &LabelFormProps) -> Html {
             let canvas = render_label(text, *diameter, geometry)?;
             let length =
                 f64::from(canvas.width()) / f64::from(canvas.height()) * geometry.band_inch;
-            Ok::<_, brady_web_sdk::Error>((canvas.to_data_url()?, length * MM_PER_INCH))
+            let (_, copies) = text_layout(*diameter, geometry.band_inch);
+            Ok::<_, brady_web_sdk::Error>((canvas.to_data_url()?, length * MM_PER_INCH, copies))
         },
     );
     let preview = match &*preview {
-        Ok((src, length)) => html! {
+        Ok((src, length, copies)) => html! {
             <>
                 <img src={src.clone()} alt={text.clone()} style="display: block; max-width: 100%; max-height: 48px; border: 1px solid #8a8d90;"/>
-                {format!("Etikett ca. {length:.0} mm (+{:.0} mm Vorschub)", props.geometry.feed_inch * MM_PER_INCH)}
+                {format!(
+                    "Etikett ca. {length:.0} mm{} (+{:.0} mm Vorschub)",
+                    if *copies > 1 { format!(", Text {copies}×") } else { String::new() },
+                    props.geometry.feed_inch * MM_PER_INCH,
+                )}
             </>
         },
         Err(e) => (&FrontendError::from(e.clone())).into_prop_value(),
@@ -441,8 +448,22 @@ async fn wait_for_supply(sdk: &BradySdk) -> Result<(), FrontendError> {
     }
 }
 
-/// One line of black text on the print band, cropped to the glyphs. The text height is
-/// capped to a share of the cable diameter. The printer feeds blank tape around each label.
+/// Text height relative to the print band and how many copies of the text fit across it.
+/// The text height is capped to a share of the cable diameter; small text is repeated so
+/// it can be read from more sides once the band is wrapped around the cable.
+fn text_layout(diameter_mm: Option<f64>, band_inch: f64) -> (f64, u32) {
+    let ratio = diameter_mm.map_or(MAX_TEXT_RATIO, |d| {
+        (DIAMETER_TEXT_RATIO * d / MM_PER_INCH / band_inch).min(MAX_TEXT_RATIO)
+    });
+    // Copies with gaps stay within the area a single maximal line takes:
+    // n * ratio + (n - 1) * gap * ratio <= MAX_TEXT_RATIO
+    let copies =
+        ((MAX_TEXT_RATIO + COPY_GAP_RATIO * ratio) / (ratio * (1.0 + COPY_GAP_RATIO))).floor();
+    (ratio, copies.max(1.0) as u32)
+}
+
+/// Black text on the print band, repeated across it for small text,
+/// cropped to the glyphs along the tape. The printer feeds blank tape around each label.
 fn render_label(
     text: &str,
     diameter_mm: Option<f64>,
@@ -450,9 +471,7 @@ fn render_label(
 ) -> Result<HtmlCanvasElement, brady_web_sdk::Error> {
     let band = geometry.band_inch;
     let height = (band * geometry.dpi).round();
-    let ratio = diameter_mm.map_or(MAX_TEXT_RATIO, |d| {
-        (DIAMETER_TEXT_RATIO * d / MM_PER_INCH / band).min(MAX_TEXT_RATIO)
-    });
+    let (ratio, copies) = text_layout(diameter_mm, band);
     let canvas: HtmlCanvasElement = window()
         .and_then(|w| w.document())
         .expect("Missing Document")
@@ -481,6 +500,16 @@ fn render_label(
     context.set_fill_style_str("white");
     context.fill_rect(0.0, 0.0, width, height);
     context.set_fill_style_str("black");
-    context.fill_text(text, left, (height + ascent - descent) / 2.0)?;
+    // Spread the copies over the area of a maximal line, centered on the band
+    let step = if copies > 1 {
+        (MAX_TEXT_RATIO - ratio) / f64::from(copies - 1)
+    } else {
+        0.0
+    };
+    for copy in 0..copies {
+        let offset = f64::from(copy) - f64::from(copies - 1) / 2.0;
+        let center = height * (0.5 + offset * step);
+        context.fill_text(text, left, center + (ascent - descent) / 2.0)?;
+    }
     Ok(canvas)
 }
