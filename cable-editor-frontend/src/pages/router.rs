@@ -235,9 +235,10 @@ impl PlanView {
     pub fn append_breadcrumbs(&self, plan_id: i32, item_contents: &mut Vec<VNode>) {
         let title: Cow<'static, str> = match self {
             PlanView::Edit => "Ändern",
-            PlanView::Cabinet { .. } | PlanView::ListOfCabinets => "Schacht",
+            PlanView::Cabinet { .. } | PlanView::ListOfCabinets | PlanView::Panel { .. } => {
+                "Schacht"
+            }
             PlanView::Cable { .. } | PlanView::ListOfCables => "Kabel",
-            PlanView::Panel { .. } => "Panel",
         }
         .into();
         let mut entries = Vec::new();

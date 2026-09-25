@@ -1,7 +1,8 @@
+use crate::components::menu::list_cabinet::ListCabinet;
 use crate::components::menu::{MenuDropdown, MenuEntry};
 use crate::error::FrontendError;
 use crate::graphql::authenticated::panel_navigation::{ChildPanelNav, PanelHierarchy};
-use crate::pages::router::{AppRoute, PanelView, PlanView};
+use crate::pages::router::{AppRoute, CabinetView, PanelView, PlanView};
 use crate::util::get_credentials;
 use patternfly_yew::prelude::{Icon, Spinner};
 use std::borrow::Cow;
@@ -96,6 +97,9 @@ impl Component for ListPanel {
                     let plan_id = ctx.props().plan_id;
                     let current_view = &ctx.props().view;
                     let mut elements = Vec::new();
+
+                    // 0. Schacht, zu dem das Panel gehört
+                    elements.push(html!(<ListCabinet {plan_id} cabinet_id={panel.schacht.id} view={CabinetView::Overview}/>));
 
                     // 1. Parent Chain durchgehen:
                     for parent in &panel.parent_chain {
