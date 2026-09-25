@@ -49,6 +49,21 @@
   }
 }
 
+// Printer error with a dismiss button in the alert's corner
+.printer-error {
+  position: relative;
+
+  .pf-v6-c-alert {
+    padding-inline-end: calc(var(--pf-t--global--spacer--md) + 2rem);
+  }
+
+  > .pf-v6-c-button {
+    position: absolute;
+    inset-block-start: var(--pf-t--global--spacer--xs);
+    inset-inline-end: var(--pf-t--global--spacer--xs);
+  }
+}
+
 // In the flow after the page, keeps its end reachable above the bar
 .printer-status-bar-spacer {
   height: 3rem;

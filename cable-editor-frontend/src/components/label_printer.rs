@@ -8,8 +8,8 @@ use futures::{
     future::{Either, ready, select},
 };
 use patternfly_yew::prelude::{
-    ActionGroup, Backdrop, Bullseye, Button, ButtonType, ButtonVariant, Form, FormGroup, Modal,
-    ModalVariant, TextInput, TextInputType, use_backdrop,
+    ActionGroup, Backdrop, Bullseye, Button, ButtonType, ButtonVariant, Form, FormGroup, Icon,
+    Modal, ModalVariant, TextInput, TextInputType, use_backdrop,
 };
 use std::{future::Future, pin::pin, rc::Rc, time::Duration};
 use wasm_bindgen::{JsCast, JsValue};
@@ -102,7 +102,7 @@ pub fn PrinterStatusBar() -> Html {
         <>
             <div class="printer-status-bar-spacer"/>
             <div class="printer-status-bar">
-                {error.as_ref().map(IntoPropValue::<Html>::into_prop_value)}
+                {error_view(&error)}
                 <div class="printer-status-bar__row">
                     <button type="button" class="pf-v6-c-button pf-m-plain" aria-label={label} title={label} onclick={toggle} disabled={*busy}>
                         <span class="pf-v6-c-button__icon">{icon}</span>
@@ -191,7 +191,7 @@ pub fn PrintLabelButton(props: &PrintLabelButtonProps) -> Html {
     html! {
         <>
             <Button variant={ButtonVariant::Secondary} label={props.label.to_string()} {onclick} disabled={*busy}/>
-            {error.as_ref().map(IntoPropValue::<Html>::into_prop_value)}
+            {error_view(&error)}
         </>
     }
 }
@@ -312,6 +312,25 @@ fn parse_diameter(value: &str) -> Option<f64> {
 
 fn storage() -> Option<Storage> {
     window()?.local_storage().ok().flatten()
+}
+
+/// The printer error, if any, with a button to dismiss it.
+fn error_view(error: &UseStateHandle<Option<FrontendError>>) -> Html {
+    let Some(e) = error.as_ref() else {
+        return Html::default();
+    };
+    let ondismiss = {
+        let error = error.clone();
+        Callback::from(move |_| error.set(None))
+    };
+    html! {
+        <div class="printer-error">
+            {IntoPropValue::<Html>::into_prop_value(e)}
+            <button type="button" class="pf-v6-c-button pf-m-plain" aria-label="Schliessen" title="Schliessen" onclick={ondismiss}>
+                <span class="pf-v6-c-button__icon">{Icon::Times}</span>
+            </button>
+        </div>
+    }
 }
 
 /// Runs a printer task, keeping `busy` set and `error` updated.
