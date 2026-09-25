@@ -1,7 +1,11 @@
 use crate::pages::router::{AppRoute, PlanView};
 use yew::{Callback, Component, Context, Html, html};
-use yew_nested_router::components::{Link, LinkProperties};
+use yew_nested_router::{
+    components::{Link, LinkProperties},
+    prelude::RouterContext,
+};
 
+/// Link to a view within the plan of the current page.
 pub struct PlanLink {}
 pub enum Msg {}
 
@@ -14,11 +18,12 @@ impl Component for PlanLink {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
+        // The router provides the route as RouterContext; nothing provides a bare AppRoute
         let plan_id = ctx
             .link()
-            .context::<AppRoute>(Callback::noop())
-            .and_then(|(route, _)| match route {
-                AppRoute::Plan { plan_id, .. } => Some(plan_id),
+            .context::<RouterContext<AppRoute>>(Callback::noop())
+            .and_then(|(router, _)| match router.active_target {
+                Some(AppRoute::Plan { plan_id, .. }) => Some(plan_id),
                 _ => None,
             })
             .unwrap_or_default();
