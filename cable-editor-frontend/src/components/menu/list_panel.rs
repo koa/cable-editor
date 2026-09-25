@@ -83,7 +83,7 @@ impl Component for ListPanel {
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         let divider = html! {
-            <span style="margin: 0 0.5rem; color: var(--pf-v6-global--Color--200);">
+            <span class="pf-v6-c-breadcrumb__item-divider breadcrumb-path__divider">
                 { Icon::AngleRight }
             </span>
         };
@@ -153,7 +153,7 @@ impl Component for ListPanel {
                     ));
 
                     html! {
-                        <span style="display: flex; align-items: center;">
+                        <span class="breadcrumb-path">
                             { for elements }
                         </span>
                     }

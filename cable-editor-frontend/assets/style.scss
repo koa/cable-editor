@@ -675,6 +675,19 @@ body {
     }
   }
 }
+// Schacht and panel chain inside one breadcrumb item (components/menu/list_panel.rs). Breadcrumb
+// items don't wrap, so without this a deep panel path widens the whole page on phones.
+.breadcrumb-path {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  row-gap: var(--pf-t--global--spacer--xs);
+}
+
+.breadcrumb-path__divider {
+  margin-inline-start: var(--pf-t--global--spacer--sm);
+}
+
 // Dropdown menu (components/menu/popup.rs); always opens downwards, so no popper
 .popup-menu {
   position: relative;
