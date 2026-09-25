@@ -1,6 +1,5 @@
 use crate::error::FrontendError;
 use crate::graphql::authenticated::schema;
-use crate::graphql::authenticated::schema::CreatePlan;
 use crate::graphql::{mutate, query};
 use yew_oauth2::context::OAuth2Context;
 

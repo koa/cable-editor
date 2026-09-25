@@ -74,10 +74,8 @@ impl Component for ListCabinet {
         {
             ctx.link().send_message(Msg::FetchCabinets);
             false
-        } else if ctx.props().view != old_props.view {
-            true
         } else {
-            false
+            ctx.props().view != old_props.view
         }
     }
 

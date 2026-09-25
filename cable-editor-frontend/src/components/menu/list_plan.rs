@@ -3,13 +3,11 @@ use crate::error::FrontendError;
 use crate::graphql::authenticated::list_plans::PlanListEntry;
 use crate::pages::router::{AppRoute, PlanView};
 use crate::util::get_credentials;
-use log::info;
 use patternfly_yew::prelude::Spinner;
 use std::borrow::Cow;
 use yew::html::IntoPropValue;
 use yew::platform::spawn_local;
-use yew::{Component, Context, Html, Properties, html, html_nested};
-use yew_nested_router::components::Link;
+use yew::{Component, Context, Html, Properties, html};
 
 pub struct ListPlan {
     loaded_plans: Option<Box<[PlanListEntry]>>,
@@ -33,7 +31,7 @@ impl Component for ListPlan {
     type Message = Msg;
     type Properties = ListPlanProps;
 
-    fn create(ctx: &Context<Self>) -> Self {
+    fn create(_ctx: &Context<Self>) -> Self {
         ListPlan {
             loaded_plans: None,
             error: None,

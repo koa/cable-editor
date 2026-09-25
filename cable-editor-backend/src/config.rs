@@ -7,9 +7,7 @@ use std::net::IpAddr;
 pub struct Settings {
     auth_client_id: String,
     auth_issuer: String,
-    auth_token_url: Option<String>,
     user_info_url: Option<String>,
-    auth_url: Option<String>,
     auth_scopes: Option<String>,
 
     server_port: Option<u16>,

@@ -164,15 +164,6 @@ impl ShowPanel {
             .filter(|c| !c.ports.is_empty())
             .collect();
         let has_root_ports = !root_planned.ports.is_empty();
-        let root_has_direct_ports = root_planned
-            .ports
-            .iter()
-            .any(|p| p.port_type == PortType::Splice || p.port_type == PortType::Connector);
-        let root_has_direct_loops = root_planned
-            .ports
-            .iter()
-            .any(|p| p.port_type == PortType::Loop);
-
         // Calculate summary metrics
         let total_panels = (if has_root_ports { 1 } else { 0 }) + child_panels_with_ports.len();
         let mut total_ports = if has_root_ports {

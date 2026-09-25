@@ -34,7 +34,7 @@ impl Component for ListCable {
     type Message = Msg;
     type Properties = ListPlanProps;
 
-    fn create(ctx: &Context<Self>) -> Self {
+    fn create(_ctx: &Context<Self>) -> Self {
         ListCable {
             loaded_cables: None,
             error: None,

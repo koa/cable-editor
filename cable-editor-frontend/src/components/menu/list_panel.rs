@@ -74,10 +74,8 @@ impl Component for ListPanel {
         if ctx.props().panel_id != old_props.panel_id || ctx.props().plan_id != old_props.plan_id {
             ctx.link().send_message(Msg::FetchPanel);
             false
-        } else if ctx.props().view != old_props.view {
-            true
         } else {
-            false
+            ctx.props().view != old_props.view
         }
     }
 

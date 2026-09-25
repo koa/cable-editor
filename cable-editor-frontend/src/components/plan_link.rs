@@ -13,7 +13,7 @@ impl Component for PlanLink {
     type Message = ();
     type Properties = LinkProperties<PlanView>;
 
-    fn create(ctx: &Context<Self>) -> Self {
+    fn create(_ctx: &Context<Self>) -> Self {
         PlanLink {}
     }
 

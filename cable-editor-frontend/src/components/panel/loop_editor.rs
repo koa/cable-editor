@@ -5,8 +5,8 @@ use crate::{
     graphql::authenticated::{
         PortSide, PortType,
         connections::{
-            Cable, CableEnd, CableId, Fiber, FiberKeyInput, Panel, PlannedPanel, PortUsageInput,
-            Schacht, UpdatePortUsage,
+            Cable, CableEnd, CableId, Fiber, FiberKeyInput, PlannedPanel, PortUsageInput,
+            UpdatePortUsage,
         },
     },
     icons::{IconFiberConnected, IconFiberCut, IconLink, IconUnlink},
@@ -623,7 +623,6 @@ impl LoopPortEditor {
     }
 
     fn render_fiber_table(&self, ctx: &Context<Self>) -> Html {
-        let a = self.cable_a.as_ref().unwrap();
         let mut entries = Vec::new();
         let scope = ctx.link().clone();
 
@@ -665,18 +664,8 @@ impl LoopPortEditor {
 
     fn calculate_current_states(&self, panel_id: i32) -> BTreeMap<(i32, i32), FiberData> {
         let mut states = BTreeMap::new();
-        if let (
-            Some(cable_a),
-            Some(cable_b),
-            Some(PlannedPanel {
-                panel:
-                    Panel {
-                        schacht: Schacht { cables, .. },
-                        ..
-                    },
-                ..
-            }),
-        ) = (&self.cable_a, &self.cable_b, &self.current_situation)
+        if let (Some(cable_a), Some(cable_b), Some(_)) =
+            (&self.cable_a, &self.cable_b, &self.current_situation)
         {
             let fibers_a = cable_a
                 .fibers

@@ -7,23 +7,20 @@ pub mod panel;
 pub mod planning;
 pub mod router;
 
-use crate::{components::label_printer::PrinterStatusBar, icons::IconBlueprintNode};
+use crate::components::label_printer::PrinterStatusBar;
 use crate::{
     error::FrontendError,
     graphql::{
         anonymous::{AuthenticationData, AuthenticationQuery},
         query_anonymous,
     },
-    pages::router::{AppRoute, RedirectToPlans, Sidebar},
+    pages::router::{AppRoute, RedirectToPlans},
 };
 use brady_web_sdk::BradyProvider;
 use cynic::GraphQlResponse;
-use patternfly_yew::prelude::{
-    BackdropViewer, Bullseye, Button, MastheadBrand, Page, PageSidebar, Spinner, ToastViewer,
-};
-use web_sys::MouseEvent;
+use patternfly_yew::prelude::{BackdropViewer, Bullseye, Spinner, ToastViewer};
 use yew::{
-    Callback, Context, Html, Properties, function_component, html, html_nested,
+    Context, Html, Properties, function_component, html, html::IntoPropValue,
     platform::spawn_local, use_effect_with,
 };
 use yew_nested_router::{Router, Switch};
@@ -68,7 +65,10 @@ impl yew::Component for App {
     }
 
     fn view(&self, _ctx: &Context<Self>) -> Html {
-        if let Some(config) = self.oauth2_config.clone() {
+        if let Some(error) = &self.error {
+            let error: Html = error.into_prop_value();
+            html!(<Bullseye>{error}</Bullseye>)
+        } else if let Some(config) = self.oauth2_config.clone() {
             html! {
                 <MainOAuth2 {config}/>
             }
@@ -84,7 +84,13 @@ impl yew::Component for App {
             spawn_local(async move {
                 let result = query_anonymous::<AuthenticationQuery, _>(()).await;
                 match result {
-                    Ok(GraphQlResponse { data, errors }) => {
+                    Ok(GraphQlResponse {
+                        errors: Some(errors),
+                        ..
+                    }) => {
+                        scope.send_message(AppMessage::Error(FrontendError::Graphql(errors)));
+                    }
+                    Ok(GraphQlResponse { data, .. }) => {
                         if let Some(AuthenticationQuery { authentication }) = data {
                             scope.send_message(AppMessage::AuthenticationData(authentication));
                         }
@@ -104,18 +110,6 @@ pub struct MainOAuth2Props {
 #[function_component(MainOAuth2)]
 pub fn main_oauth2(props: &MainOAuth2Props) -> Html {
     let oauth2_config = &props.config;
-    let brand = html! (
-        <MastheadBrand>
-            <div className="show-light">
-                <IconBlueprintNode/>
-                /*<Brand
-                    src="./icon.svg"
-                    alt="Cable Editor Logo"
-                    style="--pf-v6-c-brand--Height: 36px;"
-                />*/
-            </div>
-        </MastheadBrand>
-    );
     let scopes = oauth2_config.scopes.clone();
     html! {
      <OAuth2 config={oauth2_config.clone()} {scopes}>
@@ -139,18 +133,6 @@ pub fn main_oauth2(props: &MainOAuth2Props) -> Html {
     }
 }
 
-#[function_component(LoginButton)]
-fn not_authenticated_sidebar() -> Html {
-    let agent = use_auth_agent().expect("Requires OAuth2Context component in parent hierarchy");
-    let onclick = Callback::from(move |_: MouseEvent| {
-        if let Err(err) = agent.start_login() {
-            log::warn!("Failed to start login: {err}");
-        }
-    });
-    html! {
-        <Button {onclick}>{"Login"}</Button>
-    }
-}
 #[function_component(AutoLogin)]
 fn auto_login() -> Html {
     let agent = use_auth_agent().expect("Requires OAuth2Context component in parent hierarchy");

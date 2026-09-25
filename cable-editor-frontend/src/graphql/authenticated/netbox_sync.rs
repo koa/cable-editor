@@ -1,4 +1,3 @@
-use crate::graphql::authenticated::schema::PanelPort;
 use crate::{
     error::FrontendError,
     graphql::{authenticated::schema, mutate},
@@ -70,7 +69,7 @@ impl PanelPortInfo {
 
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
 #[cynic(graphql_type = "Panel")]
-struct PanelInfo {
+pub struct PanelInfo {
     name: Option<String>,
     schacht: SchachtInfo,
     parent_chain: Vec<ParentChainPanelInfo>,

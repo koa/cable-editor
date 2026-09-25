@@ -10,14 +10,12 @@ use crate::{
 use crate::graphql::authenticated::edit_cabinet::{
     FlatPanelInput, OverviewNetboxDevice, update_panels_in_cabinet,
 };
-use log::info;
 use patternfly_yew::prelude::{
     ActionGroup, Button, ButtonType, ButtonVariant, Cell, Form, FormGroup, FormSelect,
     FormSelectOption, Icon, Modal, Spinner, TableColumn, TableHeader, TableMode, TextInput,
 };
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
-use std::thread::scope;
 use yew::{
     Callback, Component, Context, Html, Properties, classes, html,
     html::IntoPropValue,
@@ -63,12 +61,11 @@ pub struct EditCabinetProps {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
 enum PanelColumn {
     Name,
-    Id { modified: bool, plan_id: i32 },
     SelectNetbox(Rc<[OverviewNetboxDevice]>),
     Actions { modified: bool, plan_id: i32 },
 }
 #[derive(Clone, PartialEq, Hash, Eq)]
-enum PanelEditAction {
+pub enum PanelEditAction {
     Remove(IdOrNew),
     ExchangeSiblings {
         parent: Option<IdOrNew>,
@@ -195,23 +192,6 @@ impl TreeTableColumn<IdOrNew, PanelEntry, PanelEditAction> for PanelColumn {
 
                 Cell::new(html!(<div class="panel-actions">{for buttons}</div>))
             }
-            PanelColumn::Id { modified, plan_id } => Cell::new(match &context.key {
-                IdOrNew::Id(id) => {
-                    if *modified {
-                        id.into_prop_value()
-                    } else {
-                        let to = AppRoute::Plan {
-                            plan_id: *plan_id,
-                            view: PlanView::Panel {
-                                id: *id,
-                                view: PanelView::Edit,
-                            },
-                        };
-                        html!(<Link<AppRoute>{to}>{id}</Link<AppRoute>>)
-                    }
-                }
-                IdOrNew::Temporary(_) => String::from("neu").into_prop_value(),
-            }),
             PanelColumn::SelectNetbox(devices) => {
                 let id = *context.key;
                 let onchange = context
@@ -495,7 +475,6 @@ impl Component for EditCabinet {
             let netbox_devices = self.netbox_devices.clone();
             let header = html_nested! {
                 <TableHeader<PanelColumn>>
-                    //<TableColumn<PanelColumn> label="ID" index={PanelColumn::Id{modified,plan_id}} />
                     <TableColumn<PanelColumn> label="Name" index={PanelColumn::Name} />
                     <TableColumn<PanelColumn> label="Netbox" index={PanelColumn::SelectNetbox(netbox_devices)} />
                     // Labelled, as the phone layout of tree tables hides cells without a label

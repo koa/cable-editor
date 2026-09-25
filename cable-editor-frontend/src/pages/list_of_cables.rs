@@ -229,7 +229,7 @@ impl Component for AddCable {
     type Message = AddCableMsg;
     type Properties = AddCableProps;
 
-    fn create(ctx: &Context<Self>) -> Self {
+    fn create(_ctx: &Context<Self>) -> Self {
         Self {
             cable_name: "".to_string(),
             error: None,

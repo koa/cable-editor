@@ -1,8 +1,7 @@
 use crate::{
     error::FrontendError,
     graphql::authenticated::netbox_sync::{
-        AsymetricTargetConnectionEntry, AsymmetricDuplexError, BlindEndError,
-        MissingNetboxReferenceError, SyncIssue, SyncNetbox,
+        AsymmetricDuplexError, BlindEndError, MissingNetboxReferenceError, SyncIssue, SyncNetbox,
     },
     util::get_credentials,
 };
@@ -32,7 +31,7 @@ impl Component for NetboxSyncModal {
     type Message = Msg;
     type Properties = NetboxSyncProps;
 
-    fn create(ctx: &Context<Self>) -> Self {
+    fn create(_ctx: &Context<Self>) -> Self {
         Self {
             syncing: false,
             error: None,

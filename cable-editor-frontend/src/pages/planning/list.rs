@@ -44,7 +44,7 @@ impl Component for ListOfPlannings {
     type Message = Msg;
     type Properties = ListOfPlanningProps;
 
-    fn create(ctx: &Context<Self>) -> Self {
+    fn create(_ctx: &Context<Self>) -> Self {
         ListOfPlannings {
             error: None,
             data: None,
@@ -107,7 +107,7 @@ impl ListOfPlannings {
             };
 
             let create_button = get_backdrop(ctx.link())
-                .map(|(bd)| {
+                .map(|bd| {
                     let scope=ctx.link().clone();
                     let onclick = Callback::from(move |_|{
                         let scope=scope.clone();
@@ -138,7 +138,7 @@ impl ListOfPlannings {
                                     let bd=bd.clone();
                                     let scope=scope.clone();
                                     spawn_local(async move{
-                                        if let Ok(_)=PlanListEntry::create(credentials.as_ref(), name).await{
+                                        if PlanListEntry::create(credentials.as_ref(), name).await.is_ok() {
                                             bd.close();
                                             scope.send_message(Msg::Refresh);
                                         }

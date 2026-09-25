@@ -19,7 +19,7 @@ impl<'de> Deserialize<'de> for NumberId {
     where
         D: serde::Deserializer<'de>,
     {
-        deserializer.deserialize_str(IdVisitor(PhantomData::<NumberId>::default()))
+        deserializer.deserialize_str(IdVisitor(PhantomData::<NumberId>))
     }
 }
 impl Serialize for NumberId {

@@ -24,8 +24,7 @@ impl SelectItemRenderer for SchachtTypListEntry {
 
     fn label(&self) -> String {
         self.name
-            .as_ref()
-            .map(|n| n.clone())
+            .clone()
             .unwrap_or_else(|| format!("schacht {}", self.id))
     }
 }

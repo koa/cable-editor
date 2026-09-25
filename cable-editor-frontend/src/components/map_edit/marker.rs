@@ -43,18 +43,18 @@ impl MarkerLoader for NoDynamicMarkerLayer {
 
     async fn list_points(
         &self,
-        bounds: &LatLngBounds,
+        _bounds: &LatLngBounds,
     ) -> Box<[<<Self as MarkerLoader>::Data as ReferencedData>::Key]> {
         match *self {}
     }
 
-    async fn create_entry(&self, point: &LatLng) -> Self::Data {
+    async fn create_entry(&self, _point: &LatLng) -> Self::Data {
         match *self {}
     }
 
     async fn fetch_data(
         &self,
-        key: &<<Self as MarkerLoader>::Data as ReferencedData>::Key,
+        _key: &<<Self as MarkerLoader>::Data as ReferencedData>::Key,
     ) -> Option<Self::Data> {
         match *self {}
     }
@@ -141,7 +141,7 @@ impl MarkerLoader for HashmapLayer {
             .entries
             .iter()
             .filter(|(_, e)| bounds.contains(&e.position))
-            .map(|(id, e)| *id)
+            .map(|(id, _e)| *id)
             .collect()
     }
 
@@ -184,10 +184,10 @@ impl MarkerLoader for HashmapLayer {
             }));
         }
         let sender = self.sender.clone();
-        let marker_ref = marker.clone();
+        let _marker_ref = marker.clone();
         let marker_ref = marker.clone();
         marker.on_click(Box::from(move |_| {
-            let (handle, element) = render_component::<MarkerPopup>(());
+            let (_handle, element) = render_component::<MarkerPopup>(());
             info!("Created element: {:?}", element.outer_html());
             marker_ref.bind_popup_with_options(&element, &JsValue::null());
 

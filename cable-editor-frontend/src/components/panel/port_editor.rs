@@ -115,7 +115,7 @@ impl Component for PortEditor {
                                                 id: IdOrNew::Id(p.id),
                                                 order_number: p.order_number,
                                                 label: p.label.unwrap_or_default().into_boxed_str(),
-                                                port_type: p.port_type.into(),
+                                                port_type: p.port_type,
                                                 deleted: false,
                                                 netbox_port: p.netbox_port.map(|p| p.id),
                                             })
@@ -277,7 +277,7 @@ impl Component for PortEditor {
                             id: port.id.into(), // Verwendet den bestehenden From<IdOrNew> Trait
                             order: port.order_number,
                             label: port.label.to_string(),
-                            port_type: port.port_type.into(),
+                            port_type: port.port_type,
                             netbox_port_id: port.netbox_port,
                         });
                     }

@@ -41,7 +41,7 @@ impl Component for ListOfCabinets {
     type Message = Msg;
     type Properties = ListOfCabinetProps;
 
-    fn create(ctx: &Context<Self>) -> Self {
+    fn create(_ctx: &Context<Self>) -> Self {
         ListOfCabinets {
             data: None,
             error: None,
@@ -123,7 +123,7 @@ fn fetch_data(scope: Scope<ListOfCabinets>) {
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
-enum Columns {
+pub enum Columns {
     Name,
     Cabinets,
 }

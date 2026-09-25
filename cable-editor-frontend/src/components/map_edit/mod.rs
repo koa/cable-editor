@@ -149,7 +149,7 @@ impl<ML: MarkerLoader + 'static> Component for MapEditor<ML> {
                 {
                     let scope = ctx.link().clone();
                     spawn_local(async move {
-                        let entry = layer.create_entry(&position).await;
+                        let _entry = layer.create_entry(&position).await;
                         scope.send_message(Msg::Moved);
                     })
                 }
@@ -158,7 +158,6 @@ impl<ML: MarkerLoader + 'static> Component for MapEditor<ML> {
             Msg::SetEditLayer(l) => {
                 if self.active_layer.as_ref() != Some(&l) {
                     let old_active_layer = self.active_layer.clone();
-                    let scope = ctx.link().clone();
                     let markers = self.markers.clone();
                     let map = self.map.clone();
                     spawn_local(async move {
@@ -182,7 +181,7 @@ impl<ML: MarkerLoader + 'static> Component for MapEditor<ML> {
         }
     }
 
-    fn view(&self, ctx: &Context<Self>) -> Html {
+    fn view(&self, _ctx: &Context<Self>) -> Html {
         html! {
             <>
                 <div class="map-container component-container">

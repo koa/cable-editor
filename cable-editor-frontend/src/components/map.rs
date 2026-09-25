@@ -139,7 +139,7 @@ impl Component for MapComponent {
                             popup.remove();
                         })
                     };
-                    let guard: GuardAppHandle<_> =
+                    let _guard: GuardAppHandle<_> =
                         yew::Renderer::<MarkerPopup>::with_root_and_props(
                             div_container.clone(),
                             MarkerPopupProps {
@@ -296,8 +296,4 @@ fn marker_component(props: &MarkerPopupProps) -> Html {
             {for entries}
         </Menu>
     }
-}
-
-fn void_callback<E>(remove_marker_callback: Callback<()>) -> Callback<E> {
-    Callback::from(move |_| remove_marker_callback.emit(()))
 }

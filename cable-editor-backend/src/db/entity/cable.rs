@@ -2,7 +2,7 @@ use crate::{
     db::{
         entity::{
             Duct,
-            panel::{PanelPort, PortUsage},
+            panel::PortUsage,
             path::{DirectedDuct, DuctAlignmentError, align_ducts},
             schacht::{Schacht, fetch_schacht},
             st_length,
@@ -175,12 +175,12 @@ impl CableEnd {
           )
     "#;
 
-        Ok(diesel::sql_query(raw_sql)
+        diesel::sql_query(raw_sql)
             .bind::<diesel::sql_types::Integer, _>(plan_id)
             .bind::<diesel::sql_types::Integer, _>(self.cable.id)
             .bind::<diesel::sql_types::Integer, _>(self.schacht.id)
             .load::<PortUsage>(connection)
-            .await?)
+            .await
     }
 }
 
@@ -329,23 +329,6 @@ impl PotentialPathSegment {
     }
     async fn schacht(&self) -> &Schacht {
         &self.schacht
-    }
-}
-
-#[derive(Clone, PartialEq, Hash, Ord, PartialOrd, Eq, Debug)]
-struct FiberPathSegment {
-    fiber: Fiber,
-    next_port: PanelPort,
-    plan_id: i32,
-}
-
-#[Object]
-impl FiberPathSegment {
-    async fn fiber(&self) -> &Fiber {
-        &self.fiber
-    }
-    async fn next_port(&self) -> &PanelPort {
-        &self.next_port
     }
 }
 

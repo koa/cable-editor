@@ -17,7 +17,7 @@ use std::{
 use web_sys::MouseEvent;
 use yew::{
     AttrValue, Callback, Classes, Component, Context, Html, Properties, classes,
-    function_component, html, props, virtual_dom::VChild,
+    function_component, html, virtual_dom::VChild,
 };
 
 pub struct ListModel<C, M>
@@ -432,7 +432,7 @@ where
     type Message = TreeTableMsg<Msg, Key>;
     type Properties = TreeTableProps<Key, Row, Msg, C>;
 
-    fn create(ctx: &Context<Self>) -> Self {
+    fn create(_ctx: &Context<Self>) -> Self {
         Self {
             phantom: Default::default(),
         }
@@ -497,7 +497,7 @@ pub struct TreeTableContext<'a, Key, Row, Msg> {
 pub trait TreeTableColumn<Key, Row, Msg> {
     fn render_cell(&self, context: TreeTableContext<Key, Row, Msg>) -> Cell;
     /// `MenuActionItem`s for the row's kebab menu
-    fn actions(context: TreeTableContext<Key, Row, Msg>) -> Vec<Html> {
+    fn actions(_context: TreeTableContext<Key, Row, Msg>) -> Vec<Html> {
         Vec::new()
     }
 }
@@ -513,12 +513,6 @@ where
     Row: 'static + Clone + Eq + std::hash::Hash,
 {
     let rows = props.model.rows(&props.state);
-    if let Some(header) = &props.header {
-        for child in header.props.children.iter() {
-            let idx = &child.props.index;
-        }
-    }
-
     let rows = rows.into_iter().filter_map(|entry| {
         {
             props

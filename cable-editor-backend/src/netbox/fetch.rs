@@ -127,13 +127,13 @@ impl RearPort {
         self.name.as_str()
     }
     async fn fiber_ports(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<PanelPort>> {
-        PanelPort::rear_port_from_netbox(self.id.into(), ctx).await
+        PanelPort::rear_port_from_netbox(self.id, ctx).await
     }
     async fn device(&self) -> async_graphql::Result<DeviceWithRearPorts> {
         let id = self.device.id;
-        Ok(fetch_device_with_ports(id)
+        fetch_device_with_ports(id)
             .await?
-            .ok_or_else(|| async_graphql::Error::new(format!("Device for id {id} not found")))?)
+            .ok_or_else(|| async_graphql::Error::new(format!("Device for id {id} not found")))
     }
 }
 

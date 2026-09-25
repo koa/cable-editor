@@ -100,7 +100,7 @@ impl TableEntryRenderer<CablePathColumn> for DuctPathEntry {
                 }
                 DuctPathEntry::Schacht {
                     schacht,
-                    pos,
+                    pos: _,
                     on_extend: Some(on_extend),
                 } => {
                     let onclick_extend = {
@@ -275,7 +275,7 @@ impl Component for EditCable {
     type Message = Msg;
     type Properties = EditCableProperties;
 
-    fn create(ctx: &Context<Self>) -> Self {
+    fn create(_ctx: &Context<Self>) -> Self {
         Self::default()
     }
 
@@ -416,7 +416,7 @@ impl Component for EditCable {
 
     fn changed(&mut self, ctx: &Context<Self>, old_props: &Self::Properties) -> bool {
         if ctx.props().cable_id != old_props.cable_id {
-            Self::fetch_data(&ctx);
+            Self::fetch_data(ctx);
         }
         false
     }

@@ -1,7 +1,7 @@
 use crate::{
     error::FrontendError,
     graphql::{
-        authenticated::{ParentChainPanel, PortSide, PortType, schema},
+        authenticated::{ParentChainPanel, PortType, schema},
         query,
     },
 };

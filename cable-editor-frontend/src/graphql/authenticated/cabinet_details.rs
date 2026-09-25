@@ -2,7 +2,6 @@ use crate::{
     error::FrontendError,
     graphql::{authenticated::schema, mutate, query},
 };
-use log::info;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use yew_oauth2::prelude::OAuth2Context;
 

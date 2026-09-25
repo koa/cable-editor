@@ -383,10 +383,10 @@ impl AttachFiber {
                             ));
                         }
                     }
-                    PortType::Connector => {
-                        if front != &SlotState::Empty && back == &SlotState::Empty {
-                            errors.push(format!("Port {}: Stecker benötigt zwingend eine Back-Belegung, wenn Front belegt ist.", port_label));
-                        }
+                    PortType::Connector
+                        if front != &SlotState::Empty && back == &SlotState::Empty =>
+                    {
+                        errors.push(format!("Port {}: Stecker benötigt zwingend eine Back-Belegung, wenn Front belegt ist.", port_label));
                     }
                     _ => {}
                 }
@@ -778,7 +778,7 @@ fn calculate_current_states(data: &PlannedPanel) -> BTreeMap<(i32, PortSide), Sl
 
 // Geändert: Neuer Typ f r die kombinierte Auswahl
 #[derive(Clone, Eq, PartialEq)]
-struct CableBundleSelectEntry {
+pub struct CableBundleSelectEntry {
     cable: CableEnd,
     bundle: i32,
     free_count: usize,
@@ -792,32 +792,6 @@ impl SelectItemRenderer for CableBundleSelectEntry {
             "{} - Bündel {} ({} frei)",
             self.cable.cable.name, self.bundle, self.free_count
         )
-    }
-}
-
-#[derive(Clone, Eq, PartialEq)]
-struct FiberSelectEntry(FiberOwnEnd);
-
-impl SelectItemRenderer for FiberSelectEntry {
-    type Item = i32;
-
-    fn label(&self) -> String {
-        let idx = self.0.fiber;
-        if let Some(end_port) = self
-            .0
-            .other_end
-            .as_ref()
-            .and_then(|e| e.used_port.as_ref())
-            .and_then(|u| u.panel_side_end_port.as_ref())
-            .map(|u| &u.port)
-        {
-            let port = end_port.label.as_deref().unwrap_or_default();
-            let panel = end_port.panel.name.as_deref().unwrap_or_default();
-            let schacht = end_port.panel.schacht.name.as_str();
-            format!("{idx} ({schacht} {panel} {port})")
-        } else {
-            idx.to_string()
-        }
     }
 }
 

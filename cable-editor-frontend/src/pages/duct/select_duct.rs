@@ -5,7 +5,7 @@ use crate::{
 };
 use patternfly_yew::prelude::{
     Cell, CellContext, ExpansionState, MemoizedTableModel, Spinner, Table, TableColumn,
-    TableEntryRenderer, TableGridMode, TableHeader, TableMode, UseTableData,
+    TableEntryRenderer, TableGridMode, TableHeader, TableMode,
 };
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use yew::{
@@ -53,11 +53,11 @@ impl Component for SelectDuct {
     type Message = Msg;
     type Properties = SelectDuctProps;
 
-    fn create(ctx: &Context<Self>) -> Self {
+    fn create(_ctx: &Context<Self>) -> Self {
         Self::default()
     }
 
-    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+    fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Msg::Data(data) => {
                 self.found_ducts = Some(Rc::new(data.into_vec()));
