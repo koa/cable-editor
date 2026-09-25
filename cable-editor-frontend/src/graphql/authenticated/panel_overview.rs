@@ -171,6 +171,7 @@ pub struct CablePathOverview {
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
 #[cynic(graphql_type = "Schacht")]
 pub struct RemoteSchachtOverview {
+    pub id: i32,
     pub name: String,
 }
 

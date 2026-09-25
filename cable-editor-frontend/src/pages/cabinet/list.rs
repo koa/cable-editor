@@ -1,9 +1,8 @@
 use crate::components::page_layout::PageLayout;
 use crate::{
-    components::{plan_link::PlanLink, table::ListModel},
+    components::{links::SchachtLink, table::ListModel},
     error::FrontendError,
     graphql::authenticated::list_schacht::{SchachtListEntry, fetch_schacht_list},
-    pages::router::{CabinetView, PlanView},
     util::get_credentials,
 };
 use patternfly_yew::prelude::{
@@ -132,13 +131,7 @@ enum Columns {
 impl TableEntryRenderer<Columns> for SchachtListEntry {
     fn render_cell(&self, context: CellContext<'_, Columns>) -> Cell {
         match context.column {
-            Columns::Name => {
-                let to = PlanView::Cabinet {
-                    id: self.id,
-                    view: CabinetView::Overview,
-                };
-                Cell::new(html! {<PlanLink {to}>{self.name.as_str()}</PlanLink>})
-            }
+            Columns::Name => Cell::new(html!(<SchachtLink id={self.id} text={self.name.clone()}/>)),
             Columns::Cabinets => Cell::new(self.root_panels.len().into_prop_value()),
         }
     }

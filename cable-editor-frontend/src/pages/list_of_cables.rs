@@ -1,8 +1,11 @@
 use crate::{
-    components::{page_layout::PageLayout, plan_link::PlanLink, table::ListModel},
+    components::{
+        links::{CableLink, SchachtLink},
+        page_layout::PageLayout,
+        table::ListModel,
+    },
     error::FrontendError,
     graphql::authenticated::list_cables::{CableListEntry, create_cable, fetch_cables_list},
-    pages::router::{CableView, PlanView},
     util::{get_backdrop, get_credentials},
 };
 use patternfly_yew::prelude::{
@@ -29,13 +32,7 @@ pub enum Columns {
 impl TableEntryRenderer<Columns> for CableListEntry {
     fn render_cell(&self, context: CellContext<'_, Columns>) -> Cell {
         match &context.column {
-            Columns::Name => {
-                let to = PlanView::Cable {
-                    id: self.id,
-                    view: CableView::Edit,
-                };
-                Cell::new(html! {<PlanLink {to}>{self.name.as_str()}</PlanLink>})
-            }
+            Columns::Name => Cell::new(html!(<CableLink id={self.id} text={self.name.clone()}/>)),
             Columns::Fibers => Cell::new(
                 format!(
                     "{} ({}x{})",
@@ -51,12 +48,18 @@ impl TableEntryRenderer<Columns> for CableListEntry {
             Columns::SchachtA => self
                 .path
                 .as_ref()
-                .map(|sch| Cell::new(sch.near_schacht.name.as_str().into()))
+                .map(|sch| {
+                    let schacht = &sch.near_schacht;
+                    Cell::new(html!(<SchachtLink id={schacht.id} text={schacht.name.clone()}/>))
+                })
                 .unwrap_or_default(),
             Columns::SchachtZ => self
                 .path
                 .as_ref()
-                .map(|sch| Cell::new(sch.far_schacht.name.as_str().into()))
+                .map(|sch| {
+                    let schacht = &sch.far_schacht;
+                    Cell::new(html!(<SchachtLink id={schacht.id} text={schacht.name.clone()}/>))
+                })
                 .unwrap_or_default(),
         }
     }

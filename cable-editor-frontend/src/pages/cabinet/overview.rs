@@ -1,13 +1,14 @@
 use crate::{
     components::{
         label_printer::{LabelText, PanelLabelButton, PrintLabelButton, check_printer_supported},
+        links::{CableLink, PanelLink, SchachtLink},
         page_layout::{PageLayout, object_title},
         plan_link::PlanLink,
         table::ListModel,
     },
     error::FrontendError,
     graphql::authenticated::schacht_cables::{SchachtCableEnd, SchachtCables, SchachtPanelEntry},
-    pages::router::{CabinetView, CableView, PanelView, PlanView},
+    pages::router::{CabinetView, PlanView},
     util::get_credentials,
 };
 use patternfly_yew::prelude::{
@@ -38,13 +39,12 @@ impl TableEntryRenderer<Columns> for SchachtCableEnd {
     fn render_cell(&self, context: CellContext<'_, Columns>) -> Cell {
         match context.column {
             Columns::Cable => {
-                let to = PlanView::Cable {
-                    id: self.cable.id,
-                    view: CableView::Edit,
-                };
-                Cell::new(html! {<PlanLink {to}>{self.cable.name.as_str()}</PlanLink>})
+                Cell::new(html!(<CableLink id={self.cable.id} text={self.cable.name.clone()}/>))
             }
-            Columns::Destination => Cell::new(self.path.far_schacht.name.as_str().into()),
+            Columns::Destination => {
+                let far = &self.path.far_schacht;
+                Cell::new(html!(<SchachtLink id={far.id} text={far.name.clone()}/>))
+            }
             Columns::Label => Cell::new(self.label_text().into_prop_value()),
             Columns::Print => {
                 Cell::new(html!(<PrintLabelButton texts={LabelText::single(self.label_text())}/>))
@@ -55,10 +55,6 @@ impl TableEntryRenderer<Columns> for SchachtCableEnd {
 
 /// Panel of the Schacht linking to its connection overview, with its label.
 fn view_panel(panel: &SchachtPanelEntry) -> Html {
-    let to = PlanView::Panel {
-        id: panel.id,
-        view: PanelView::Show,
-    };
     let name = panel
         .name
         .clone()
@@ -69,7 +65,7 @@ fn view_panel(panel: &SchachtPanelEntry) -> Html {
             <div class="pf-v6-c-data-list__item-row">
                 <div class="pf-v6-c-data-list__item-content">
                     <div class="pf-v6-c-data-list__cell schacht-panels__name" style={depth}>
-                        <PlanLink {to}>{name}</PlanLink>
+                        <PanelLink id={panel.id} text={name}/>
                         if panel.port_count > 0 {
                             <span class="pf-v6-u-ml-sm pf-v6-u-color-200">
                                 {format!("{} Ports", panel.port_count)}

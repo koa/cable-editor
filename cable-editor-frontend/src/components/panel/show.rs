@@ -1,7 +1,11 @@
 use crate::components::page_layout::{PageLayout, object_title};
 use crate::util::is_wide_screen;
 use crate::{
-    components::{fiber::FiberLabel, label_printer::PanelLabelButton},
+    components::{
+        fiber::FiberLabel,
+        label_printer::PanelLabelButton,
+        links::{CableLink, PanelLink, SchachtLink},
+    },
     error::FrontendError,
     graphql::authenticated::{
         PortType,
@@ -232,7 +236,10 @@ impl ShowPanel {
                 <Card class="pf-v6-u-mb-lg panel-summary-card">
                     <CardTitle>
                         <div class="overview-header-title">
-                            <div>{format!("Standort: Schacht \"{}\"", schacht.name)}</div>
+                            <div>
+                                {"Standort: Schacht "}
+                                <SchachtLink id={schacht.id} text={schacht.name.clone()}/>
+                            </div>
                             <div class="overview-header-badges">
                                 if modified_ports > 0 {
                                     <span class="pf-v6-c-label pf-m-orange">
@@ -369,7 +376,7 @@ impl ShowPanel {
                                     <Title level={Level::H2} size={patternfly_yew::prelude::Size::Large}>
                                         {Icon::AngleDoubleRight}
                                         <span class="pf-v6-u-ml-sm">
-                                            {format!("{}", child.panel)}
+                                            <PanelLink id={child_id} text={child.panel.to_string()}/>
                                         </span>
                                     </Title>
                                 </div>
@@ -748,7 +755,7 @@ impl ShowPanel {
             .map(|c| c.cable.name.clone())
             .unwrap_or_else(|| format!("Kabel {}", fiber_info.cable.id));
 
-        let far_schacht_name = cable_end.map(|c| c.path.far_schacht.name.clone());
+        let far_schacht = cable_end.map(|c| &c.path.far_schacht);
 
         // Find specific fiber end to get other end termination details
         let fiber_own_end = cable_end.and_then(|c| {
@@ -757,15 +764,18 @@ impl ShowPanel {
                 .find(|f| f.bundle == fiber_info.bundle && f.fiber == fiber_info.fiber)
         });
 
-        let destination_label = cable_end_label(fiber_own_end);
+        let destination = cable_end_port(fiber_own_end);
 
         html! {
             <div class="slot-assigned">
                 <div class="slot-cable-row">
-                    <span class="cable-name">{cable_name}</span>
-                    if let Some(far_schacht) = far_schacht_name {
+                    <span class="cable-name">
+                        <CableLink id={fiber_info.cable.id} text={cable_name}/>
+                    </span>
+                    if let Some(far_schacht) = far_schacht {
                         <span class="cable-far-schacht pf-v6-u-font-size-xs pf-v6-u-color-200">
-                            {format!(" ➔ {}", far_schacht)}
+                            {" ➔ "}
+                            <SchachtLink id={far_schacht.id} text={far_schacht.name.clone()}/>
                         </span>
                     }
                     if usage.modified_in_plan {
@@ -779,11 +789,13 @@ impl ShowPanel {
                         {format!("{}-{}", fiber_info.bundle, fiber_info.fiber)}
                     </FiberLabel>
                 </div>
-                if let Some(dest) = destination_label {
+                if let Some(dest) = destination {
                     <div class="slot-destination-row pf-v6-u-font-size-xs">
                         <span class="destination-icon">{Icon::ArrowRight}</span>
                         {" "}
-                        <span class="destination-text">{dest}</span>
+                        <span class="destination-text">
+                            <PanelLink id={dest.port.panel.id} text={dest.to_string()}/>
+                        </span>
                     </div>
                 }
             </div>
@@ -811,12 +823,12 @@ fn count_modified_ports(ports: &[PlannedPortOverview]) -> usize {
         .count()
 }
 
-fn cable_end_label(option: Option<&FiberOwnEndOverview>) -> Option<String> {
+/// The port the fiber ends at on its other end, if used there.
+fn cable_end_port(option: Option<&FiberOwnEndOverview>) -> Option<&UsedEndPortOverview> {
     option
         .and_then(|f| f.other_end.as_ref())
         .and_then(|e| e.used_port.as_ref())
         .and_then(|p| p.panel_side_end_port.as_ref())
-        .map(UsedEndPortOverview::to_string)
 }
 
 fn chrono_stub_date() -> String {
