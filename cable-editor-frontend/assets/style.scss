@@ -98,6 +98,9 @@ body {
   > .pf-v6-c-page__main-container {
     max-height: none;
     overflow: visible;
+    // PatternFly's z-index (against the sidebar, which we don't have) makes it a stacking context,
+    // which would keep the phone menu sheet below the printer status bar
+    z-index: auto;
   }
 
   .pf-v6-c-page__main {
@@ -689,5 +692,24 @@ body {
   &.popup-menu--end > .pf-v6-c-menu {
     inset-inline-start: auto;
     inset-inline-end: 0;
+  }
+}
+
+// On phones a menu below its toggle would often reach past the screen edge: open it as a sheet
+// at the bottom instead, within thumb reach (above the printer status bar)
+@media screen and (max-width: calc(48rem - 1px)) {
+  .popup-menu > .pf-v6-c-menu,
+  .popup-menu.popup-menu--end > .pf-v6-c-menu {
+    --pf-v6-c-menu--m-scrollable__content--MaxHeight: 60dvh;
+
+    position: fixed;
+    inset-block: auto 0;
+    inset-inline: 0;
+    z-index: var(--pf-t--global--z-index--lg);
+    min-width: 0;
+    margin: 0;
+    border-end-start-radius: 0;
+    border-end-end-radius: 0;
+    box-shadow: var(--pf-t--global--box-shadow--lg);
   }
 }
