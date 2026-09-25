@@ -13,8 +13,7 @@ use crate::graphql::authenticated::edit_cabinet::{
 use log::info;
 use patternfly_yew::prelude::{
     ActionGroup, Button, ButtonType, ButtonVariant, Cell, Form, FormGroup, FormSelect,
-    FormSelectOption, Icon, Level, Modal, Spinner, TableColumn, TableHeader, TableMode, TextInput,
-    Title,
+    FormSelectOption, Icon, Modal, Spinner, TableColumn, TableHeader, TableMode, TextInput,
 };
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
@@ -59,9 +58,6 @@ pub enum Msg {
 pub struct EditCabinetProps {
     pub plan_id: i32,
     pub cabinet_id: i32,
-    /// Show the "Panels im Schacht" heading (off where the caller labels the editor itself)
-    #[prop_or(true)]
-    pub heading: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
@@ -517,9 +513,6 @@ impl Component for EditCabinet {
 
             html! {
                 <>
-                if ctx.props().heading {
-                    <Title level={Level::H2}>{"Panels im Schacht"}</Title>
-                }
                 {error}
                 <TreeTable<IdOrNew, PanelEntry,PanelEditAction, PanelColumn>
                     state={self.state.clone()}

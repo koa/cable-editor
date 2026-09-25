@@ -1,20 +1,16 @@
 use crate::components::page_layout::PageLayout;
 use crate::{
-    components::{cabinet::edit::EditCabinet, plan_link::PlanLink, table::ListModel},
+    components::{plan_link::PlanLink, table::ListModel},
     error::FrontendError,
     graphql::authenticated::list_schacht::{SchachtListEntry, fetch_schacht_list},
     pages::router::{CabinetView, PlanView},
     util::get_credentials,
 };
 use patternfly_yew::prelude::{
-    Cell, CellContext, ExpansionState, MemoizedTableModel, Span, Spinner, Table, TableColumn,
+    Cell, CellContext, ExpansionState, MemoizedTableModel, Spinner, Table, TableColumn,
     TableEntryRenderer, TableGridMode, TableHeader, TableHeaderSortBy, TableMode,
 };
-use std::{
-    cell::RefCell,
-    collections::{HashMap, hash_map::Entry},
-    rc::Rc,
-};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use yew::{
     Component, Context, Html, Properties, html,
     html::{IntoPropValue, Scope},
@@ -23,9 +19,10 @@ use yew::{
 };
 
 pub struct ListOfCabinets {
-    data: Option<Rc<Vec<(SchachtListEntry, i32)>>>,
+    data: Option<Rc<Vec<SchachtListEntry>>>,
     error: Option<FrontendError>,
     sort: Option<TableHeaderSortBy<Columns>>,
+    /// Required by `ListModel`; the rows don't expand
     table_state: Rc<RefCell<HashMap<usize, ExpansionState<Columns>>>>,
 }
 
@@ -33,10 +30,6 @@ pub enum Msg {
     Data(Box<[SchachtListEntry]>),
     Error(FrontendError),
     OnSort(TableHeaderSortBy<Columns>),
-    SetExpandState {
-        row: usize,
-        state: ExpansionState<Columns>,
-    },
 }
 
 #[derive(Clone, PartialEq, Properties)]
@@ -54,16 +47,15 @@ impl Component for ListOfCabinets {
             data: None,
             error: None,
             sort: None,
-            table_state: Rc::new(RefCell::new(Default::default())),
+            table_state: Rc::default(),
         }
     }
 
-    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+    fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Msg::Data(data) => {
                 self.error = None;
-                let plan_id = ctx.props().plan_id;
-                self.data = Some(Rc::new(data.into_iter().map(|e| (e, plan_id)).collect()));
+                self.data = Some(Rc::new(data.into_vec()));
                 true
             }
             Msg::Error(error) => {
@@ -72,22 +64,6 @@ impl Component for ListOfCabinets {
             }
             Msg::OnSort(sort) => {
                 self.sort = Some(sort);
-                true
-            }
-            Msg::SetExpandState { row, state } => {
-                let mut states = self.table_state.as_ref().borrow_mut();
-                match states.entry(row) {
-                    Entry::Occupied(mut e) => {
-                        if e.get() == &state {
-                            e.remove();
-                        } else {
-                            e.insert(state);
-                        }
-                    }
-                    Entry::Vacant(e) => {
-                        e.insert(state);
-                    }
-                }
                 true
             }
         }
@@ -120,19 +96,15 @@ impl ListOfCabinets {
             let header = html_nested! {
                 <TableHeader<Columns>>
                     <TableColumn<Columns> label="Name" index={Columns::Name} onsort={onsort.clone()} sortby={self.sort}/>
-                    <TableColumn<Columns> label="Panels" expandable=true index={Columns::Cabinets} onsort={onsort.clone()} sortby={self.sort}/>
+                    <TableColumn<Columns> label="Panels" index={Columns::Cabinets} onsort={onsort.clone()} sortby={self.sort}/>
                 </TableHeader<Columns>>
             };
-            let onexpand = ctx
-                .link()
-                .callback(|(row, state)| Msg::SetExpandState { row, state });
             html! {
-                <Table<Columns, ListModel<Columns, MemoizedTableModel<(SchachtListEntry,i32)>>>
-                    mode={TableMode::Expandable}
+                <Table<Columns, ListModel<Columns, MemoizedTableModel<SchachtListEntry>>>
+                    mode={TableMode::Compact}
                     grid={TableGridMode::Medium}
                     {header}
                     {entries}
-                    {onexpand}
                 />
             }
         } else {
@@ -157,30 +129,17 @@ enum Columns {
     Cabinets,
 }
 
-impl TableEntryRenderer<Columns> for (SchachtListEntry, i32) {
+impl TableEntryRenderer<Columns> for SchachtListEntry {
     fn render_cell(&self, context: CellContext<'_, Columns>) -> Cell {
         match context.column {
             Columns::Name => {
                 let to = PlanView::Cabinet {
-                    id: self.0.id,
+                    id: self.id,
                     view: CabinetView::Overview,
                 };
-                Cell::new(html! {<PlanLink {to}>{self.0.name.as_str()}</PlanLink>})
+                Cell::new(html! {<PlanLink {to}>{self.name.as_str()}</PlanLink>})
             }
-            Columns::Cabinets => Cell::new(self.0.root_panels.len().into_prop_value()),
-        }
-    }
-
-    fn render_column_details(&self, column: &Columns) -> Vec<Span> {
-        match column {
-            Columns::Name => {
-                vec![Span::max(html!("Can't expand"))]
-            }
-            Columns::Cabinets => {
-                vec![Span::max(
-                    html!(<EditCabinet cabinet_id={self.0.id} plan_id={self.1}/>),
-                )]
-            }
+            Columns::Cabinets => Cell::new(self.root_panels.len().into_prop_value()),
         }
     }
 }

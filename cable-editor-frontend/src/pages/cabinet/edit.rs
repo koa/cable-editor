@@ -74,7 +74,7 @@ impl Component for EditCabinetPanels {
         } = *ctx.props();
         html! {
             <PageLayout title={object_title("Panels bearbeiten", self.name.as_ref())}>
-                <EditCabinet {plan_id} {cabinet_id} heading=false/>
+                <EditCabinet {plan_id} {cabinet_id}/>
             </PageLayout>
         }
     }
