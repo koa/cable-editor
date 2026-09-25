@@ -115,7 +115,7 @@ impl Component for PopupMenu {
                     ontoggle={link.callback(|()| PopupMenuMsg::Toggle)}
                 />
                 if self.is_open {
-                    <div ref={self.menu_ref.clone()} class="pf-v6-c-menu pf-m-scrollable">
+                    <div ref={self.menu_ref.clone()} class="pf-v6-c-menu pf-m-scrollable" tabindex="-1">
                         <div class="pf-v6-c-menu__content">
                             <ContextProvider<CloseMenu> context={close}>
                                 {props.children.clone()}
@@ -128,18 +128,18 @@ impl Component for PopupMenu {
     }
 
     fn rendered(&mut self, _ctx: &Context<Self>, _first_render: bool) {
-        // Focus the selected entry (or the first one), so the arrow keys work right away and
-        // leaving the menu with the focus closes it.
+        // Focus the selected entry, so the arrow keys work right away and leaving the menu with
+        // the focus closes it. The last one: in the menu of a Schacht or panel the current view
+        // comes before the Schacht or panel itself, the dropdown's title. Without one the menu
+        // itself, as a focused first entry would look selected; the arrow keys then start there.
         if std::mem::take(&mut self.focus_on_render)
             && let Some(menu) = self.menu_ref.cast::<Element>()
         {
-            let item = menu
-                .query_selector(".pf-v6-c-menu__item.pf-m-selected")
-                .ok()
-                .flatten()
-                .or_else(|| menu_items(&menu).into_iter().next());
-            if let Some(item) = item.and_then(|item| item.dyn_into::<HtmlElement>().ok()) {
-                let _ = item.focus();
+            let target = menu_items(&menu, ".pf-v6-c-menu__item.pf-m-selected")
+                .pop()
+                .unwrap_or(menu);
+            if let Ok(target) = target.dyn_into::<HtmlElement>() {
+                let _ = target.focus();
             }
         }
     }
@@ -157,7 +157,7 @@ impl PopupMenu {
         let Some(menu) = self.menu_ref.cast::<Element>().filter(|_| self.is_open) else {
             return false;
         };
-        let items = menu_items(&menu);
+        let items = menu_items(&menu, "[role=menuitem]");
         let current = gloo_utils::document()
             .active_element()
             .and_then(|focused| items.iter().position(|item| *item == focused));
@@ -188,8 +188,8 @@ impl PopupMenu {
     }
 }
 
-fn menu_items(menu: &Element) -> Vec<Element> {
-    let Ok(items) = menu.query_selector_all("[role=menuitem]") else {
+fn menu_items(menu: &Element, selector: &str) -> Vec<Element> {
+    let Ok(items) = menu.query_selector_all(selector) else {
         return Vec::new();
     };
     (0..items.length())
@@ -250,6 +250,9 @@ fn item_class(selected: bool) -> yew::Classes {
 #[derive(Properties, PartialEq)]
 pub struct MenuLinkItemProps {
     pub to: AppRoute,
+    /// Mark as selected although `to` is not the current page (e.g. the area it lies in)
+    #[prop_or_default]
+    pub selected: bool,
     #[prop_or_default]
     pub children: Html,
 }
@@ -312,7 +315,7 @@ impl Component for MenuLinkItem {
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         let props = ctx.props();
-        let selected = self.router.as_ref().is_some_and(|r| r.is_same(&props.to));
+        let selected = props.selected || self.router.as_ref().is_some_and(|r| r.is_same(&props.to));
         let href = self
             .router
             .as_ref()

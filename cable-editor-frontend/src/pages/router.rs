@@ -247,16 +247,20 @@ pub enum PlanView {
 
 impl PlanView {
     pub fn append_breadcrumbs(&self, plan_id: i32, item_contents: &mut Vec<VNode>) {
-        let title: Cow<'static, str> = match self {
-            PlanView::Edit => "Ändern",
+        // The area the current page lies in: its entry leads to the area's start page
+        let (title, area): (Cow<'static, str>, PlanView) = match self {
+            PlanView::Edit => ("Ändern".into(), PlanView::Edit),
             PlanView::Cabinet { .. } | PlanView::ListOfCabinets | PlanView::Panel { .. } => {
-                "Schacht"
+                ("Schacht".into(), PlanView::ListOfCabinets)
             }
-            PlanView::Cable { .. } | PlanView::ListOfCables => "Kabel",
-        }
-        .into();
+            PlanView::Cable { .. } | PlanView::ListOfCables => {
+                ("Kabel".into(), PlanView::ListOfCables)
+            }
+        };
+
         let mut entries = Vec::new();
         entries.push(MenuEntry {
+            selected: false,
             text: "Ändern".into(),
             target: AppRoute::Plan {
                 plan_id,
@@ -265,6 +269,7 @@ impl PlanView {
         });
 
         entries.push(MenuEntry {
+            selected: false,
             text: "Schacht".into(),
             target: AppRoute::Plan {
                 plan_id,
@@ -273,6 +278,7 @@ impl PlanView {
         });
 
         entries.push(MenuEntry {
+            selected: false,
             text: "Kabel".into(),
             target: AppRoute::Plan {
                 plan_id,
@@ -280,6 +286,9 @@ impl PlanView {
             },
         });
 
+        for entry in &mut entries {
+            entry.selected = matches!(&entry.target, AppRoute::Plan { view, .. } if *view == area);
+        }
         item_contents.push(html!(<MenuDropdown {title} {entries}/>));
 
         match self {

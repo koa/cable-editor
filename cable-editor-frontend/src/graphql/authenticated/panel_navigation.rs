@@ -20,6 +20,7 @@ struct FetchPanelQuery {
 pub struct PanelHierarchy {
     pub id: i32,
     pub name: Option<String>,
+    pub parent_order: Option<i32>,
     pub schacht: PanelSchacht,
     pub parent_chain: Vec<ParentChainWithSiblingsPanel>,
     pub siblings: Vec<ChildPanelNav>,
@@ -37,6 +38,7 @@ pub struct PanelSchacht {
 pub struct ParentChainWithSiblingsPanel {
     pub id: i32,
     pub name: Option<String>,
+    pub parent_order: Option<i32>,
     pub siblings: Vec<ChildPanelNav>,
 }
 
@@ -45,6 +47,7 @@ pub struct ParentChainWithSiblingsPanel {
 pub struct ChildPanelNav {
     pub id: i32,
     pub name: Option<String>,
+    pub parent_order: Option<i32>,
 }
 
 impl PanelHierarchy {

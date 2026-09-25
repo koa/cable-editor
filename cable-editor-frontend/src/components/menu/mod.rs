@@ -23,6 +23,9 @@ pub struct MenuDropdownProps {
 
 #[derive(PartialEq, Clone)]
 pub struct MenuEntry {
+    /// Marked as selected also when `target` is not the current page: the entry the dropdown
+    /// shows as its title (e.g. the area or the panel the current page lies in)
+    pub selected: bool,
     pub text: Box<str>,
     pub target: AppRoute,
 }
@@ -51,7 +54,11 @@ pub fn MenuDropdown(props: &MenuDropdownProps) -> Html {
             .iter()
             .map(|entry| {
                 html! {
-                    <MenuLinkItem key={entry.text.as_ref()} to={entry.target.clone()}>
+                    <MenuLinkItem
+                        key={entry.text.as_ref()}
+                        to={entry.target.clone()}
+                        selected={entry.selected}
+                    >
                         {entry.text.as_ref()}
                     </MenuLinkItem>
                 }

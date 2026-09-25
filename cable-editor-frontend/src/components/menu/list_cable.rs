@@ -89,6 +89,7 @@ impl Component for ListCable {
                     let entries = cables
                         .iter()
                         .map(|e| MenuEntry {
+                            selected: false,
                             text: e.name.clone().into_boxed_str(),
                             target: AppRoute::Plan {
                                 plan_id,

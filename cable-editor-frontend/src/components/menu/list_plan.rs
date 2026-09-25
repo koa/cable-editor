@@ -88,11 +88,13 @@ impl Component for ListPlan {
                         .as_ref()
                         .unwrap_or(&PlanView::ListOfCabinets);
                     let entries = Some(MenuEntry {
+                        selected: false,
                         text: Box::from("Übersicht"),
                         target: AppRoute::ListOfPlans,
                     })
                     .into_iter()
                     .chain(plans.iter().map(|e| MenuEntry {
+                        selected: false,
                         text: e.name.clone().into_boxed_str(),
                         target: AppRoute::Plan {
                             plan_id: e.id,

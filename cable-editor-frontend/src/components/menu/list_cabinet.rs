@@ -116,6 +116,7 @@ impl ListCabinet {
         let view_entries = CabinetView::ALL
             .iter()
             .map(|view| MenuEntry {
+                selected: false,
                 text: view.title().into(),
                 target: AppRoute::Plan {
                     plan_id,
@@ -126,10 +127,10 @@ impl ListCabinet {
                 },
             })
             .collect::<Vec<_>>();
-        let mut others = cabinets
+        let mut cabinet_entries = cabinets
             .iter()
-            .filter(|c| c.id != cabinet_id)
             .map(|c| MenuEntry {
+                selected: c.id == cabinet_id,
                 text: c.name.clone().into_boxed_str(),
                 target: AppRoute::Plan {
                     plan_id,
@@ -140,10 +141,10 @@ impl ListCabinet {
                 },
             })
             .collect::<Vec<_>>();
-        others.sort_by(|a, b| a.text.cmp(&b.text));
+        cabinet_entries.sort_by(|a, b| a.text.cmp(&b.text));
         let groups = vec![MenuEntryGroup {
             title: "Schächte",
-            entries: others,
+            entries: cabinet_entries,
         }];
         let cabinet_menu = html!(<MenuDropdown {title} entries={view_entries.clone()} {groups}/>);
 
@@ -155,6 +156,7 @@ impl ListCabinet {
             .unwrap_or_default()
             .iter()
             .map(|p| MenuEntry {
+                selected: false,
                 text: p
                     .name
                     .clone()

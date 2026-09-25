@@ -112,7 +112,7 @@ impl Component for ListPanel {
                             p_id,
                             p_name,
                             "Panels",
-                            &parent.siblings,
+                            &with_self(&parent.siblings, p_id, &parent.name, parent.parent_order),
                         ));
                     }
 
@@ -130,7 +130,7 @@ impl Component for ListPanel {
                         c_id,
                         c_name,
                         "Panels",
-                        &panel.siblings,
+                        &with_self(&panel.siblings, c_id, &panel.name, panel.parent_order),
                     ));
 
                     // 3. View Dropdown
@@ -169,8 +169,8 @@ impl Component for ListPanel {
 }
 
 impl ListPanel {
-    /// Menu with the views of the panel and, in a group titled `others_title`, the siblings
-    /// (on a panel) or children (on the view) to switch to.
+    /// Menu with the views of the panel and, in a group titled `others_title`, the panels at its
+    /// level including itself, marked (on a panel), or its children (on the view).
     fn render_panel_dropdown(
         &self,
         plan_id: i32,
@@ -182,6 +182,7 @@ impl ListPanel {
         let title: Cow<'static, str> = name.into();
         let mut entries = vec![
             MenuEntry {
+                selected: false,
                 text: "Übersicht".into(),
                 target: AppRoute::Plan {
                     plan_id,
@@ -192,6 +193,7 @@ impl ListPanel {
                 },
             },
             MenuEntry {
+                selected: false,
                 text: "Ports ändern".into(),
                 target: AppRoute::Plan {
                     plan_id,
@@ -205,6 +207,7 @@ impl ListPanel {
         if plan_id != 0 {
             entries.extend([
                 MenuEntry {
+                    selected: false,
                     text: "Fasern auflegen".into(),
                     target: AppRoute::Plan {
                         plan_id,
@@ -215,6 +218,7 @@ impl ListPanel {
                     },
                 },
                 MenuEntry {
+                    selected: false,
                     text: "Loops verbinden".into(),
                     target: AppRoute::Plan {
                         plan_id,
@@ -229,8 +233,8 @@ impl ListPanel {
 
         let others = others
             .iter()
-            .filter(|other| other.id != panel_id)
             .map(|other| MenuEntry {
+                selected: other.id == panel_id,
                 text: other
                     .name
                     .clone()
@@ -251,4 +255,21 @@ impl ListPanel {
         }];
         html!(<MenuDropdown {title} {entries} {groups}/>)
     }
+}
+
+/// The siblings of a panel (which the backend returns without it) plus the panel, in panel order.
+fn with_self(
+    siblings: &[ChildPanelNav],
+    id: i32,
+    name: &Option<String>,
+    parent_order: Option<i32>,
+) -> Vec<ChildPanelNav> {
+    let mut panels = siblings.to_vec();
+    panels.push(ChildPanelNav {
+        id,
+        name: name.clone(),
+        parent_order,
+    });
+    panels.sort_by_key(|panel| panel.parent_order);
+    panels
 }
