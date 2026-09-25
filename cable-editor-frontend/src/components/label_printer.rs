@@ -2,7 +2,7 @@ use crate::{
     error::FrontendError,
     icons::{IconLink, IconUnlink},
 };
-use brady_web_sdk::{BradySdk, PrinterStatus, image_from_canvas, use_brady};
+use brady_web_sdk::{Brady, BradySdk, PrinterStatus, image_from_canvas, use_brady};
 use futures::{
     StreamExt,
     future::{Either, ready, select},
@@ -16,8 +16,9 @@ use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, Storage, window};
 use yew::{
-    AttrValue, Callback, Html, Properties, UseStateHandle, classes, function_component, hook, html,
-    html::IntoPropValue,
+    AttrValue, Callback, Component, Html, Properties, UseStateHandle, classes, function_component,
+    hook, html,
+    html::{IntoPropValue, Scope},
     platform::{spawn_local, time::sleep},
     prelude::SubmitEvent,
     use_effect_with, use_memo, use_state,
@@ -54,6 +55,14 @@ pub fn use_printer_supported() -> bool {
         });
     }
     *supported
+}
+
+/// `use_printer_supported` for struct components: sends `msg` with the result once checked.
+pub fn check_printer_supported<C: Component>(scope: &Scope<C>, msg: fn(bool) -> C::Message) {
+    if let Some((brady, _)) = scope.context::<Brady>(Callback::noop()) {
+        let scope = scope.clone();
+        spawn_local(async move { scope.send_message(msg(brady.sdk.is_supported_browser().await)) });
+    }
 }
 
 /// Printer connection and status, fixed at the bottom of every page.

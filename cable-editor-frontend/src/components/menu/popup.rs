@@ -4,10 +4,10 @@ use wasm_bindgen::JsCast;
 use web_sys::{Element, HtmlElement, Node};
 use yew::events::{FocusEvent, KeyboardEvent, MouseEvent};
 use yew::{
-    AttrValue, Callback, Component, Context, ContextProvider, Html, NodeRef, Properties, classes,
-    function_component, html, use_context,
+    AttrValue, Callback, Component, Context, ContextHandle, ContextProvider, Html, NodeRef,
+    Properties, classes, function_component, html, use_context,
 };
-use yew_nested_router::prelude::use_router;
+use yew_nested_router::prelude::RouterContext;
 
 #[derive(Properties, PartialEq)]
 pub struct PopupMenuProps {
@@ -255,34 +255,76 @@ pub struct MenuLinkItemProps {
 }
 
 /// Entry of a `PopupMenu` navigating to `to`; marked as selected when that is the current page.
-#[function_component]
-pub fn MenuLinkItem(props: &MenuLinkItemProps) -> Html {
-    let router = use_router::<AppRoute>();
-    let close = use_context::<CloseMenu>();
-    let selected = router.as_ref().is_some_and(|r| r.is_same(&props.to));
-    let href = router.as_ref().map(|r| r.render_target(props.to.clone()));
-    let onclick = {
-        let to = props.to.clone();
-        Callback::from(move |e: MouseEvent| {
-            // Modified clicks keep the browser behaviour (e.g. open in a new tab)
-            if e.ctrl_key() || e.meta_key() || e.shift_key() || e.button() != 0 {
-                return;
+pub struct MenuLinkItem {
+    router: Option<RouterContext<AppRoute>>,
+    _router_handle: Option<ContextHandle<RouterContext<AppRoute>>>,
+    close: Option<CloseMenu>,
+}
+
+pub enum MenuLinkItemMsg {
+    /// The route changed, which may change whether this entry is selected
+    RouterChanged(RouterContext<AppRoute>),
+    Click(MouseEvent),
+}
+
+impl Component for MenuLinkItem {
+    type Message = MenuLinkItemMsg;
+    type Properties = MenuLinkItemProps;
+
+    fn create(ctx: &Context<Self>) -> Self {
+        let (router, router_handle) = ctx
+            .link()
+            .context::<RouterContext<AppRoute>>(ctx.link().callback(MenuLinkItemMsg::RouterChanged))
+            .unzip();
+        let close = ctx
+            .link()
+            .context::<CloseMenu>(Callback::noop())
+            .map(|(close, _)| close);
+        Self {
+            router,
+            _router_handle: router_handle,
+            close,
+        }
+    }
+
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+        match msg {
+            MenuLinkItemMsg::RouterChanged(router) => {
+                self.router = Some(router);
+                true
             }
-            e.prevent_default();
-            if let Some(CloseMenu(close)) = &close {
-                close.emit(());
+            MenuLinkItemMsg::Click(e) => {
+                // Modified clicks keep the browser behaviour (e.g. open in a new tab)
+                if e.ctrl_key() || e.meta_key() || e.shift_key() || e.button() != 0 {
+                    return false;
+                }
+                e.prevent_default();
+                if let Some(CloseMenu(close)) = &self.close {
+                    close.emit(());
+                }
+                if let Some(router) = &self.router {
+                    router.push(ctx.props().to.clone());
+                }
+                false
             }
-            if let Some(router) = &router {
-                router.push(to.clone());
-            }
-        })
-    };
-    html! {
-        <li class="pf-v6-c-menu__list-item" role="none">
-            <a class={item_class(selected)} {href} role="menuitem" tabindex="-1" {onclick}>
-                {item_main(selected, &props.children)}
-            </a>
-        </li>
+        }
+    }
+
+    fn view(&self, ctx: &Context<Self>) -> Html {
+        let props = ctx.props();
+        let selected = self.router.as_ref().is_some_and(|r| r.is_same(&props.to));
+        let href = self
+            .router
+            .as_ref()
+            .map(|r| r.render_target(props.to.clone()));
+        let onclick = ctx.link().callback(MenuLinkItemMsg::Click);
+        html! {
+            <li class="pf-v6-c-menu__list-item" role="none">
+                <a class={item_class(selected)} {href} role="menuitem" tabindex="-1" {onclick}>
+                    {item_main(selected, &props.children)}
+                </a>
+            </li>
+        }
     }
 }
 
