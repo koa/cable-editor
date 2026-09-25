@@ -10,6 +10,7 @@ pub mod list_plans;
 pub mod list_schacht;
 pub mod list_schacht_typ;
 pub mod netbox_sync;
+pub mod panel_navigation;
 pub mod panel_overview;
 pub mod plan_details;
 pub mod schacht_cables;

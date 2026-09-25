@@ -1,3 +1,7 @@
+use crate::components::menu::list_cable::ListCable;
+use crate::components::menu::list_panel::ListPanel;
+use crate::components::menu::list_plan::ListPlan;
+use crate::components::menu::{MenuDropdown, MenuEntry};
 use crate::{
     components::panel::{attach_fiber::AttachFiber, loop_editor::LoopPortEditor, show::ShowPanel},
     error::FrontendError,
@@ -11,10 +15,12 @@ use crate::{
     },
     util::get_credentials,
 };
-use patternfly_yew::prelude::{Nav, NavList, NavRouterItem, Spinner};
+use patternfly_yew::prelude::{Breadcrumb, BreadcrumbItem, Nav, NavList, NavRouterItem, Spinner};
+use std::borrow::Cow;
+use yew::virtual_dom::VNode;
 use yew::{
     Callback, Component, Context, ContextHandle, Html, Properties, function_component, html,
-    html::IntoPropValue, platform::spawn_local,
+    html::IntoPropValue, html_nested, platform::spawn_local,
 };
 use yew_nested_router::prelude::{RouterContext, Target, use_router};
 
@@ -165,6 +171,7 @@ pub enum AppRoute {
         view: PlanView,
     },
 }
+
 #[derive(Debug, Clone, PartialEq, Eq, Target)]
 pub enum CableView {
     Edit,
@@ -223,21 +230,119 @@ pub enum PlanView {
     },
 }
 
-impl AppRoute {
-    pub fn content(self) -> Html {
+impl PlanView {
+    pub fn append_breadcrumbs(&self, plan_id: i32, item_contents: &mut Vec<VNode>) {
+        let title: Cow<'static, str> = match self {
+            PlanView::Edit => "Ändern",
+            PlanView::Cabinet { .. } | PlanView::ListOfCabinets => "Schacht",
+            PlanView::Cable { .. } | PlanView::ListOfCables => "Kabel",
+            PlanView::Panel { .. } => "Panel",
+        }
+        .into();
+        let mut entries = Vec::new();
+        entries.push(MenuEntry {
+            text: "Ändern".into(),
+            target: AppRoute::Plan {
+                plan_id,
+                view: PlanView::Edit,
+            },
+        });
+
+        entries.push(MenuEntry {
+            text: "Schacht".into(),
+            target: AppRoute::Plan {
+                plan_id,
+                view: PlanView::ListOfCabinets,
+            },
+        });
+
+        entries.push(MenuEntry {
+            text: "Kabel".into(),
+            target: AppRoute::Plan {
+                plan_id,
+                view: PlanView::ListOfCables,
+            },
+        });
+
+        item_contents.push(html!(<MenuDropdown {title} {entries}/>));
+
         match self {
-            AppRoute::NotFound => html! {<h1>{"Not Found"}</h1>},
-            /*AppRoute::Map => {
-                html! {<MapComponent center={Point( 47.417986,8.882440)}/>}
+            PlanView::Cabinet { id, view } => {
+                let title: Cow<'static, str> = format!("{id}").into();
+                let target = AppRoute::Plan {
+                    plan_id,
+                    view: PlanView::Cabinet {
+                        id: *id,
+                        view: view.clone(),
+                    },
+                };
+                let my_entry = MenuEntry {
+                    text: Box::from(title.as_ref()),
+                    target,
+                };
+                item_contents.push(html!(<MenuDropdown {title} entries={vec![my_entry]}/>));
+                view.append_breadcrumbs(plan_id, id, item_contents);
             }
-            AppRoute::MapTest => {
-                html! {<MapTestPage/>}
-            }*/
-            AppRoute::ListOfPlans => html! {<ListOfPlannings/>},
-            AppRoute::Plan { plan_id, view } => view.content(plan_id),
+            PlanView::Cable { id, view } => {
+                item_contents.push(html!(<ListCable {plan_id} cable_id={id} view={view.clone()}/>))
+            }
+            PlanView::Panel { id, view } => {
+                item_contents.push(html!(<ListPanel {plan_id} panel_id={*id} view={view.clone()}/>));
+            }
+            _ => {}
         }
     }
 }
+
+impl AppRoute {
+    pub fn content(self) -> Html {
+        let bc = self.breadcrumb();
+
+        match self {
+            AppRoute::NotFound => html! {<h1>{"Not Found"}</h1>},
+            AppRoute::ListOfPlans => {
+                html! {
+                    <>
+                    {bc}
+                    <ListOfPlannings/>
+                    </>
+                }
+            }
+            AppRoute::Plan { plan_id, view } => {
+                html! {
+                    <>
+                    {bc}
+                    {view.content(plan_id)}
+                    </>
+                }
+            }
+        }
+    }
+    fn breadcrumb(&self) -> Html {
+        let mut item_contents = Vec::new();
+        item_contents.push(match self {
+            AppRoute::NotFound => Html::default(),
+            AppRoute::ListOfPlans => {
+                html!(<ListPlan/>)
+            }
+            AppRoute::Plan { plan_id, view } => {
+                html!(<ListPlan {plan_id} view={view.clone()}/>)
+            }
+        });
+        if let AppRoute::Plan { plan_id, view } = self {
+            view.append_breadcrumbs(*plan_id, &mut item_contents);
+        }
+        let items = item_contents
+            .into_iter()
+            .map(|item_content| html_nested!(<BreadcrumbItem>{item_content}</BreadcrumbItem>));
+        html! {
+            <Breadcrumb>
+                {for items}
+            </Breadcrumb>
+        }
+    }
+}
+
 impl PlanView {
     fn content(self, plan_id: i32) -> Html {
         match self {
@@ -266,5 +371,12 @@ impl CabinetView {
         match self {
             CabinetView::Overview => html!(<CabinetOverview {plan_id} {cabinet_id}/>),
         }
+    }
+    pub fn append_breadcrumbs(
+        &self,
+        plan_id: i32,
+        cabinet_id: &i32,
+        breadcrumb_items: &mut Vec<VNode>,
+    ) {
     }
 }

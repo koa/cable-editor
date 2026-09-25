@@ -8,7 +8,6 @@ pub mod planning;
 pub mod router;
 
 use crate::icons::IconBlueprintNode;
-use brady_web_sdk::BradyProvider;
 use crate::{
     error::FrontendError,
     graphql::{
@@ -17,6 +16,7 @@ use crate::{
     },
     pages::router::{AppRoute, Sidebar},
 };
+use brady_web_sdk::BradyProvider;
 use cynic::GraphQlResponse;
 use patternfly_yew::prelude::{
     BackdropViewer, Button, MastheadBrand, Page, PageSidebar, Spinner, ToastViewer,
@@ -123,12 +123,8 @@ pub fn main_oauth2(props: &MainOAuth2Props) -> Html {
             <ToastViewer>
                 <Authenticated>
                     <BradyProvider>
-                        <Router<AppRoute>>
-                            <Page {brand} sidebar={html_nested! {<PageSidebar><Sidebar/></PageSidebar>}}>
-                                <Switch<AppRoute>
-                                    render = { AppRoute::content}
-                                />
-                            </Page>
+                        <Router<AppRoute> default={AppRoute::default()}>
+                            <Switch<AppRoute> render={AppRoute::content}/>
                         </Router<AppRoute>>
                     </BradyProvider>
                 </Authenticated>

@@ -4,6 +4,7 @@ pub mod fiber;
 pub mod label_printer;
 pub mod map;
 pub mod map_edit;
+pub mod menu;
 pub mod panel;
 pub mod plan;
 pub mod plan_link;
