@@ -7,7 +7,7 @@ pub mod panel;
 pub mod planning;
 pub mod router;
 
-use crate::icons::IconBlueprintNode;
+use crate::{components::label_printer::PrinterStatusBar, icons::IconBlueprintNode};
 use crate::{
     error::FrontendError,
     graphql::{
@@ -126,6 +126,7 @@ pub fn main_oauth2(props: &MainOAuth2Props) -> Html {
                         <Router<AppRoute> default={AppRoute::default()}>
                             <Switch<AppRoute> render={AppRoute::content}/>
                         </Router<AppRoute>>
+                        <PrinterStatusBar/>
                     </BradyProvider>
                 </Authenticated>
                 <NotAuthenticated>

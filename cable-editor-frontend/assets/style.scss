@@ -23,6 +23,44 @@
   width: 100%;
 }
 
+// Printer status, fixed at the bottom below dialogs (Backdrop is z-index lg)
+.printer-status-bar {
+  position: fixed;
+  inset-inline: 0;
+  inset-block-end: 0;
+  z-index: var(--pf-t--global--z-index--md);
+  padding: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--md);
+  background-color: var(--pf-t--global--background--color--secondary--default);
+  border-block-start: 1px solid var(--pf-t--global--border--color--default);
+  font-size: var(--pf-t--global--font--size--body--sm);
+
+  .printer-status-bar__row {
+    display: flex;
+    align-items: center;
+    gap: var(--pf-t--global--spacer--sm);
+  }
+
+  .printer-status-bar__text {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+// In the flow after the page, keeps its end reachable above the bar
+.printer-status-bar-spacer {
+  height: 3rem;
+}
+
+@media print {
+  .printer-status-bar,
+  .printer-status-bar-spacer {
+    display: none;
+  }
+}
+
 .map {
   height: 100%;
 }

@@ -1,7 +1,7 @@
 use crate::{
     components::{
         cabinet::edit::EditCabinet,
-        label_printer::{LabelPrinter, PrintLabelButton, use_printer_supported},
+        label_printer::{PrintLabelButton, use_printer_supported},
         plan_link::PlanLink,
     },
     graphql::authenticated::schacht_cables::{SchachtCableEnd, SchachtCables},
@@ -98,9 +98,6 @@ fn CabinetContent(props: &CabinetOverviewProps) -> HtmlResult {
             </nav>
             <Title>{schacht.name.as_str()}</Title>
             <EditCabinet {plan_id} {cabinet_id}/>
-            if printing {
-                <LabelPrinter/>
-            }
             <Table<Columns, UseTableData<Columns, MemoizedTableModel<SchachtCableEnd>>>
                 mode={TableMode::Compact}
                 grid={TableGridMode::Medium}

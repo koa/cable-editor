@@ -1,4 +1,7 @@
-use crate::error::FrontendError;
+use crate::{
+    error::FrontendError,
+    icons::{IconLink, IconUnlink},
+};
 use brady_web_sdk::{BradySdk, PrinterStatus, image_from_canvas, use_brady};
 use futures::{
     StreamExt,
@@ -48,12 +51,16 @@ pub fn use_printer_supported() -> bool {
     *supported
 }
 
-/// Printer connection and status, shown above the labels.
+/// Printer connection and status, fixed at the bottom of every page.
 #[function_component]
-pub fn LabelPrinter() -> Html {
+pub fn PrinterStatusBar() -> Html {
     let brady = use_brady().expect("Missing BradyProvider");
+    let supported = use_printer_supported();
     let error = use_state(|| None);
     let busy = use_state(|| false);
+    if !supported {
+        return Html::default();
+    }
     let status = &brady.status;
     let toggle = {
         let (sdk, connected) = (brady.sdk.clone(), status.connected);
@@ -70,7 +77,7 @@ pub fn LabelPrinter() -> Html {
             });
         })
     };
-    let (label, description) = if status.connected {
+    let (label, icon, description) = if status.connected {
         let battery = status
             .battery_level_percentage
             .map(|b| format!("Akku {b:.0}%"));
@@ -83,17 +90,26 @@ pub fn LabelPrinter() -> Html {
         .flatten()
         .collect::<Vec<_>>()
         .join(" | ");
-        ("Drucker trennen", description)
+        ("Drucker trennen", html!(<IconUnlink/>), description)
     } else {
-        ("Drucker verbinden", "Kein Drucker verbunden".to_string())
+        (
+            "Drucker verbinden",
+            html!(<IconLink/>),
+            "Kein Drucker verbunden".to_string(),
+        )
     };
     html! {
         <>
-            <div style="display: flex; align-items: center; gap: 12px;">
-                <Button variant={ButtonVariant::Secondary} {label} onclick={toggle} disabled={*busy}/>
-                <span>{description}</span>
+            <div class="printer-status-bar-spacer"/>
+            <div class="printer-status-bar">
+                {error.as_ref().map(IntoPropValue::<Html>::into_prop_value)}
+                <div class="printer-status-bar__row">
+                    <button type="button" class="pf-v6-c-button pf-m-plain" aria-label={label} title={label} onclick={toggle} disabled={*busy}>
+                        <span class="pf-v6-c-button__icon">{icon}</span>
+                    </button>
+                    <span class="printer-status-bar__text" title={description.clone()}>{description}</span>
+                </div>
             </div>
-            {error.as_ref().map(IntoPropValue::<Html>::into_prop_value)}
         </>
     }
 }
