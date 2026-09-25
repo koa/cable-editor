@@ -1,3 +1,4 @@
+use crate::components::menu::list_cabinet::ListCabinet;
 use crate::components::menu::list_cable::ListCable;
 use crate::components::menu::list_panel::ListPanel;
 use crate::components::menu::list_plan::ListPlan;
@@ -268,26 +269,17 @@ impl PlanView {
 
         match self {
             PlanView::Cabinet { id, view } => {
-                let title: Cow<'static, str> = format!("{id}").into();
-                let target = AppRoute::Plan {
-                    plan_id,
-                    view: PlanView::Cabinet {
-                        id: *id,
-                        view: view.clone(),
-                    },
-                };
-                let my_entry = MenuEntry {
-                    text: Box::from(title.as_ref()),
-                    target,
-                };
-                item_contents.push(html!(<MenuDropdown {title} entries={vec![my_entry]}/>));
+                item_contents.push(
+                    html!(<ListCabinet plan_id={plan_id} cabinet_id={*id} view={view.clone()}/>),
+                );
                 view.append_breadcrumbs(plan_id, id, item_contents);
             }
             PlanView::Cable { id, view } => {
                 item_contents.push(html!(<ListCable {plan_id} cable_id={id} view={view.clone()}/>))
             }
             PlanView::Panel { id, view } => {
-                item_contents.push(html!(<ListPanel {plan_id} panel_id={*id} view={view.clone()}/>));
+                item_contents
+                    .push(html!(<ListPanel {plan_id} panel_id={*id} view={view.clone()}/>));
             }
             _ => {}
         }

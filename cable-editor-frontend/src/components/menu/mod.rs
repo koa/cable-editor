@@ -4,9 +4,12 @@ use std::borrow::Cow;
 use wasm_bindgen::JsCast;
 use web_sys::{HtmlElement, Node};
 use yew::events::FocusEvent;
-use yew::{function_component, html, html_nested, use_node_ref, use_state, Callback, Html, Properties};
+use yew::{
+    Callback, Html, Properties, function_component, html, html_nested, use_node_ref, use_state,
+};
 use yew_nested_router::components::Link;
 
+pub mod list_cabinet;
 pub mod list_cable;
 pub mod list_panel;
 pub mod list_plan;

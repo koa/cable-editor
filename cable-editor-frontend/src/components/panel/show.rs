@@ -245,22 +245,6 @@ impl Component for ShowPanel {
                 <div class="no-print pf-v6-u-mb-md">
                     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
                         <div>
-                            <nav class="pf-v6-c-breadcrumb" aria-label="breadcrumb">
-                                <ol class="pf-v6-c-breadcrumb__list">
-                                    <li class="pf-v6-c-breadcrumb__item">
-                                        <Link<AppRoute> to={AppRoute::Plan { plan_id: self.plan_id, view: PlanView::ListOfCabinets }} class="pf-v6-c-breadcrumb__link">
-                                            {"Schächte"}
-                                        </Link<AppRoute>>
-                                    </li>
-                                    <li class="pf-v6-c-breadcrumb__item">
-                                        <span class="pf-v6-c-breadcrumb__link pf-m-current">
-                                            {format!("{}: {}", schacht.name, root_panel.name.as_deref().unwrap_or("Panel"))}
-                                        </span>
-                                    </li>
-                                </ol>
-                            </nav>
-                        </div>
-                        <div>
                             <div class="overview-action-buttons">
                                 <Button
                                     variant={ButtonVariant::Secondary}
@@ -273,19 +257,6 @@ impl Component for ShowPanel {
                                     name={root_panel.name.clone()}
                                     parents={root_panel.parent_chain.iter().filter_map(|p| p.name.clone()).collect::<Vec<_>>()}
                                 />
-                                <Link<AppRoute>
-                                    to={AppRoute::Plan {
-                                        plan_id: self.plan_id,
-                                        view: PlanView::Panel {
-                                            id: self.panel_id,
-                                            view: PanelView::Edit,
-                                        },
-                                    }}
-                                    class="pf-v6-c-button pf-m-secondary"
-                                >
-                                    {Icon::FolderOpen}
-                                    <span class="pf-v6-u-ml-xs">{"Ports ändern"}</span>
-                                </Link<AppRoute>>
                             </div>
                         </div>
                     </div>
@@ -408,38 +379,6 @@ impl Component for ShowPanel {
                                 <span class="pf-v6-c-label pf-m-grey">
                                     <span class="pf-v6-c-label__content">{format!("{} Ports", root_planned.ports.len())}</span>
                                 </span>
-                                if self.plan_id > 0 {
-                                    if root_has_direct_ports {
-                                        <Link<AppRoute>
-                                            to={AppRoute::Plan {
-                                                plan_id: self.plan_id,
-                                                view: PlanView::Panel {
-                                                    id: root_panel.id,
-                                                    view: PanelView::Attach,
-                                                },
-                                            }}
-                                            class="no-print pf-v6-c-button pf-m-secondary"
-                                        >
-                                            <IconLink/>
-                                            <span class="pf-v6-u-ml-xs">{"Fasern auflegen"}</span>
-                                        </Link<AppRoute>>
-                                    }
-                                    if root_has_direct_loops {
-                                        <Link<AppRoute>
-                                            to={AppRoute::Plan {
-                                                plan_id: self.plan_id,
-                                                view: PlanView::Panel {
-                                                    id: root_panel.id,
-                                                    view: PanelView::Loop,
-                                                },
-                                            }}
-                                            class="no-print pf-v6-c-button pf-m-secondary"
-                                        >
-                                            {Icon::Redo}
-                                            <span class="pf-v6-u-ml-xs">{"Loops verbinden"}</span>
-                                        </Link<AppRoute>>
-                                    }
-                                }
                             </div>
                         </div>
 

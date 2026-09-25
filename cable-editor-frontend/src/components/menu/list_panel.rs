@@ -100,20 +100,36 @@ impl Component for ListPanel {
                     // 1. Parent Chain durchgehen:
                     for parent in &panel.parent_chain {
                         let p_id = parent.id;
-                        let p_name = parent.name.clone().unwrap_or_else(|| format!("Panel {}", p_id));
+                        let p_name = parent
+                            .name
+                            .clone()
+                            .unwrap_or_else(|| format!("Panel {}", p_id));
                         if !elements.is_empty() {
                             elements.push(divider.clone());
                         }
-                        elements.push(self.render_panel_dropdown(plan_id, p_id, p_name, &parent.siblings));
+                        elements.push(self.render_panel_dropdown(
+                            plan_id,
+                            p_id,
+                            p_name,
+                            &parent.siblings,
+                        ));
                     }
 
                     // 2. Aktuelles Panel (Mit Child-Panels für Vorwärtsnavigation)
                     let c_id = panel.id;
-                    let c_name = panel.name.clone().unwrap_or_else(|| format!("Panel {}", c_id));
+                    let c_name = panel
+                        .name
+                        .clone()
+                        .unwrap_or_else(|| format!("Panel {}", c_id));
                     if !elements.is_empty() {
                         elements.push(divider.clone());
                     }
-                    elements.push(self.render_panel_dropdown(plan_id, c_id, c_name, &panel.siblings));
+                    elements.push(self.render_panel_dropdown(
+                        plan_id,
+                        c_id,
+                        c_name,
+                        &panel.siblings,
+                    ));
 
                     // 3. View Dropdown
                     let view_title: Cow<'static, str> = match current_view {
@@ -121,10 +137,16 @@ impl Component for ListPanel {
                         PanelView::Edit => "Ports ändern",
                         PanelView::Attach => "Fasern auflegen",
                         PanelView::Loop => "Loops verbinden",
-                    }.into();
+                    }
+                    .into();
 
                     elements.push(divider.clone());
-                    elements.push(self.render_panel_dropdown(plan_id, c_id, view_title.into(), &panel.children));
+                    elements.push(self.render_panel_dropdown(
+                        plan_id,
+                        c_id,
+                        view_title.into(),
+                        &panel.children,
+                    ));
 
                     html! {
                         <span style="display: flex; align-items: center;">
@@ -155,41 +177,80 @@ impl ListPanel {
         let mut entries = vec![
             MenuEntry {
                 text: "Übersicht".into(),
-                target: AppRoute::Plan { plan_id, view: PlanView::Panel { id: panel_id, view: PanelView::Show } },
+                target: AppRoute::Plan {
+                    plan_id,
+                    view: PlanView::Panel {
+                        id: panel_id,
+                        view: PanelView::Show,
+                    },
+                },
             },
             MenuEntry {
                 text: "Ports ändern".into(),
-                target: AppRoute::Plan { plan_id, view: PlanView::Panel { id: panel_id, view: PanelView::Edit } },
-            },
-            MenuEntry {
-                text: "Fasern auflegen".into(),
-                target: AppRoute::Plan { plan_id, view: PlanView::Panel { id: panel_id, view: PanelView::Attach } },
-            },
-            MenuEntry {
-                text: "Loops verbinden".into(),
-                target: AppRoute::Plan { plan_id, view: PlanView::Panel { id: panel_id, view: PanelView::Loop } },
+                target: AppRoute::Plan {
+                    plan_id,
+                    view: PlanView::Panel {
+                        id: panel_id,
+                        view: PanelView::Edit,
+                    },
+                },
             },
         ];
+        if plan_id != 0 {
+            entries.extend([
+                MenuEntry {
+                    text: "Fasern auflegen".into(),
+                    target: AppRoute::Plan {
+                        plan_id,
+                        view: PlanView::Panel {
+                            id: panel_id,
+                            view: PanelView::Attach,
+                        },
+                    },
+                },
+                MenuEntry {
+                    text: "Loops verbinden".into(),
+                    target: AppRoute::Plan {
+                        plan_id,
+                        view: PlanView::Panel {
+                            id: panel_id,
+                            view: PanelView::Loop,
+                        },
+                    },
+                },
+            ]);
+        }
 
         Self::append_siblings(plan_id, panel_id, siblings, &mut entries);
 
         html!(<MenuDropdown {title} {entries}/>)
     }
 
-    fn append_siblings(plan_id: i32, panel_id: i32, siblings: &[ChildPanelNav], entries: &mut Vec<MenuEntry>) {
-            for sibling in siblings {
-                let sibling_id = sibling.id;
-                if sibling_id == panel_id {
-                    continue;
-                }
-                let sibling_name = sibling.name.clone().unwrap_or_else(|| format!("Panel {}", sibling_id));
-                entries.push(MenuEntry {
-                    text: format!("↳ {}", sibling_name).into_boxed_str(),
-                    target: AppRoute::Plan {
-                        plan_id,
-                        view: PlanView::Panel { id: sibling_id, view: PanelView::Show },
+    fn append_siblings(
+        plan_id: i32,
+        panel_id: i32,
+        siblings: &[ChildPanelNav],
+        entries: &mut Vec<MenuEntry>,
+    ) {
+        for sibling in siblings {
+            let sibling_id = sibling.id;
+            if sibling_id == panel_id {
+                continue;
+            }
+            let sibling_name = sibling
+                .name
+                .clone()
+                .unwrap_or_else(|| format!("Panel {}", sibling_id));
+            entries.push(MenuEntry {
+                text: format!("↳ {}", sibling_name).into_boxed_str(),
+                target: AppRoute::Plan {
+                    plan_id,
+                    view: PlanView::Panel {
+                        id: sibling_id,
+                        view: PanelView::Show,
                     },
-                });
+                },
+            });
         }
     }
 }

@@ -366,14 +366,14 @@ impl Panel {
     }
     async fn siblings(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Panel>> {
         let mut connection = get_connection(ctx).await?;
-        Ok(if let Some(parent_id)=self.parent_panel{
+        Ok(if let Some(parent_id) = self.parent_panel {
             Panel::query()
                 .filter(schema::panel::parent_panel.eq(parent_id))
                 .filter(schema::panel::id.ne(self.id))
                 .order(schema::panel::parent_order.asc())
                 .load(&mut connection)
                 .await?
-        }else{
+        } else {
             Panel::query()
                 .filter(schema::panel::parent_panel.is_null())
                 .filter(schema::panel::schacht_id.eq(self.schacht_id))

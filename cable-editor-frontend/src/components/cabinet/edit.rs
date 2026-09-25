@@ -11,6 +11,7 @@ use std::borrow::Cow;
 use crate::graphql::authenticated::edit_cabinet::{
     FlatPanelInput, OverviewNetboxDevice, update_panels_in_cabinet,
 };
+use log::info;
 use patternfly_yew::prelude::{
     ActionGroup, Button, ButtonType, ButtonVariant, Cell, Dropdown, Form, FormGroup, Icon,
     MenuAction, Modal, Spinner, TableColumn, TableHeader, TableMode, TextInput, TextModifier,
@@ -18,6 +19,7 @@ use patternfly_yew::prelude::{
 };
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
+use std::thread::scope;
 use yew::{
     Callback, Component, Context, Html, Properties, classes, html,
     html::IntoPropValue,
@@ -487,6 +489,16 @@ impl Component for EditCabinet {
                 true
             }
         }
+    }
+
+    fn changed(&mut self, ctx: &Context<Self>, old_props: &Self::Properties) -> bool {
+        let props = ctx.props();
+        if props.cabinet_id != old_props.cabinet_id {
+            self.loaded_panels = None;
+            //self.model = TreeModel::default();
+            ctx.link().send_message(Msg::FetchPanels);
+        }
+        true
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {

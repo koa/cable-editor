@@ -127,13 +127,10 @@ impl PanelTreeEntry {
                 .copied()
                 .filter(|id| !is_child.contains(id))
                 .collect::<Vec<_>>();
-            info!("Roots: {roots:?}");
             let data = roots
                 .into_iter()
                 .map(|root_id| collect_children(root_id, &mut children, &mut panel_data))
                 .collect();
-            info!("Data: {data:?}");
-            info!("Children: {children:?}");
             assert!(children.is_empty());
             assert!(panel_data.is_empty());
             Ok(data)
