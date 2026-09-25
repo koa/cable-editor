@@ -84,15 +84,35 @@
   }
 }
 
+// PatternFly's page layout (AppRoute::content) without Page's inner scrolling: the page grows with
+// its content and the document scrolls, so e.g. mobile browsers can hide their address bar.
+body {
+  background-color: var(--pf-t--global--background--color--secondary--default);
+}
+
+.app-page {
+  height: auto;
+  min-height: 100dvh;
+  max-height: none;
+
+  > .pf-v6-c-page__main-container {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .pf-v6-c-page__main {
+    overflow: visible;
+  }
+}
+
+@media screen and (min-width: 48rem) {
+  .app-page > .pf-v6-c-page__main-container {
+    margin-block: var(--pf-v6-c-page--inset);
+  }
+}
+
 .map {
   height: 100%;
-}
-div.pf-v6-c-page__main-container {
-  height: 100%;
-  flex-grow: 1;
-  div.map-container{
-    height: 100%;
-  }
 }
 
 .component-container {

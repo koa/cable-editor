@@ -228,7 +228,7 @@ impl Component for ShowPanel {
         }
 
         html! {
-            <div class="panel-overview-container pf-v6-u-p-md pf-v6-u-p-lg-on-lg">
+            <div class="panel-overview-container">
                 // --- Print Only Header ---
                 <div class="print-only pf-v6-u-mb-lg">
                     <div style="border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 12px;">

@@ -16,7 +16,9 @@ use crate::{
     },
     util::get_credentials,
 };
-use patternfly_yew::prelude::{Breadcrumb, BreadcrumbItem, Nav, NavList, NavRouterItem, Spinner};
+use patternfly_yew::prelude::{
+    Breadcrumb, BreadcrumbItem, Nav, NavList, NavRouterItem, PageSection, PageSectionType, Spinner,
+};
 use std::borrow::Cow;
 use yew::virtual_dom::VNode;
 use yew::{
@@ -299,26 +301,24 @@ impl PlanView {
 }
 
 impl AppRoute {
+    /// Renders the page in PatternFly's page layout: the breadcrumb and the content each in a
+    /// `PageSection` inside `<main>`. There is no masthead or sidebar, and unlike PatternFly's
+    /// `Page` the document scrolls instead of the main container (`.app-page` in `style.scss`).
     pub fn content(self) -> Html {
-        let bc = self.breadcrumb();
-
-        match self {
-            AppRoute::ListOfPlans => {
-                html! {
-                    <>
-                    {bc}
-                    <ListOfPlannings/>
-                    </>
-                }
-            }
-            AppRoute::Plan { plan_id, view } => {
-                html! {
-                    <>
-                    {bc}
-                    {view.content(plan_id)}
-                    </>
-                }
-            }
+        let breadcrumb = self.breadcrumb();
+        let content = match self {
+            AppRoute::ListOfPlans => html!(<ListOfPlannings/>),
+            AppRoute::Plan { plan_id, view } => view.content(plan_id),
+        };
+        html! {
+            <div class="pf-v6-c-page pf-m-no-sidebar app-page">
+                <div class="pf-v6-c-page__main-container">
+                    <main class="pf-v6-c-page__main" id="main-content" tabindex="-1">
+                        <PageSection r#type={PageSectionType::Breadcrumbs}>{breadcrumb}</PageSection>
+                        <PageSection>{content}</PageSection>
+                    </main>
+                </div>
+            </div>
         }
     }
     fn breadcrumb(&self) -> Html {
