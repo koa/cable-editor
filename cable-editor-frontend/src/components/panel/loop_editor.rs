@@ -17,7 +17,7 @@ use crate::graphql::authenticated::connections::{FiberOwnEnd, PortUsageUpdateAct
 use itertools::Itertools;
 use patternfly_yew::prelude::{
     ActionGroup, Alert, AlertType, Button, ButtonVariant, Cell, CellContext, ExpansionState,
-    FormGroup, Grid, GridItem, Icon, MemoizedTableModel, SelectItemRenderer, SimpleSelect, Spinner,
+    FormGroup, FormSelect, FormSelectOption, Grid, GridItem, Icon, MemoizedTableModel, Spinner,
     Table, TableColumn, TableEntryRenderer, TableGridMode, TableHeader, TableMode,
 };
 use std::{
@@ -27,7 +27,7 @@ use std::{
 };
 use yew::{
     Callback, Component, Context, Html, Properties, html, html::IntoPropValue, html_nested,
-    platform::spawn_local,
+    platform::spawn_local, virtual_dom::VChild,
 };
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -39,17 +39,23 @@ enum LoopColumn {
     TerminationB,
 }
 
-impl SelectItemRenderer for CableEnd {
-    type Item = i32;
-
-    fn label(&self) -> String {
-        format!(
-            "{} ({}x{}) -> {}",
-            self.cable.name,
-            self.cable.bundle_count,
-            self.cable.fiber_count,
-            self.path.far_schacht.name
-        )
+/// Option of the cable selects, keyed by the cable id.
+///
+/// A native `FormSelect` instead of patternfly-yew's `SimpleSelect`: that one is built on its
+/// popper-based `Dropdown`, which logged errors to the console when opened here (see
+/// `components/menu/mod.rs`).
+fn cable_option(cable: &CableEnd) -> VChild<FormSelectOption<i32>> {
+    html_nested! {
+        <FormSelectOption<i32>
+            value={cable.cable.id}
+            description={format!(
+                "{} ({}x{}) -> {}",
+                cable.cable.name,
+                cable.cable.bundle_count,
+                cable.cable.fiber_count,
+                cable.path.far_schacht.name
+            )}
+        />
     }
 }
 
@@ -532,18 +538,19 @@ impl LoopPortEditor {
                 .as_ref()
                 .map(|s| s.panel.schacht.cables.clone())
                 .unwrap_or_default();
-            let onselect = ctx
+            let onchange = ctx
                 .link()
-                .callback(|c: CableEnd| Msg::SelectCableA(c.cable.id));
+                .batch_callback(|id: Option<i32>| id.map(Msg::SelectCableA));
 
             html! {
                 <FormGroup label="Zulauf-Kabel (A)">
-                    <SimpleSelect<CableEnd>
-                        {entries}
-                        selected={self.cable_a.clone()}
-                        {onselect}
+                    <FormSelect<i32>
+                        value={self.cable_a.as_ref().map(|c| c.cable.id)}
+                        {onchange}
                         placeholder="- Kabel A wählen -"
-                    />
+                    >
+                        { for entries.iter().map(cable_option) }
+                    </FormSelect<i32>>
                 </FormGroup>
             }
         };
@@ -566,18 +573,19 @@ impl LoopPortEditor {
                 })
                 .unwrap_or_default();
 
-            let onselect = ctx
+            let onchange = ctx
                 .link()
-                .callback(|c: CableEnd| Msg::SelectCableB(c.cable.id));
+                .batch_callback(|id: Option<i32>| id.map(Msg::SelectCableB));
 
             html! {
                 <FormGroup label="Ablauf-Kabel (B)">
-                    <SimpleSelect<CableEnd>
-                        entries={entries}
-                        selected={self.cable_b.clone()}
-                        {onselect}
+                    <FormSelect<i32>
+                        value={self.cable_b.as_ref().map(|c| c.cable.id)}
+                        {onchange}
                         placeholder="- Zugehöriges Kabel B wählen -"
-                    />
+                    >
+                        { for entries.iter().map(cable_option) }
+                    </FormSelect<i32>>
                 </FormGroup>
             }
         } else {
