@@ -8,7 +8,7 @@ use crate::{
     error::FrontendError,
     graphql::authenticated::plan_details::PlanDetails,
     pages::{
-        cabinet::{list::ListOfCabinets, overview::CabinetOverview},
+        cabinet::{edit::EditCabinetPanels, list::ListOfCabinets, overview::CabinetOverview},
         cable::edit::EditCable,
         list_of_cables::ListOfCables,
         panel::EditPanel,
@@ -194,6 +194,7 @@ pub enum CableView {
 #[derive(Debug, Clone, PartialEq, Eq, Target)]
 pub enum CabinetView {
     Overview,
+    Edit,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Target)]
 pub enum PanelView {
@@ -373,13 +374,38 @@ impl CabinetView {
     fn content(self, plan_id: i32, cabinet_id: i32) -> Html {
         match self {
             CabinetView::Overview => html!(<CabinetOverview {plan_id} {cabinet_id}/>),
+            CabinetView::Edit => html!(<EditCabinetPanels {plan_id} {cabinet_id}/>),
         }
     }
+
+    fn title(&self) -> &'static str {
+        match self {
+            CabinetView::Overview => "Übersicht",
+            CabinetView::Edit => "Panels bearbeiten",
+        }
+    }
+
+    /// Menu to switch between the views of the Schacht.
     pub fn append_breadcrumbs(
         &self,
         plan_id: i32,
         cabinet_id: &i32,
         breadcrumb_items: &mut Vec<VNode>,
     ) {
+        let entries = [CabinetView::Overview, CabinetView::Edit]
+            .into_iter()
+            .map(|view| MenuEntry {
+                text: view.title().into(),
+                target: AppRoute::Plan {
+                    plan_id,
+                    view: PlanView::Cabinet {
+                        id: *cabinet_id,
+                        view,
+                    },
+                },
+            })
+            .collect::<Vec<_>>();
+        let title: Cow<'static, str> = self.title().into();
+        breadcrumb_items.push(html!(<MenuDropdown {title} {entries}/>));
     }
 }

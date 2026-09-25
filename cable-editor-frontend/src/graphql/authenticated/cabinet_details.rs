@@ -18,6 +18,36 @@ struct FetchDuctDetailsQuery {
 }
 
 #[derive(cynic::QueryFragment, Debug)]
+#[cynic(graphql_type = "Query", variables = "Variables")]
+struct FetchSchachtNameQuery {
+    #[arguments(schachtId: $id)]
+    pub schacht: Option<SchachtName>,
+}
+
+#[derive(cynic::QueryFragment, Debug)]
+#[cynic(graphql_type = "Schacht")]
+struct SchachtName {
+    name: String,
+}
+
+/// Name of the Schacht, e.g. for a page title.
+pub async fn fetch_schacht_name(
+    credentials: Option<&OAuth2Context>,
+    id: i32,
+) -> Result<String, FrontendError> {
+    let response = query::<FetchSchachtNameQuery, _>(Variables { id }, credentials).await?;
+    if let Some(errors) = response.errors {
+        Err(FrontendError::Graphql(errors))
+    } else {
+        response
+            .data
+            .and_then(|d| d.schacht)
+            .map(|s| s.name)
+            .ok_or(FrontendError::NotFound)
+    }
+}
+
+#[derive(cynic::QueryFragment, Debug)]
 #[cynic(graphql_type = "Schacht")]
 struct SchachtDetails {
     root_panels: Vec<RootPanelEntry>,

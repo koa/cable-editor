@@ -1,13 +1,11 @@
 use crate::components::page_layout::{PageLayout, object_title};
 use crate::{
     components::{
-        cabinet::edit::EditCabinet,
         label_printer::{LabelText, PanelLabelButton, PrintLabelButton, use_printer_supported},
         plan_link::PlanLink,
     },
     graphql::authenticated::schacht_cables::{SchachtCableEnd, SchachtCables, SchachtPanelEntry},
-    pages::router::{CableView, PanelView, PlanView},
-    util::is_wide_screen,
+    pages::router::{CabinetView, CableView, PanelView, PlanView},
 };
 use patternfly_yew::prelude::{
     Cell, CellContext, Level, MemoizedTableModel, Spinner, Table, TableColumn, TableEntryRenderer,
@@ -73,10 +71,7 @@ fn CabinetContent(props: &CabinetOverviewProps) -> HtmlResult {
         Err(e) => return Ok(e.into_prop_value()),
     };
 
-    let CabinetOverviewProps {
-        plan_id,
-        cabinet_id,
-    } = *props;
+    let cabinet_id = props.cabinet_id;
     let header = html_nested! {
         <TableHeader<Columns>>
             <TableColumn<Columns> label="Kabel" index={Columns::Cable}/>
@@ -86,6 +81,10 @@ fn CabinetContent(props: &CabinetOverviewProps) -> HtmlResult {
         </TableHeader<Columns>>
     };
     let panels = schacht.panels();
+    let edit_panels = PlanView::Cabinet {
+        id: cabinet_id,
+        view: CabinetView::Edit,
+    };
     Ok(html! {
         <PageLayout title={object_title("Schacht", Some(&schacht.name))}>
             <Title level={Level::H2}>{"Panels"}</Title>
@@ -96,6 +95,11 @@ fn CabinetContent(props: &CabinetOverviewProps) -> HtmlResult {
                     {for panels.iter().map(view_panel)}
                 </ul>
             }
+            <div class="pf-v6-u-mb-xl">
+                <PlanLink to={edit_panels} class="pf-v6-c-button pf-m-secondary">
+                    {"Panels bearbeiten"}
+                </PlanLink>
+            </div>
             <Title level={Level::H2}>{"Kabel"}</Title>
             <Table<Columns, UseTableData<Columns, MemoizedTableModel<SchachtCableEnd>>>
                 mode={TableMode::Compact}
@@ -103,11 +107,6 @@ fn CabinetContent(props: &CabinetOverviewProps) -> HtmlResult {
                 {header}
                 {entries}
             />
-            // Collapsed on phones, where the connection overview and labels matter most
-            <details class="disclosure" open={is_wide_screen()}>
-                <summary><Title level={Level::H2}>{"Panels bearbeiten"}</Title></summary>
-                <EditCabinet {plan_id} {cabinet_id} heading=false/>
-            </details>
         </PageLayout>
     })
 }
