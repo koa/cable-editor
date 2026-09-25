@@ -301,7 +301,7 @@ impl Component for AttachFiber {
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         html! {
-            <PageLayout title={object_title("Fasern auflegen", self.current_situation.as_ref().map(|situation| &situation.panel))}>{self.view_content(ctx)}</PageLayout>
+            <PageLayout title={object_title("Fasern auflegen", self.current_situation.as_ref().and_then(|situation| situation.panel.name.as_deref()))}>{self.view_content(ctx)}</PageLayout>
         }
     }
 

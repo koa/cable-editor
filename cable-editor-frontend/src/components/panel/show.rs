@@ -156,7 +156,7 @@ impl Component for ShowPanel {
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         html! {
-            <PageLayout title={object_title("Verbindungsübersicht", self.data.as_ref().map(|data| &data.panel))}>{self.view_content(ctx)}</PageLayout>
+            <PageLayout title={object_title("Verbindungsübersicht", self.data.as_ref().and_then(|data| data.panel.name.as_deref()))}>{self.view_content(ctx)}</PageLayout>
         }
     }
 }
@@ -290,7 +290,7 @@ impl ShowPanel {
                     </CardTitle>
                     <Divider />
                     <CardBody>
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;" class="overview-stats-grid">
+                        <div class="overview-stats-grid">
                             <div class="stat-box">
                                 <div class="stat-value">{total_panels}</div>
                                 <div class="stat-label">
@@ -321,13 +321,15 @@ impl ShowPanel {
                 if total_panels > 1 {
                     <div class="no-print pf-v6-u-mb-lg panel-toc-card">
                         <Card>
-                            <CardTitle>
-                                <Title level={Level::H2} size={patternfly_yew::prelude::Size::Medium}>
-                                    {Icon::Folder}
-                                    <span class="pf-v6-u-ml-sm">{"Schnellnavigation"}</span>
-                                </Title>
-                            </CardTitle>
                             <CardBody>
+                                // Collapsed on phones, where it would push the ports below the fold
+                                <details class="panel-toc" open={is_wide_screen()}>
+                                <summary>
+                                    <Title level={Level::H2} size={patternfly_yew::prelude::Size::Medium}>
+                                        {Icon::Folder}
+                                        <span class="pf-v6-u-ml-sm">{"Schnellnavigation"}</span>
+                                    </Title>
+                                </summary>
                                 <div class="panel-hierarchy-tree">
                                     if has_root_ports {
                                         <a href="#panel-root" class="panel-tree-node root-node">
@@ -360,6 +362,7 @@ impl ShowPanel {
                                         }
                                     })}
                                 </div>
+                                </details>
                             </CardBody>
                         </Card>
                     </div>
@@ -417,6 +420,11 @@ impl ShowPanel {
                                     <span class="pf-v6-c-label pf-m-cyan">
                                         <span class="pf-v6-c-label__content">{format!("{} Ports", child.ports.len())}</span>
                                     </span>
+                                    <PanelLabelButton
+                                        id={child_id}
+                                        name={child.panel.name.clone()}
+                                        parents={child.panel.parent_chain.iter().filter_map(|p| p.name.clone()).collect::<Vec<_>>()}
+                                    />
                                     if self.plan_id > 0 {
                                         if has_direct_ports {
                                             <Link<AppRoute>
@@ -856,4 +864,13 @@ fn cable_end_label(option: Option<&FiberOwnEndOverview>) -> Option<String> {
 
 fn chrono_stub_date() -> String {
     "2026".to_string()
+}
+
+/// Whether the viewport is at least PatternFly's md breakpoint (48rem), i.e. not a phone.
+fn is_wide_screen() -> bool {
+    window()
+        .inner_width()
+        .ok()
+        .and_then(|width| width.as_f64())
+        .is_some_and(|width| width >= 768.0)
 }

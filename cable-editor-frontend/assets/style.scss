@@ -222,6 +222,12 @@ body {
     flex-wrap: wrap;
   }
 
+  .overview-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(12.5rem, 1fr));
+    gap: var(--pf-t--global--spacer--md);
+  }
+
   .stat-box {
     background: #f5f5f5;
     border: 1px solid #e0e0e0;
@@ -240,6 +246,18 @@ body {
       color: #6a6e73;
       margin-top: 2px;
     }
+  }
+
+  .panel-toc > summary {
+    cursor: pointer;
+
+    > .pf-v6-c-title {
+      display: inline;
+    }
+  }
+
+  .panel-toc[open] > summary {
+    margin-block-end: var(--pf-t--global--spacer--md);
   }
 
   .panel-hierarchy-tree {
@@ -315,6 +333,7 @@ body {
 
       .panel-section-actions {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         gap: 8px;
       }
@@ -463,10 +482,17 @@ body {
 
 @media (max-width: 768px) {
   .panel-overview-container {
+    // 2×2 instead of four rows, so the ports start near the top
     .overview-stats-grid {
-      .pf-v6-l-grid__item {
-        grid-column: span 6 !important;
-        margin-bottom: 8px;
+      grid-template-columns: repeat(2, 1fr);
+      gap: var(--pf-t--global--spacer--sm);
+    }
+
+    .stat-box {
+      padding: var(--pf-t--global--spacer--sm);
+
+      .stat-value {
+        font-size: 1.25rem;
       }
     }
 
