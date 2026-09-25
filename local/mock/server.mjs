@@ -169,7 +169,8 @@ const portUsage = (planId, portId, side) => {
     fiber: { bundle, fiber, cable: () => cable(cableId) },
     port: () => panelPort(portId), plan: () => plan(planId),
     otherSide: () => portUsage(planId, portId, side === 'FRONT' ? 'BACK' : 'FRONT'),
-    cableSideEndPort: () => null, panelSideEndPort: () => null,
+    // Simplified trace: the fiber ends at this port
+    cableSideEndPort: () => null, panelSideEndPort: () => portUsage(planId, portId, side),
   };
 };
 const panelPort = (id) => {
