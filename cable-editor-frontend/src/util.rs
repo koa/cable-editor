@@ -47,3 +47,12 @@ pub fn get_backdrop(scope: &Scope<impl BaseComponent>) -> Option<Backdropper> {
         .context::<Backdropper>(Callback::noop())
         .map(|(c, _)| c)
 }
+
+/// Whether the viewport is at least PatternFly's md breakpoint (48rem), i.e. not a phone.
+pub fn is_wide_screen() -> bool {
+    gloo_utils::window()
+        .inner_width()
+        .ok()
+        .and_then(|width| width.as_f64())
+        .is_some_and(|width| width >= 768.0)
+}

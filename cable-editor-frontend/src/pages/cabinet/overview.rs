@@ -2,11 +2,12 @@ use crate::components::page_layout::{PageLayout, object_title};
 use crate::{
     components::{
         cabinet::edit::EditCabinet,
-        label_printer::{LabelText, PrintLabelButton, use_printer_supported},
+        label_printer::{LabelText, PanelLabelButton, PrintLabelButton, use_printer_supported},
         plan_link::PlanLink,
     },
-    graphql::authenticated::schacht_cables::{SchachtCableEnd, SchachtCables},
-    pages::router::{CableView, PlanView},
+    graphql::authenticated::schacht_cables::{SchachtCableEnd, SchachtCables, SchachtPanelEntry},
+    pages::router::{CableView, PanelView, PlanView},
+    util::is_wide_screen,
 };
 use patternfly_yew::prelude::{
     Cell, CellContext, Level, MemoizedTableModel, Spinner, Table, TableColumn, TableEntryRenderer,
@@ -84,9 +85,17 @@ fn CabinetContent(props: &CabinetOverviewProps) -> HtmlResult {
             { for printing.then(|| html_nested!(<TableColumn<Columns> index={Columns::Print}/>)) }
         </TableHeader<Columns>>
     };
+    let panels = schacht.panels();
     Ok(html! {
         <PageLayout title={object_title("Schacht", Some(&schacht.name))}>
-            <EditCabinet {plan_id} {cabinet_id}/>
+            <Title level={Level::H2}>{"Panels"}</Title>
+            if panels.is_empty() {
+                <p class="pf-v6-u-color-200">{"Keine Panels im Schacht."}</p>
+            } else {
+                <ul class="pf-v6-c-data-list pf-m-compact schacht-panels" role="list" aria-label="Panels">
+                    {for panels.iter().map(view_panel)}
+                </ul>
+            }
             <Title level={Level::H2}>{"Kabel"}</Title>
             <Table<Columns, UseTableData<Columns, MemoizedTableModel<SchachtCableEnd>>>
                 mode={TableMode::Compact}
@@ -94,8 +103,49 @@ fn CabinetContent(props: &CabinetOverviewProps) -> HtmlResult {
                 {header}
                 {entries}
             />
+            // Collapsed on phones, where the connection overview and labels matter most
+            <details class="disclosure" open={is_wide_screen()}>
+                <summary><Title level={Level::H2}>{"Panels bearbeiten"}</Title></summary>
+                <EditCabinet {plan_id} {cabinet_id} heading=false/>
+            </details>
         </PageLayout>
     })
+}
+
+/// Panel of the Schacht linking to its connection overview, with its label.
+fn view_panel(panel: &SchachtPanelEntry) -> Html {
+    let to = PlanView::Panel {
+        id: panel.id,
+        view: PanelView::Show,
+    };
+    let name = panel
+        .name
+        .clone()
+        .unwrap_or_else(|| format!("Panel {}", panel.id));
+    let depth = format!("--panel-depth: {}", panel.parents.len());
+    html! {
+        <li class="pf-v6-c-data-list__item" key={panel.id}>
+            <div class="pf-v6-c-data-list__item-row">
+                <div class="pf-v6-c-data-list__item-content">
+                    <div class="pf-v6-c-data-list__cell schacht-panels__name" style={depth}>
+                        <PlanLink {to}>{name}</PlanLink>
+                        if panel.port_count > 0 {
+                            <span class="pf-v6-u-ml-sm pf-v6-u-color-200">
+                                {format!("{} Ports", panel.port_count)}
+                            </span>
+                        }
+                    </div>
+                </div>
+                <div class="pf-v6-c-data-list__item-action">
+                    <PanelLabelButton
+                        id={panel.id}
+                        name={panel.name.clone()}
+                        parents={panel.parents.clone()}
+                    />
+                </div>
+            </div>
+        </li>
+    }
 }
 
 /// Schacht overview: panels and cables ending here.

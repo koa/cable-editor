@@ -14,7 +14,7 @@ use log::info;
 use patternfly_yew::prelude::{
     ActionGroup, Button, ButtonType, ButtonVariant, Cell, Form, FormGroup, FormSelect,
     FormSelectOption, Icon, Level, Modal, Spinner, TableColumn, TableHeader, TableMode, TextInput,
-    TextModifier, Title,
+    Title,
 };
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
@@ -59,6 +59,9 @@ pub enum Msg {
 pub struct EditCabinetProps {
     pub plan_id: i32,
     pub cabinet_id: i32,
+    /// Show the "Panels im Schacht" heading (off where the caller labels the editor itself)
+    #[prop_or(true)]
+    pub heading: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
@@ -194,7 +197,7 @@ impl TreeTableColumn<IdOrNew, PanelEntry, PanelEditAction> for PanelColumn {
                     }
                 }
 
-                Cell::new(buttons.into_iter().collect()).text_modifier(TextModifier::NoWrap)
+                Cell::new(html!(<div class="panel-actions">{for buttons}</div>))
             }
             PanelColumn::Id { modified, plan_id } => Cell::new(match &context.key {
                 IdOrNew::Id(id) => {
@@ -499,7 +502,8 @@ impl Component for EditCabinet {
                     //<TableColumn<PanelColumn> label="ID" index={PanelColumn::Id{modified,plan_id}} />
                     <TableColumn<PanelColumn> label="Name" index={PanelColumn::Name} />
                     <TableColumn<PanelColumn> label="Netbox" index={PanelColumn::SelectNetbox(netbox_devices)} />
-                    <TableColumn<PanelColumn> index={PanelColumn::Actions{modified,plan_id}} />
+                    // Labelled, as the phone layout of tree tables hides cells without a label
+                    <TableColumn<PanelColumn> label="Aktionen" index={PanelColumn::Actions{modified,plan_id}} />
                 </TableHeader<PanelColumn>>
             };
             let model = self.model.clone();
@@ -513,7 +517,9 @@ impl Component for EditCabinet {
 
             html! {
                 <>
-                <Title level={Level::H2}>{"Panels im Schacht"}</Title>
+                if ctx.props().heading {
+                    <Title level={Level::H2}>{"Panels im Schacht"}</Title>
+                }
                 {error}
                 <TreeTable<IdOrNew, PanelEntry,PanelEditAction, PanelColumn>
                     state={self.state.clone()}

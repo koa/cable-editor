@@ -535,3 +535,40 @@ fn render_label(
     }
     Ok(canvas)
 }
+
+#[derive(Properties, PartialEq)]
+pub struct PanelLabelButtonProps {
+    pub id: i32,
+    pub name: Option<String>,
+    /// Names of the parent panels, root first.
+    pub parents: Vec<String>,
+}
+
+/// Prints the panel name or its path from the root panel as label.
+#[function_component]
+pub fn PanelLabelButton(props: &PanelLabelButtonProps) -> Html {
+    let printing = use_printer_supported();
+    let texts = use_memo(
+        (props.id, props.name.clone(), props.parents.clone()),
+        |(id, name, parents)| {
+            let name = name.clone().unwrap_or_else(|| format!("Panel {id}"));
+            let path = parents
+                .iter()
+                .map(String::as_str)
+                .chain([name.as_str()])
+                .collect::<Vec<_>>()
+                .join(" - ");
+            let mut texts = vec![LabelText::new("Name", name.clone())];
+            if path != name {
+                texts.push(LabelText::new("Pfad", path));
+            }
+            Rc::<[LabelText]>::from(texts)
+        },
+    );
+    if !printing {
+        return Html::default();
+    }
+    html! {
+        <PrintLabelButton texts={(*texts).clone()} diameter=false label="Etikett drucken"/>
+    }
+}

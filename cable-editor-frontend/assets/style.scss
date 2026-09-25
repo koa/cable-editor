@@ -248,18 +248,6 @@ body {
     }
   }
 
-  .panel-toc > summary {
-    cursor: pointer;
-
-    > .pf-v6-c-title {
-      display: inline;
-    }
-  }
-
-  .panel-toc[open] > summary {
-    margin-block-end: var(--pf-t--global--spacer--md);
-  }
-
   .panel-hierarchy-tree {
     display: flex;
     flex-direction: column;
@@ -701,6 +689,37 @@ body {
     }
   }
 }
+// Collapsible section (<details>): the summary holds a heading
+.disclosure {
+  > summary {
+    cursor: pointer;
+
+    > .pf-v6-c-title {
+      display: inline;
+    }
+  }
+
+  &[open] > summary {
+    margin-block-end: var(--pf-t--global--spacer--md);
+  }
+}
+
+// Panels on the Schacht overview (pages/cabinet/overview.rs), indented by their depth
+.schacht-panels {
+  margin-block-end: var(--pf-t--global--spacer--lg);
+
+  .schacht-panels__name {
+    padding-inline-start: calc(var(--panel-depth, 0) * var(--pf-t--global--spacer--lg));
+  }
+}
+
+// Actions of a panel in the panel editor (components/cabinet/edit.rs), wrapping on small screens
+.panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pf-t--global--spacer--sm);
+}
+
 // Schacht and panel chain inside one breadcrumb item (components/menu/list_panel.rs). Breadcrumb
 // items don't wrap, so without this a deep panel path widens the whole page on phones.
 .breadcrumb-path {

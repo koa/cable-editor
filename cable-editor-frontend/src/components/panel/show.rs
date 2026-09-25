@@ -1,9 +1,7 @@
 use crate::components::page_layout::{PageLayout, object_title};
+use crate::util::is_wide_screen;
 use crate::{
-    components::{
-        fiber::FiberLabel,
-        label_printer::{LabelText, PrintLabelButton, use_printer_supported},
-    },
+    components::{fiber::FiberLabel, label_printer::PanelLabelButton},
     error::FrontendError,
     graphql::authenticated::{
         PortType,
@@ -21,54 +19,13 @@ use patternfly_yew::prelude::{
     Alert, AlertType, Button, ButtonVariant, Card, CardBody, CardTitle, Divider, Icon, Level,
     Spinner, Title,
 };
-use std::rc::Rc;
-use yew::{
-    Component, Context, Html, Properties, classes, function_component, html, platform::spawn_local,
-    use_memo,
-};
+use yew::{Component, Context, Html, Properties, classes, html, platform::spawn_local};
 use yew_nested_router::components::Link;
 
 #[derive(Properties, PartialEq, Clone)]
 pub struct ShowPanelProps {
     pub plan_id: i32,
     pub panel_id: i32,
-}
-
-#[derive(Properties, PartialEq)]
-struct PanelLabelButtonProps {
-    id: i32,
-    name: Option<String>,
-    /// Names of the parent panels, root first.
-    parents: Vec<String>,
-}
-
-/// Prints the panel name or its path from the root panel as label.
-#[function_component]
-fn PanelLabelButton(props: &PanelLabelButtonProps) -> Html {
-    let printing = use_printer_supported();
-    let texts = use_memo(
-        (props.id, props.name.clone(), props.parents.clone()),
-        |(id, name, parents)| {
-            let name = name.clone().unwrap_or_else(|| format!("Panel {id}"));
-            let path = parents
-                .iter()
-                .map(String::as_str)
-                .chain([name.as_str()])
-                .collect::<Vec<_>>()
-                .join(" - ");
-            let mut texts = vec![LabelText::new("Name", name.clone())];
-            if path != name {
-                texts.push(LabelText::new("Pfad", path));
-            }
-            Rc::<[LabelText]>::from(texts)
-        },
-    );
-    if !printing {
-        return Html::default();
-    }
-    html! {
-        <PrintLabelButton texts={(*texts).clone()} diameter=false label="Etikett drucken"/>
-    }
 }
 
 pub enum Msg {
@@ -323,7 +280,7 @@ impl ShowPanel {
                         <Card>
                             <CardBody>
                                 // Collapsed on phones, where it would push the ports below the fold
-                                <details class="panel-toc" open={is_wide_screen()}>
+                                <details class="disclosure" open={is_wide_screen()}>
                                 <summary>
                                     <Title level={Level::H2} size={patternfly_yew::prelude::Size::Medium}>
                                         {Icon::Folder}
@@ -864,13 +821,4 @@ fn cable_end_label(option: Option<&FiberOwnEndOverview>) -> Option<String> {
 
 fn chrono_stub_date() -> String {
     "2026".to_string()
-}
-
-/// Whether the viewport is at least PatternFly's md breakpoint (48rem), i.e. not a phone.
-fn is_wide_screen() -> bool {
-    window()
-        .inner_width()
-        .ok()
-        .and_then(|width| width.as_f64())
-        .is_some_and(|width| width >= 768.0)
 }
