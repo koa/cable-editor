@@ -35,7 +35,6 @@ pub fn menu_dropdown(props: &MenuDropdownProps) -> Html {
             let next_state = !*is_open;
             is_open.set(next_state);
 
-            // Fokus programmatisch auf das Wrapper-Div ziehen, sobald es öffnet.
             if next_state {
                 if let Some(el) = node_ref.cast::<HtmlElement>() {
                     let _ = el.focus();
@@ -50,7 +49,6 @@ pub fn menu_dropdown(props: &MenuDropdownProps) -> Html {
         Callback::from(move |e: FocusEvent| {
             let mut focus_inside = false;
 
-            // Prüfen, ob der Fokus innerhalb des Dropdowns geblieben ist
             if let Some(related_target) = e.related_target() {
                 if let Some(node) = related_target.dyn_ref::<Node>() {
                     if let Some(root) = node_ref.cast::<Node>() {
@@ -61,7 +59,6 @@ pub fn menu_dropdown(props: &MenuDropdownProps) -> Html {
                 }
             }
 
-            // Schließen, wenn der Klick nach außen gewandert ist.
             if !focus_inside {
                 is_open.set(false);
             }
@@ -73,13 +70,12 @@ pub fn menu_dropdown(props: &MenuDropdownProps) -> Html {
         let link_text = e.text.clone();
         let is_open = is_open.clone();
 
-        // Klick auf das Element schließt das Dropdown.
         let onclick = Callback::from(move |_| {
             is_open.set(false);
         });
 
         html_nested! {
-            <li key={link_text.to_string()} {onclick} class="pf-v6-c-menu__list-item">
+            <li key={link_text.to_string()} {onclick} class="pf-v6-c-menu__list-item" role="none">
                 <Link<AppRoute> {to} class="pf-v6-c-menu__item">
                     <span class="pf-v6-c-menu__item-main">
                         <span class="pf-v6-c-menu__item-text">{link_text.as_ref()}</span>
@@ -89,8 +85,9 @@ pub fn menu_dropdown(props: &MenuDropdownProps) -> Html {
         }
     });
 
+    // Keine dicken Inline-Styles mehr! Patternfly macht die Optik, wir nur die Positionierung.
     let menu_style = if *is_open {
-        "position: absolute; top: 100%; left: 0; z-index: 9999; background-color: var(--pf-v6-global--BackgroundColor--100, #fff); box-shadow: var(--pf-v6-global--BoxShadow--sm, 0 0.25rem 0.5rem rgba(0,0,0,0.1)); border: 1px solid var(--pf-v6-global--BorderColor--100, #ccc); padding: 8px 0; min-width: max-content; list-style: none; margin: 0; border-radius: 3px;"
+        "position: absolute; top: 100%; left: 0; z-index: 9999; min-width: max-content; margin-top: 4px;"
     } else {
         "display: none;"
     };
@@ -113,11 +110,14 @@ pub fn menu_dropdown(props: &MenuDropdownProps) -> Html {
                     {Icon::CaretDown}
                 </span>
             </button>
-            <nav  style={menu_style} class="pf-v6-c-nav" aria-label="Global">
-                <ul class="pf-v6-c-nav__list" role="list">
-                    {for entries}
-                </ul>
-            </nav>
+
+            <div style={menu_style} class="pf-v6-c-menu">
+                <div class="pf-v6-c-menu__content">
+                    <ul class="pf-v6-c-menu__list" role="menu">
+                        {for entries}
+                    </ul>
+                </div>
+            </div>
         </div>
     }
 }
