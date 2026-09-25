@@ -13,6 +13,7 @@ use patternfly_yew::prelude::{
 };
 use std::{future::Future, pin::pin, rc::Rc, time::Duration};
 use wasm_bindgen::{JsCast, JsValue};
+use wasm_bindgen_futures::JsFuture;
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, Storage, window};
 use yew::{
     AttrValue, Callback, Html, Properties, UseStateHandle, classes, function_component, hook, html,
@@ -30,6 +31,8 @@ const MM_PER_INCH: f64 = 25.4;
 /// Last entered cable diameter, kept per browser.
 const DIAMETER_KEY: &str = "cable-label-diameter-mm";
 const DEFAULT_DPI: f64 = 300.0;
+/// DIN-like font (bundled, see index.html), its straight shapes suit the 203 dpi M211.
+const LABEL_FONT: &str = "\"Barlow\", sans-serif";
 const SUPPLY_TIMEOUT: Duration = Duration::from_secs(10);
 // Print head widths and label feeds hard-coded in the SDK
 const M211_HEAD_INCH: f64 = 0.63;
@@ -395,7 +398,23 @@ async fn prepare(sdk: &BradySdk) -> Result<LabelGeometry, FrontendError> {
         sdk.connect().await?;
     }
     wait_for_supply(sdk).await?;
+    // The canvas silently falls back to another font until the label font is loaded
+    if let Err(e) = load_label_font().await {
+        log::warn!("Label font not loaded: {e:?}");
+    }
     LabelGeometry::from_status(&sdk.status())
+}
+
+async fn load_label_font() -> Result<(), JsValue> {
+    let document = window()
+        .and_then(|w| w.document())
+        .expect("Missing Document");
+    JsFuture::from(document.fonts().load(&label_font(16.0))).await?;
+    Ok(())
+}
+
+fn label_font(size: f64) -> String {
+    format!("bold {size:.1}px {LABEL_FONT}")
 }
 
 async fn print_label(
@@ -434,7 +453,6 @@ fn render_label(
     let ratio = diameter_mm.map_or(MAX_TEXT_RATIO, |d| {
         (DIAMETER_TEXT_RATIO * d / MM_PER_INCH / band).min(MAX_TEXT_RATIO)
     });
-    let font = |size: f64| format!("bold {size:.1}px sans-serif");
     let canvas: HtmlCanvasElement = window()
         .and_then(|w| w.document())
         .expect("Missing Document")
@@ -446,10 +464,10 @@ fn render_label(
         .and_then(|c| c.dyn_into().ok())
         .expect("Missing 2d context");
     // Scale the font so the glyphs span ratio * height
-    context.set_font(&font(height));
+    context.set_font(&label_font(height));
     let reference = context.measure_text(text)?;
     let glyphs = reference.actual_bounding_box_ascent() + reference.actual_bounding_box_descent();
-    let font = font(height * ratio * height / glyphs.max(1.0));
+    let font = label_font(height * ratio * height / glyphs.max(1.0));
     context.set_font(&font);
     let metrics = context.measure_text(text)?;
     let left = metrics.actual_bounding_box_left();

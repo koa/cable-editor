@@ -15,6 +15,14 @@
   //src: url("./webfonts/fa-brands-400.woff2");
 }
 
+// Label font (components/label_printer.rs), copied to the dist root by index.html
+@font-face {
+  font-family: "Barlow";
+  font-style: normal;
+  font-weight: 700;
+  src: url("barlow-latin-700-normal.woff2") format("woff2");
+}
+
 // Bullseye wraps each child in a content-sized item, so a modal in it grows to its content (e.g. the
 // label preview) instead of the screen and gets cut off on both sides on phones.
 .pf-v6-c-backdrop .pf-v6-l-bullseye__item {
