@@ -647,3 +647,17 @@ div.pf-v6-c-page__main-container {
     }
   }
 }
+// Dropdown in a breadcrumb item (components/menu/mod.rs); always opens downwards, so no popper
+.breadcrumb-menu {
+  position: relative;
+  display: inline-block;
+
+  > .pf-v6-c-menu {
+    position: absolute;
+    inset-block-start: 100%;
+    inset-inline-start: 0;
+    z-index: var(--pf-t--global--z-index--sm);
+    min-width: max-content;
+    margin-block-start: var(--pf-t--global--spacer--xs);
+  }
+}
