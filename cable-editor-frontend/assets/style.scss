@@ -15,6 +15,14 @@
   //src: url("./webfonts/fa-brands-400.woff2");
 }
 
+// Bullseye wraps each child in a content-sized item, so a modal in it grows to its content (e.g. the
+// label preview) instead of the screen and gets cut off on both sides on phones.
+.pf-v6-c-backdrop .pf-v6-l-bullseye__item {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
 .map {
   height: 100%;
 }
