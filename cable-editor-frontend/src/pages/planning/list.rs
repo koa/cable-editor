@@ -1,3 +1,4 @@
+use crate::components::page_layout::PageLayout;
 use crate::{
     components::table::ListModel,
     error::FrontendError,
@@ -77,6 +78,20 @@ impl Component for ListOfPlannings {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
+        html! {
+            <PageLayout title="Planungen">{self.view_content(ctx)}</PageLayout>
+        }
+    }
+
+    fn rendered(&mut self, ctx: &Context<Self>, first_render: bool) {
+        if first_render {
+            ctx.link().send_message(Msg::Refresh);
+        }
+    }
+}
+
+impl ListOfPlannings {
+    fn view_content(&self, ctx: &Context<Self>) -> Html {
         if let Some(error) = &self.error {
             error.into_prop_value()
         } else if let Some(data) = &self.data {
@@ -155,7 +170,6 @@ impl Component for ListOfPlannings {
                 <Table<Columns, ListModel<Columns, MemoizedTableModel<PlanListEntry>>>
                     mode={TableMode::Compact}
                     grid={TableGridMode::Medium}
-                    caption="Planungen"
                     {header}
                     {entries}
                 />
@@ -164,12 +178,6 @@ impl Component for ListOfPlannings {
             }
         } else {
             html!(<Spinner/>)
-        }
-    }
-
-    fn rendered(&mut self, ctx: &Context<Self>, first_render: bool) {
-        if first_render {
-            ctx.link().send_message(Msg::Refresh);
         }
     }
 }

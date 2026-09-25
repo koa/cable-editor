@@ -1,3 +1,4 @@
+use crate::components::page_layout::{PageLayout, object_title};
 use crate::{
     components::{
         fiber::FiberLabel,
@@ -17,8 +18,8 @@ use crate::{
 };
 use gloo_utils::window;
 use patternfly_yew::prelude::{
-    Alert, AlertType, Button, ButtonVariant, Card, CardBody, CardTitle, Divider, Icon, Spinner,
-    Title,
+    Alert, AlertType, Button, ButtonVariant, Card, CardBody, CardTitle, Divider, Icon, Level,
+    Spinner, Title,
 };
 use std::rc::Rc;
 use yew::{
@@ -154,6 +155,14 @@ impl Component for ShowPanel {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
+        html! {
+            <PageLayout title={object_title("Verbindungsübersicht", self.data.as_ref().map(|data| &data.panel))}>{self.view_content(ctx)}</PageLayout>
+        }
+    }
+}
+
+impl ShowPanel {
+    fn view_content(&self, ctx: &Context<Self>) -> Html {
         if self.loading {
             return html! {
                 <div class="pf-v6-u-p-xl pf-v6-u-text-align-center">
@@ -266,14 +275,7 @@ impl Component for ShowPanel {
                 <Card class="pf-v6-u-mb-lg panel-summary-card">
                     <CardTitle>
                         <div class="overview-header-title">
-                            <div>
-                                <Title size={patternfly_yew::prelude::Size::XXLarge}>
-                                    {format!("Verbindungsübersicht: {}", root_panel)}
-                                </Title>
-                                <div class="pf-v6-u-font-size-sm pf-v6-u-color-200 pf-v6-u-mt-xs">
-                                    {format!("Standort: Schacht \"{}\"", schacht.name)}
-                                </div>
-                            </div>
+                            <div>{format!("Standort: Schacht \"{}\"", schacht.name)}</div>
                             <div class="overview-header-badges">
                                 if modified_ports > 0 {
                                     <span class="pf-v6-c-label pf-m-orange">
@@ -320,7 +322,7 @@ impl Component for ShowPanel {
                     <div class="no-print pf-v6-u-mb-lg panel-toc-card">
                         <Card>
                             <CardTitle>
-                                <Title size={patternfly_yew::prelude::Size::Medium}>
+                                <Title level={Level::H2} size={patternfly_yew::prelude::Size::Medium}>
                                     {Icon::Folder}
                                     <span class="pf-v6-u-ml-sm">{"Schnellnavigation"}</span>
                                 </Title>
@@ -368,7 +370,7 @@ impl Component for ShowPanel {
                     <div id="panel-root" class="panel-overview-section pf-v6-u-mb-xl">
                         <div class="panel-section-header">
                             <div class="panel-section-title-wrapper">
-                                <Title size={patternfly_yew::prelude::Size::Large}>
+                                <Title level={Level::H2} size={patternfly_yew::prelude::Size::Large}>
                                     {Icon::FolderOpen}
                                     <span class="pf-v6-u-ml-sm">
                                         {root_panel.name.as_deref().unwrap_or("Panel")}
@@ -404,7 +406,7 @@ impl Component for ShowPanel {
                         <div id={anchor_id} class={classes!("panel-overview-section", "child-panel-section", format!("hierarchy-level-{}", level), "pf-v6-u-mb-xl")}>
                             <div class="panel-section-header child-header">
                                 <div class="panel-section-title-wrapper">
-                                    <Title size={patternfly_yew::prelude::Size::Large}>
+                                    <Title level={Level::H2} size={patternfly_yew::prelude::Size::Large}>
                                         {Icon::AngleDoubleRight}
                                         <span class="pf-v6-u-ml-sm">
                                             {format!("{}", child.panel)}
@@ -473,9 +475,7 @@ impl Component for ShowPanel {
             </div>
         }
     }
-}
 
-impl ShowPanel {
     fn render_ports_table(
         &self,
         ports: &[PlannedPortOverview],

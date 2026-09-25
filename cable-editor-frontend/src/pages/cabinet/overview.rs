@@ -1,3 +1,4 @@
+use crate::components::page_layout::{PageLayout, object_title};
 use crate::{
     components::{
         cabinet::edit::EditCabinet,
@@ -8,7 +9,7 @@ use crate::{
     pages::router::{CableView, PlanView},
 };
 use patternfly_yew::prelude::{
-    Cell, CellContext, MemoizedTableModel, Spinner, Table, TableColumn, TableEntryRenderer,
+    Cell, CellContext, Level, MemoizedTableModel, Spinner, Table, TableColumn, TableEntryRenderer,
     TableGridMode, TableHeader, TableMode, Title, UseTableData, use_table_data,
 };
 use yew::{
@@ -84,24 +85,23 @@ fn CabinetContent(props: &CabinetOverviewProps) -> HtmlResult {
         </TableHeader<Columns>>
     };
     Ok(html! {
-        <>
-            <Title>{schacht.name.as_str()}</Title>
+        <PageLayout title={object_title("Schacht", Some(&schacht.name))}>
             <EditCabinet {plan_id} {cabinet_id}/>
+            <Title level={Level::H2}>{"Kabel"}</Title>
             <Table<Columns, UseTableData<Columns, MemoizedTableModel<SchachtCableEnd>>>
                 mode={TableMode::Compact}
                 grid={TableGridMode::Medium}
-                caption="Kabel"
                 {header}
                 {entries}
             />
-        </>
+        </PageLayout>
     })
 }
 
 /// Schacht overview: panels and cables ending here.
 #[function_component]
 pub fn CabinetOverview(props: &CabinetOverviewProps) -> Html {
-    let fallback = html!(<Spinner/>);
+    let fallback = html!(<PageLayout title="Schacht"><Spinner/></PageLayout>);
     html! {
         <Suspense {fallback}>
             <CabinetContent plan_id={props.plan_id} cabinet_id={props.cabinet_id}/>

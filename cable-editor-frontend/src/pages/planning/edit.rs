@@ -1,3 +1,4 @@
+use crate::components::page_layout::{PageLayout, object_title};
 use crate::{
     components::{plan::netbox_sync::NetboxSyncModal, table::ListModel},
     error::FrontendError,
@@ -12,8 +13,9 @@ use crate::{
 use log::info;
 use patternfly_yew::prelude::{
     ActionGroup, Alert, AlertType, Backdrop, Bullseye, Button, ButtonVariant, Cell, CellContext,
-    ExpansionState, Form, FormGroup, MemoizedTableModel, Modal, ModalVariant, Spinner, Table,
-    TableColumn, TableEntryRenderer, TableGridMode, TableHeader, TableMode, TextInput, Title,
+    ExpansionState, Form, FormGroup, Level, MemoizedTableModel, Modal, ModalVariant, Spinner,
+    Table, TableColumn, TableEntryRenderer, TableGridMode, TableHeader, TableMode, TextInput,
+    Title,
 };
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use yew::{
@@ -255,6 +257,20 @@ impl Component for EditPlan {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
+        html! {
+            <PageLayout title={object_title("Planung bearbeiten", self.details.as_ref().map(|details| &details.name))}>{self.view_content(ctx)}</PageLayout>
+        }
+    }
+
+    fn rendered(&mut self, ctx: &Context<Self>, first_render: bool) {
+        if first_render {
+            ctx.link().send_message(Msg::FetchData);
+        }
+    }
+}
+
+impl EditPlan {
+    fn view_content(&self, ctx: &Context<Self>) -> Html {
         if self.loading {
             return html!(<Spinner />);
         }
@@ -332,8 +348,6 @@ impl Component for EditPlan {
             <div class="pf-v6-c-panel">
                 <div class="pf-v6-c-panel__main">
                     <div class="pf-v6-c-panel__main-body">
-                        <Title size={patternfly_yew::prelude::Size::XLarge}>{"Planung bearbeiten"}</Title>
-
                         if let Some(err) = &self.error {
                             <Alert title={err.to_string()} r#type={AlertType::Danger} inline=true />
                         }
@@ -365,7 +379,7 @@ impl Component for EditPlan {
 
                         if is_open {
                             <div class="pf-v6-u-mt-xl">
-                                <Title size={patternfly_yew::prelude::Size::Large}>{"Geplante Änderungen"}</Title>
+                                <Title level={Level::H2}>{"Geplante Änderungen"}</Title>
                                 <Table<UsageColumn, ListModel<UsageColumn, MemoizedTableModel<PortUsageRow>>>
                                     mode={TableMode::Compact}
                                     grid={TableGridMode::Medium}
@@ -387,12 +401,6 @@ impl Component for EditPlan {
                     </div>
                 </div>
             </div>
-        }
-    }
-
-    fn rendered(&mut self, ctx: &Context<Self>, first_render: bool) {
-        if first_render {
-            ctx.link().send_message(Msg::FetchData);
         }
     }
 }

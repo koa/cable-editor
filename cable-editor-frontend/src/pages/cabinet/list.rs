@@ -1,3 +1,4 @@
+use crate::components::page_layout::PageLayout;
 use crate::{
     components::{cabinet::edit::EditCabinet, plan_link::PlanLink, table::ListModel},
     error::FrontendError,
@@ -93,6 +94,20 @@ impl Component for ListOfCabinets {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
+        html! {
+            <PageLayout title="Schächte">{self.view_content(ctx)}</PageLayout>
+        }
+    }
+
+    fn rendered(&mut self, ctx: &Context<Self>, first_render: bool) {
+        if first_render {
+            fetch_data(ctx.link().clone());
+        }
+    }
+}
+
+impl ListOfCabinets {
+    fn view_content(&self, ctx: &Context<Self>) -> Html {
         if let Some(error) = &self.error {
             error.into_prop_value()
         } else if let Some(data) = &self.data {
@@ -115,7 +130,6 @@ impl Component for ListOfCabinets {
                 <Table<Columns, ListModel<Columns, MemoizedTableModel<(SchachtListEntry,i32)>>>
                     mode={TableMode::Expandable}
                     grid={TableGridMode::Medium}
-                    caption="Schächte"
                     {header}
                     {entries}
                     {onexpand}
@@ -123,12 +137,6 @@ impl Component for ListOfCabinets {
             }
         } else {
             html!(<Spinner/>)
-        }
-    }
-
-    fn rendered(&mut self, ctx: &Context<Self>, first_render: bool) {
-        if first_render {
-            fetch_data(ctx.link().clone());
         }
     }
 }

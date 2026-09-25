@@ -13,7 +13,7 @@ use crate::graphql::authenticated::edit_cabinet::{
 };
 use log::info;
 use patternfly_yew::prelude::{
-    ActionGroup, Button, ButtonType, ButtonVariant, Cell, Dropdown, Form, FormGroup, Icon,
+    ActionGroup, Button, ButtonType, ButtonVariant, Cell, Dropdown, Form, FormGroup, Icon, Level,
     MenuAction, Modal, Spinner, TableColumn, TableHeader, TableMode, TextInput, TextModifier,
     Title,
 };
@@ -527,7 +527,7 @@ impl Component for EditCabinet {
 
             html! {
                 <>
-                <Title>{"Panels im Schacht"}</Title>
+                <Title level={Level::H2}>{"Panels im Schacht"}</Title>
                 {error}
                 <TreeTable<IdOrNew, PanelEntry,PanelEditAction, PanelColumn>
                     state={self.state.clone()}

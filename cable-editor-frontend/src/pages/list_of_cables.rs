@@ -1,3 +1,4 @@
+use crate::components::page_layout::PageLayout;
 use crate::components::plan_link::PlanLink;
 use crate::pages::router::PlanView;
 use crate::{
@@ -150,7 +151,6 @@ fn CablesTable() -> HtmlResult {
             <Table<Columns, UseTableData<Columns, MemoizedTableModel<CableListEntry>>>
                 mode={TableMode::Compact}
                 grid={TableGridMode::Medium}
-                caption="Kabel"
                 {header}
                 {entries}
             />
@@ -162,9 +162,11 @@ fn CablesTable() -> HtmlResult {
 pub fn ListOfCables() -> Html {
     let fallback = html!(<Spinner/>);
     html! {
-        <Suspense {fallback}>
-            <CablesTable />
-        </Suspense>
+        <PageLayout title="Kabel">
+            <Suspense {fallback}>
+                <CablesTable />
+            </Suspense>
+        </PageLayout>
     }
 }
 struct AddCable {

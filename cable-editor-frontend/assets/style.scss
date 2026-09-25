@@ -580,6 +580,11 @@ body {
     border: none !important;
   }
 
+  // Pages with their own print header (panel overview) don't print the page title
+  .pf-v6-c-page__main:has(.print-only) .page-title {
+    display: none !important;
+  }
+
   .print-only {
     display: block !important;
     margin: 0 0 12px 0 !important;

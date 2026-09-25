@@ -1,3 +1,4 @@
+use crate::components::page_layout::{PageLayout, object_title};
 use crate::{
     components::{fiber::FiberLabel, table::ListModel},
     error::FrontendError,
@@ -15,7 +16,7 @@ use itertools::Itertools;
 use patternfly_yew::prelude::{
     Alert, AlertType, Button, ButtonVariant, Cell, CellContext, Dropdown, ExpansionState, Icon,
     MemoizedTableModel, MenuAction, SelectItemRenderer, SimpleSelect, Spinner, Table, TableColumn,
-    TableEntryRenderer, TableGridMode, TableHeader, TableMode, Title,
+    TableEntryRenderer, TableGridMode, TableHeader, TableMode,
 };
 use std::{
     cell::RefCell,
@@ -300,6 +301,20 @@ impl Component for AttachFiber {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
+        html! {
+            <PageLayout title={object_title("Fasern auflegen", self.current_situation.as_ref().map(|situation| &situation.panel))}>{self.view_content(ctx)}</PageLayout>
+        }
+    }
+
+    fn rendered(&mut self, ctx: &Context<Self>, first_render: bool) {
+        if first_render {
+            ctx.link().send_message(Msg::FetchData);
+        }
+    }
+}
+
+impl AttachFiber {
+    fn view_content(&self, ctx: &Context<Self>) -> Html {
         if self.loading {
             return html!(<Spinner />);
         }
@@ -309,22 +324,10 @@ impl Component for AttachFiber {
 
         let can_save = has_changes && validation_errors.is_empty();
 
-        let title = self
-            .current_situation
-            .as_ref()
-            .map(|p| {
-                let title = format!("Fasern auflegen in {}", p.panel);
-                html! {
-                    <Title size={patternfly_yew::prelude::Size::XLarge}>{title}</Title>
-                }
-            })
-            .unwrap_or_else(|| html!(<Spinner/>));
-
         html! {
             <div class="pf-v6-c-panel">
                 <div class="pf-v6-c-panel__main">
                     <div class="pf-v6-c-panel__main-body">
-                        {title}
                         if let Some(err) = &self.error {
                             <Alert title={err.to_string()} r#type={AlertType::Danger} inline=true />
                         }
@@ -350,14 +353,6 @@ impl Component for AttachFiber {
         }
     }
 
-    fn rendered(&mut self, ctx: &Context<Self>, first_render: bool) {
-        if first_render {
-            ctx.link().send_message(Msg::FetchData);
-        }
-    }
-}
-
-impl AttachFiber {
     fn validate(&self) -> Vec<String> {
         let mut errors = Vec::new();
 

@@ -19,7 +19,7 @@ use crate::{
 use brady_web_sdk::BradyProvider;
 use cynic::GraphQlResponse;
 use patternfly_yew::prelude::{
-    BackdropViewer, Button, MastheadBrand, Page, PageSidebar, Spinner, ToastViewer,
+    BackdropViewer, Bullseye, Button, MastheadBrand, Page, PageSidebar, Spinner, ToastViewer,
 };
 use web_sys::MouseEvent;
 use yew::{
@@ -74,7 +74,7 @@ impl yew::Component for App {
             }
         } else {
             html! {
-                <h1>{"Fetching"}</h1>
+                <Bullseye><Spinner/></Bullseye>
             }
         }
     }

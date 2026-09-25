@@ -301,9 +301,10 @@ impl PlanView {
 }
 
 impl AppRoute {
-    /// Renders the page in PatternFly's page layout: the breadcrumb and the content each in a
-    /// `PageSection` inside `<main>`. There is no masthead or sidebar, and unlike PatternFly's
-    /// `Page` the document scrolls instead of the main container (`.app-page` in `style.scss`).
+    /// Renders the page in PatternFly's page layout: the breadcrumb in a `PageSection` inside
+    /// `<main>`, followed by the page, which adds its title and content sections with
+    /// `PageLayout`. There is no masthead or sidebar, and unlike PatternFly's `Page` the document
+    /// scrolls instead of the main container (`.app-page` in `style.scss`).
     pub fn content(self) -> Html {
         let breadcrumb = self.breadcrumb();
         let content = match self {
@@ -315,7 +316,7 @@ impl AppRoute {
                 <div class="pf-v6-c-page__main-container">
                     <main class="pf-v6-c-page__main" id="main-content" tabindex="-1">
                         <PageSection r#type={PageSectionType::Breadcrumbs}>{breadcrumb}</PageSection>
-                        <PageSection>{content}</PageSection>
+                        {content}
                     </main>
                 </div>
             </div>

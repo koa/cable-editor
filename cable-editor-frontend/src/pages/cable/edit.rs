@@ -1,3 +1,4 @@
+use crate::components::page_layout::{PageLayout, object_title};
 use crate::{
     components::table::ListModel,
     error::FrontendError,
@@ -421,6 +422,20 @@ impl Component for EditCable {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
+        html! {
+            <PageLayout title={object_title("Kabel bearbeiten", match &self.state { DataState::Data(data) => Some(&data.name), _ => None })}>{self.view_content(ctx)}</PageLayout>
+        }
+    }
+
+    fn rendered(&mut self, ctx: &Context<Self>, first_render: bool) {
+        if first_render {
+            Self::fetch_data(ctx);
+        }
+    }
+}
+
+impl EditCable {
+    fn view_content(&self, ctx: &Context<Self>) -> Html {
         match &self.state {
             DataState::Data(data) => {
                 let mut has_changes = false;
@@ -719,12 +734,6 @@ impl Component for EditCable {
                 let cable_id = ctx.props().cable_id;
                 format!("Kabel {cable_id} nicht gefunden").into_prop_value()
             }
-        }
-    }
-
-    fn rendered(&mut self, ctx: &Context<Self>, first_render: bool) {
-        if first_render {
-            Self::fetch_data(ctx);
         }
     }
 }

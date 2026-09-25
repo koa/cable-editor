@@ -1,3 +1,4 @@
+use crate::components::page_layout::{PageLayout, object_title};
 use crate::{
     error::FrontendError,
     graphql::authenticated::{
@@ -30,7 +31,6 @@ pub enum Msg {
     PortsFetched {
         ports: Vec<EditablePort>,
         panel_name: Option<Box<str>>,
-        duct_name: Option<Box<str>>,
         netbox_device_id: Option<i32>,
     },
     AddPort,
@@ -58,7 +58,6 @@ pub struct PortEditor {
     loading: bool,
     error: Option<FrontendError>,
     panel_name: Option<Box<str>>,
-    cabinet_name: Option<Box<str>>,
     netbox_device_id: Option<i32>,
     netbox_ports: Box<[NetboxDevicePort]>,
 }
@@ -84,7 +83,6 @@ impl Component for PortEditor {
             loading: true,
             error: None,
             panel_name: None,
-            cabinet_name: None,
             netbox_device_id: None,
             netbox_ports: Box::default(),
         }
@@ -107,7 +105,7 @@ impl Component for PortEditor {
                                 |FetchedPanelWithPorts {
                                      ports,
                                      panel_name,
-                                     schacht_name,
+                                     schacht_name: _,
                                      netbox_device_id,
                                  }| {
                                     Msg::PortsFetched {
@@ -123,7 +121,6 @@ impl Component for PortEditor {
                                             })
                                             .collect(),
                                         panel_name: panel_name.map(|s| s.into_boxed_str()),
-                                        duct_name: schacht_name.map(|s| s.into_boxed_str()),
                                         netbox_device_id,
                                     }
                                 },
@@ -136,12 +133,10 @@ impl Component for PortEditor {
             Msg::PortsFetched {
                 ports,
                 panel_name,
-                duct_name,
                 netbox_device_id,
             } => {
                 self.ports = ports;
                 self.panel_name = panel_name;
-                self.cabinet_name = duct_name;
                 self.netbox_device_id = netbox_device_id;
                 self.loading = false;
                 self.error = None;
@@ -306,6 +301,20 @@ impl Component for PortEditor {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
+        html! {
+            <PageLayout title={object_title("Ports ändern", self.panel_name.as_deref())}>{self.view_content(ctx)}</PageLayout>
+        }
+    }
+
+    fn rendered(&mut self, ctx: &Context<Self>, first_render: bool) {
+        if first_render {
+            ctx.link().send_message(Msg::FetchPorts);
+        }
+    }
+}
+
+impl PortEditor {
+    fn view_content(&self, ctx: &Context<Self>) -> Html {
         if self.loading {
             return html!(<Spinner />);
         }
@@ -400,19 +409,10 @@ impl Component for PortEditor {
 
         let error: Option<Html> = self.error.as_ref().map(<&FrontendError>::into_prop_value);
 
-        // Titel-Text aus den optionalen Namen zusammenbauen
-        let title_text = match (&self.panel_name, &self.cabinet_name) {
-            (Some(p), Some(s)) => format!("Panel: {} (Schacht: {})", p, s),
-            (Some(p), None) => format!("Panel: {}", p),
-            (None, Some(s)) => format!("Panel bearbeiten (Schacht: {})", s),
-            (None, None) => "Panel bearbeiten".to_string(),
-        };
-
         html! {
             <div class="pf-v6-c-panel">
                 <div class="pf-v6-c-panel__main">
                     <div class="pf-v6-c-panel__main-body">
-                        <h2 class="pf-v6-c-title pf-m-xl pf-v6-u-mb-md">{title_text}</h2>
                         {error}
                         <ActionGroup>
                             <Button label="Port hinzufügen" variant={ButtonVariant::Secondary} onclick={ctx.link().callback(|_| Msg::AddPort)} />
@@ -435,12 +435,6 @@ impl Component for PortEditor {
                     </div>
                 </div>
             </div>
-        }
-    }
-
-    fn rendered(&mut self, ctx: &Context<Self>, first_render: bool) {
-        if first_render {
-            ctx.link().send_message(Msg::FetchPorts);
         }
     }
 }

@@ -1,3 +1,4 @@
+use crate::components::page_layout::{PageLayout, object_title};
 use crate::{
     components::{fiber::FiberLabel, table::ListModel},
     error::FrontendError,
@@ -17,7 +18,7 @@ use itertools::Itertools;
 use patternfly_yew::prelude::{
     ActionGroup, Alert, AlertType, Button, ButtonVariant, Cell, CellContext, ExpansionState,
     FormGroup, Grid, GridItem, Icon, MemoizedTableModel, SelectItemRenderer, SimpleSelect, Spinner,
-    Table, TableColumn, TableEntryRenderer, TableGridMode, TableHeader, TableMode, Title,
+    Table, TableColumn, TableEntryRenderer, TableGridMode, TableHeader, TableMode,
 };
 use std::{
     cell::RefCell,
@@ -474,22 +475,31 @@ impl Component for LoopPortEditor {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
+        html! {
+            <PageLayout title={object_title("Loops verbinden", self.current_situation.as_ref().map(|situation| &situation.panel))}>{self.view_content(ctx)}</PageLayout>
+        }
+    }
+
+    fn rendered(&mut self, ctx: &Context<Self>, first_render: bool) {
+        if first_render {
+            ctx.link().send_message(Msg::FetchData);
+        }
+    }
+}
+
+impl LoopPortEditor {
+    fn view_content(&self, ctx: &Context<Self>) -> Html {
         if self.loading {
             return html!(<Spinner />);
         }
 
         let is_pair_defined = self.cable_a.is_some() && self.cable_b.is_some();
         let unmodified = self.calculate_current_states(ctx.props().panel_id) == self.fiber_states;
-        let title = self.current_situation.as_ref().map(|p| {
-            let title = format!("Direktverbindungen in {}", p.panel);
-            html!(<Title size={patternfly_yew::prelude::Size::XLarge}>{title}</Title>)
-        });
 
         html! {
             <div class="pf-v6-c-panel">
                 <div class="pf-v6-c-panel__main">
                     <div class="pf-v6-c-panel__main-body">
-                        {title}
                         if let Some(err) = &self.error {
                             <Alert title={err.to_string()} r#type={AlertType::Danger} inline=true />
                         }
@@ -515,14 +525,6 @@ impl Component for LoopPortEditor {
         }
     }
 
-    fn rendered(&mut self, ctx: &Context<Self>, first_render: bool) {
-        if first_render {
-            ctx.link().send_message(Msg::FetchData);
-        }
-    }
-}
-
-impl LoopPortEditor {
     fn render_cable_selection(&self, ctx: &Context<Self>) -> Html {
         let select_cable_a = {
             let entries = self
