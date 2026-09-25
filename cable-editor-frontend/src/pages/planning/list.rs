@@ -186,7 +186,7 @@ impl TableEntryRenderer<Columns> for PlanListEntry {
     fn render_cell(&self, context: CellContext<'_, Columns>) -> Cell {
         match &context.column {
             Columns::Name => Cell::new(
-                html!(<Link<AppRoute> to={AppRoute::Plan {plan_id: self.id,view: PlanView::Edit}}>{self.name.as_str()}</Link<AppRoute>>),
+                html!(<Link<AppRoute> to={AppRoute::Plan {plan_id: self.id,view: PlanView::ListOfCabinets}}>{self.name.as_str()}</Link<AppRoute>>),
             ),
             Columns::Status => Cell::new(self.status.name().into_prop_value()),
         }
