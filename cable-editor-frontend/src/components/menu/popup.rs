@@ -24,7 +24,7 @@ pub struct PopupMenuProps {
     /// Align the menu with the end of the toggle, e.g. for a kebab at the end of a table row
     #[prop_or_default]
     pub align_end: bool,
-    /// `MenuLinkItem`s and `MenuActionItem`s
+    /// `MenuGroup`s of `MenuLinkItem`s and `MenuActionItem`s
     #[prop_or_default]
     pub children: Html,
 }
@@ -117,11 +117,9 @@ impl Component for PopupMenu {
                 if self.is_open {
                     <div ref={self.menu_ref.clone()} class="pf-v6-c-menu pf-m-scrollable">
                         <div class="pf-v6-c-menu__content">
-                            <ul class="pf-v6-c-menu__list" role="menu">
-                                <ContextProvider<CloseMenu> context={close}>
-                                    {props.children.clone()}
-                                </ContextProvider<CloseMenu>>
-                            </ul>
+                            <ContextProvider<CloseMenu> context={close}>
+                                {props.children.clone()}
+                            </ContextProvider<CloseMenu>>
                         </div>
                     </div>
                 }
@@ -198,6 +196,36 @@ fn menu_items(menu: &Element) -> Vec<Element> {
         .filter_map(|i| items.item(i))
         .filter_map(|item| item.dyn_into::<Element>().ok())
         .collect()
+}
+
+#[derive(Properties, PartialEq)]
+pub struct MenuGroupProps {
+    #[prop_or_default]
+    pub title: Option<AttrValue>,
+    /// Separate the group from the one before by a divider
+    #[prop_or_default]
+    pub divider: bool,
+    /// `MenuLinkItem`s and `MenuActionItem`s
+    #[prop_or_default]
+    pub children: Html,
+}
+
+/// A list of entries in a `PopupMenu`, optionally with a title.
+#[function_component]
+pub fn MenuGroup(props: &MenuGroupProps) -> Html {
+    html! {
+        <>
+            if props.divider {
+                <hr class="pf-v6-c-divider"/>
+            }
+            <section class="pf-v6-c-menu__group">
+                if let Some(title) = &props.title {
+                    <h1 class="pf-v6-c-menu__group-title">{title.clone()}</h1>
+                }
+                <ul class="pf-v6-c-menu__list" role="menu">{props.children.clone()}</ul>
+            </section>
+        </>
+    }
 }
 
 fn item_main(selected: bool, children: &Html) -> Html {

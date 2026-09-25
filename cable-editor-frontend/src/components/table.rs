@@ -1,4 +1,4 @@
-use crate::components::menu::popup::PopupMenu;
+use crate::components::menu::popup::{MenuGroup, PopupMenu};
 use patternfly_yew::{
     ouia,
     prelude::{
@@ -627,7 +627,7 @@ fn row_actions(props: &RowActionsProperties) -> Html {
                         aria_label="Aktionen"
                         align_end=true
                     >
-                        {for props.actions.iter().cloned()}
+                        <MenuGroup>{for props.actions.iter().cloned()}</MenuGroup>
                     </PopupMenu>
                 </TableData>
             }

@@ -285,9 +285,8 @@ impl PlanView {
         match self {
             PlanView::Cabinet { id, view } => {
                 item_contents.push(
-                    html!(<ListCabinet plan_id={plan_id} cabinet_id={*id} view={view.clone()}/>),
+                    html!(<ListCabinet plan_id={plan_id} cabinet_id={*id} view={Some(view.clone())}/>),
                 );
-                view.append_breadcrumbs(plan_id, id, item_contents);
             }
             PlanView::Cable { id, view } => {
                 item_contents.push(html!(<ListCable {plan_id} cable_id={id} view={view.clone()}/>))
@@ -378,34 +377,12 @@ impl CabinetView {
         }
     }
 
-    fn title(&self) -> &'static str {
+    pub const ALL: [CabinetView; 2] = [CabinetView::Overview, CabinetView::Edit];
+
+    pub fn title(&self) -> &'static str {
         match self {
             CabinetView::Overview => "Übersicht",
             CabinetView::Edit => "Panels bearbeiten",
         }
-    }
-
-    /// Menu to switch between the views of the Schacht.
-    pub fn append_breadcrumbs(
-        &self,
-        plan_id: i32,
-        cabinet_id: &i32,
-        breadcrumb_items: &mut Vec<VNode>,
-    ) {
-        let entries = [CabinetView::Overview, CabinetView::Edit]
-            .into_iter()
-            .map(|view| MenuEntry {
-                text: view.title().into(),
-                target: AppRoute::Plan {
-                    plan_id,
-                    view: PlanView::Cabinet {
-                        id: *cabinet_id,
-                        view,
-                    },
-                },
-            })
-            .collect::<Vec<_>>();
-        let title: Cow<'static, str> = self.title().into();
-        breadcrumb_items.push(html!(<MenuDropdown {title} {entries}/>));
     }
 }

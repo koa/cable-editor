@@ -1,10 +1,10 @@
 use crate::components::menu::list_cabinet::ListCabinet;
-use crate::components::menu::{MenuDropdown, MenuEntry};
+use crate::components::menu::{BreadcrumbDivider, MenuDropdown, MenuEntry, MenuEntryGroup};
 use crate::error::FrontendError;
 use crate::graphql::authenticated::panel_navigation::{ChildPanelNav, PanelHierarchy};
-use crate::pages::router::{AppRoute, CabinetView, PanelView, PlanView};
+use crate::pages::router::{AppRoute, PanelView, PlanView};
 use crate::util::get_credentials;
-use patternfly_yew::prelude::{Icon, Spinner};
+use patternfly_yew::prelude::Spinner;
 use std::borrow::Cow;
 use yew::html::IntoPropValue;
 use yew::platform::spawn_local;
@@ -82,11 +82,7 @@ impl Component for ListPanel {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        let divider = html! {
-            <span class="pf-v6-c-breadcrumb__item-divider breadcrumb-path__divider">
-                { Icon::AngleRight }
-            </span>
-        };
+        let divider = html!(<BreadcrumbDivider/>);
 
         if let Some(error) = &self.error {
             html!(<span>{divider} {<&FrontendError as IntoPropValue<Html>>::into_prop_value(error)}</span>)
@@ -99,7 +95,7 @@ impl Component for ListPanel {
                     let mut elements = Vec::new();
 
                     // 0. Schacht, zu dem das Panel gehört
-                    elements.push(html!(<ListCabinet {plan_id} cabinet_id={panel.schacht.id} view={CabinetView::Overview}/>));
+                    elements.push(html!(<ListCabinet {plan_id} cabinet_id={panel.schacht.id}/>));
 
                     // 1. Parent Chain durchgehen:
                     for parent in &panel.parent_chain {
@@ -115,6 +111,7 @@ impl Component for ListPanel {
                             plan_id,
                             p_id,
                             p_name,
+                            "Panels",
                             &parent.siblings,
                         ));
                     }
@@ -132,6 +129,7 @@ impl Component for ListPanel {
                         plan_id,
                         c_id,
                         c_name,
+                        "Panels",
                         &panel.siblings,
                     ));
 
@@ -149,6 +147,7 @@ impl Component for ListPanel {
                         plan_id,
                         c_id,
                         view_title.into(),
+                        "Unterpanels",
                         &panel.children,
                     ));
 
@@ -170,12 +169,15 @@ impl Component for ListPanel {
 }
 
 impl ListPanel {
+    /// Menu with the views of the panel and, in a group titled `others_title`, the siblings
+    /// (on a panel) or children (on the view) to switch to.
     fn render_panel_dropdown(
         &self,
         plan_id: i32,
         panel_id: i32,
         name: String,
-        siblings: &[ChildPanelNav],
+        others_title: &'static str,
+        others: &[ChildPanelNav],
     ) -> Html {
         let title: Cow<'static, str> = name.into();
         let mut entries = vec![
@@ -225,36 +227,28 @@ impl ListPanel {
             ]);
         }
 
-        Self::append_siblings(plan_id, panel_id, siblings, &mut entries);
-
-        html!(<MenuDropdown {title} {entries}/>)
-    }
-
-    fn append_siblings(
-        plan_id: i32,
-        panel_id: i32,
-        siblings: &[ChildPanelNav],
-        entries: &mut Vec<MenuEntry>,
-    ) {
-        for sibling in siblings {
-            let sibling_id = sibling.id;
-            if sibling_id == panel_id {
-                continue;
-            }
-            let sibling_name = sibling
-                .name
-                .clone()
-                .unwrap_or_else(|| format!("Panel {}", sibling_id));
-            entries.push(MenuEntry {
-                text: format!("↳ {}", sibling_name).into_boxed_str(),
+        let others = others
+            .iter()
+            .filter(|other| other.id != panel_id)
+            .map(|other| MenuEntry {
+                text: other
+                    .name
+                    .clone()
+                    .unwrap_or_else(|| format!("Panel {}", other.id))
+                    .into_boxed_str(),
                 target: AppRoute::Plan {
                     plan_id,
                     view: PlanView::Panel {
-                        id: sibling_id,
+                        id: other.id,
                         view: PanelView::Show,
                     },
                 },
-            });
-        }
+            })
+            .collect();
+        let groups = vec![MenuEntryGroup {
+            title: others_title,
+            entries: others,
+        }];
+        html!(<MenuDropdown {title} {entries} {groups}/>)
     }
 }

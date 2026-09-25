@@ -1,4 +1,4 @@
-use crate::components::menu::popup::{MenuActionItem, PopupMenu};
+use crate::components::menu::popup::{MenuActionItem, MenuGroup, PopupMenu};
 use crate::components::page_layout::{PageLayout, object_title};
 use crate::{
     components::{fiber::FiberLabel, table::ListModel},
@@ -699,7 +699,7 @@ impl AttachFiber {
 
             html! {
                 <PopupMenu text={html!("Faser wählen")}>
-                    {for entries}
+                    <MenuGroup>{for entries}</MenuGroup>
                 </PopupMenu>
             }
         } else {
