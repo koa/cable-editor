@@ -1,6 +1,10 @@
 use crate::components::page_layout::{PageLayout, object_title};
 use crate::{
-    components::{plan::netbox_sync::NetboxSyncModal, table::ListModel},
+    components::{
+        links::{CableLink, PanelLink, SchachtLink},
+        plan::netbox_sync::NetboxSyncModal,
+        table::ListModel,
+    },
     error::FrontendError,
     graphql::authenticated::{
         PortSide,
@@ -41,6 +45,7 @@ struct PortUsageRow {
     pub port_id: i32,
     pub schacht_id: i32,
     pub schacht_name: String,
+    /// From the root panel down to the port's own panel
     panel: Box<[PanelChain]>,
     pub port_label: String,
     pub front: Option<PortUsage>,
@@ -56,15 +61,24 @@ struct PanelChain {
 impl TableEntryRenderer<UsageColumn> for PortUsageRow {
     fn render_cell(&self, context: CellContext<'_, UsageColumn>) -> Cell {
         match context.column {
-            UsageColumn::Location => {
-                let mut text = self.schacht_name.clone();
-                for panel in &self.panel {
-                    text.push_str(" - ");
-                    text.push_str(panel.panel_name.as_str());
+            UsageColumn::Location => Cell::new(html! {
+                <>
+                    <SchachtLink id={self.schacht_id} text={self.schacht_name.clone()}/>
+                    {for self.panel.iter().map(|panel| html! {
+                        <>
+                            {" - "}
+                            <PanelLink id={panel.panel_id} text={panel.panel_name.clone()}/>
+                        </>
+                    })}
+                </>
+            }),
+            // Ports have no page of their own, their panel's connection overview shows them
+            UsageColumn::Port => Cell::new(match self.panel.last() {
+                Some(panel) => {
+                    html!(<PanelLink id={panel.panel_id} text={self.port_label.clone()}/>)
                 }
-                Cell::new(text.into_prop_value())
-            }
-            UsageColumn::Port => Cell::new(self.port_label.clone().into_prop_value()),
+                None => self.port_label.clone().into_prop_value(),
+            }),
             UsageColumn::Front => Cell::new(render_action(&self.front)),
             UsageColumn::Back => Cell::new(render_action(&self.back)),
         }
@@ -80,7 +94,8 @@ fn render_action(usage: &Option<PortUsage>) -> Html {
                     <>
                         <IconLink/>
                         <span class="pf-v6-u-ml-sm">
-                            {format!("{} ({}-{})", fiber.cable.name, fiber.bundle, fiber.fiber)}
+                            <CableLink id={fiber.cable.id} text={fiber.cable.name.clone()}/>
+                            {format!(" ({}-{})", fiber.bundle, fiber.fiber)}
                         </span>
                     </>
                 }
@@ -286,13 +301,18 @@ impl EditPlan {
         let mut row_map: HashMap<i32, PortUsageRow> = HashMap::new();
         for u in &details.usage {
             let entry = row_map.entry(u.port.id).or_insert_with(|| {
-                let mut panel_chain = Vec::with_capacity(u.port.panel.parent_chain.len());
-                for p in &u.port.panel.parent_chain {
-                    panel_chain.push(PanelChain {
-                        panel_id: p.id,
-                        panel_name: p.name.clone().unwrap_or_default(),
+                // parent_chain holds only the parents, the port's own panel comes last
+                let panel = &u.port.panel;
+                let panel_chain: Vec<_> = panel
+                    .parent_chain
+                    .iter()
+                    .map(|p| (p.id, &p.name))
+                    .chain([(panel.id, &panel.name)])
+                    .map(|(panel_id, name)| PanelChain {
+                        panel_id,
+                        panel_name: name.clone().unwrap_or_else(|| format!("Panel {panel_id}")),
                     })
-                }
+                    .collect();
                 PortUsageRow {
                     port_id: u.port.id,
                     schacht_id: u.port.panel.schacht.id,

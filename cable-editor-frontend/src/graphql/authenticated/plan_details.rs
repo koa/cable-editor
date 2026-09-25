@@ -48,6 +48,7 @@ pub struct FiberDetails {
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
 #[cynic(graphql_type = "Cable")]
 pub struct CableDetails {
+    pub id: i32,
     pub name: String,
 }
 
