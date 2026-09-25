@@ -101,15 +101,19 @@ impl Component for ListPanel {
                     for parent in &panel.parent_chain {
                         let p_id = parent.id;
                         let p_name = parent.name.clone().unwrap_or_else(|| format!("Panel {}", p_id));
-                        elements.push(divider.clone());
-                        elements.push(self.render_panel_dropdown(plan_id, p_id, p_name, None));
+                        if !elements.is_empty() {
+                            elements.push(divider.clone());
+                        }
+                        elements.push(self.render_panel_dropdown(plan_id, p_id, p_name, &parent.siblings));
                     }
 
                     // 2. Aktuelles Panel (Mit Child-Panels für Vorwärtsnavigation)
                     let c_id = panel.id;
                     let c_name = panel.name.clone().unwrap_or_else(|| format!("Panel {}", c_id));
-                    elements.push(divider.clone());
-                    elements.push(self.render_panel_dropdown(plan_id, c_id, c_name, Some(&panel.children)));
+                    if !elements.is_empty() {
+                        elements.push(divider.clone());
+                    }
+                    elements.push(self.render_panel_dropdown(plan_id, c_id, c_name, &panel.siblings));
 
                     // 3. View Dropdown
                     let view_title: Cow<'static, str> = match current_view {
@@ -119,15 +123,8 @@ impl Component for ListPanel {
                         PanelView::Loop => "Loops verbinden",
                     }.into();
 
-                    let view_entries = vec![
-                        MenuEntry { text: "Übersicht".into(), target: AppRoute::Plan { plan_id, view: PlanView::Panel { id: c_id, view: PanelView::Show } } },
-                        MenuEntry { text: "Ports ändern".into(), target: AppRoute::Plan { plan_id, view: PlanView::Panel { id: c_id, view: PanelView::Edit } } },
-                        MenuEntry { text: "Fasern auflegen".into(), target: AppRoute::Plan { plan_id, view: PlanView::Panel { id: c_id, view: PanelView::Attach } } },
-                        MenuEntry { text: "Loops verbinden".into(), target: AppRoute::Plan { plan_id, view: PlanView::Panel { id: c_id, view: PanelView::Loop } } },
-                    ];
-
                     elements.push(divider.clone());
-                    elements.push(html!(<MenuDropdown title={view_title} entries={view_entries}/>));
+                    elements.push(self.render_panel_dropdown(plan_id, c_id, view_title.into(), &panel.children));
 
                     html! {
                         <span style="display: flex; align-items: center;">
@@ -152,7 +149,7 @@ impl ListPanel {
         plan_id: i32,
         panel_id: i32,
         name: String,
-        child_panels: Option<&[ChildPanelNav]>,
+        siblings: &[ChildPanelNav],
     ) -> Html {
         let title: Cow<'static, str> = name.into();
         let mut entries = vec![
@@ -174,21 +171,25 @@ impl ListPanel {
             },
         ];
 
-        // Falls wir auf dem aktiven Panel sind und dieses Unterpanels hat, fügen wir diese ein
-        if let Some(children) = child_panels {
-            for child in children {
-                let child_id = child.id;
-                let child_name = child.name.clone().unwrap_or_else(|| format!("Panel {}", child_id));
-                entries.push(MenuEntry {
-                    text: format!("↳ {}", child_name).into_boxed_str(),
-                    target: AppRoute::Plan {
-                        plan_id,
-                        view: PlanView::Panel { id: child_id, view: PanelView::Show },
-                    },
-                });
-            }
-        }
+        Self::append_siblings(plan_id, panel_id, siblings, &mut entries);
 
         html!(<MenuDropdown {title} {entries}/>)
+    }
+
+    fn append_siblings(plan_id: i32, panel_id: i32, siblings: &[ChildPanelNav], entries: &mut Vec<MenuEntry>) {
+            for sibling in siblings {
+                let sibling_id = sibling.id;
+                if sibling_id == panel_id {
+                    continue;
+                }
+                let sibling_name = sibling.name.clone().unwrap_or_else(|| format!("Panel {}", sibling_id));
+                entries.push(MenuEntry {
+                    text: format!("↳ {}", sibling_name).into_boxed_str(),
+                    target: AppRoute::Plan {
+                        plan_id,
+                        view: PlanView::Panel { id: sibling_id, view: PanelView::Show },
+                    },
+                });
+        }
     }
 }

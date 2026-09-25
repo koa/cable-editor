@@ -20,9 +20,19 @@ struct FetchPanelQuery {
 pub struct PanelHierarchy {
     pub id: i32,
     pub name: Option<String>,
-    pub parent_chain: Vec<ParentChainPanel>,
+    pub parent_chain: Vec<ParentChainWithSiblingsPanel>,
+    pub siblings: Vec<ChildPanelNav>,
     pub children: Vec<ChildPanelNav>,
 }
+
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
+#[cynic(graphql_type = "Panel")]
+pub struct ParentChainWithSiblingsPanel {
+    pub id: i32,
+    pub name: Option<String>,
+    pub siblings: Vec<ChildPanelNav>,
+}
+
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
 #[cynic(graphql_type = "Panel")]
 pub struct ChildPanelNav {

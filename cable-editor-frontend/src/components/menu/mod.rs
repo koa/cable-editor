@@ -113,9 +113,11 @@ pub fn menu_dropdown(props: &MenuDropdownProps) -> Html {
                     {Icon::CaretDown}
                 </span>
             </button>
-            <ul style={menu_style} class="pf-v6-c-menu__list" role="list">
-                {for entries}
-            </ul>
+            <nav  style={menu_style} class="pf-v6-c-nav" aria-label="Global">
+                <ul class="pf-v6-c-nav__list" role="list">
+                    {for entries}
+                </ul>
+            </nav>
         </div>
     }
 }

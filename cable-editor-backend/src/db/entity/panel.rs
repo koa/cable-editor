@@ -364,6 +364,25 @@ impl Panel {
             .load(&mut connection)
             .await?)
     }
+    async fn siblings(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Panel>> {
+        let mut connection = get_connection(ctx).await?;
+        Ok(if let Some(parent_id)=self.parent_panel{
+            Panel::query()
+                .filter(schema::panel::parent_panel.eq(parent_id))
+                .filter(schema::panel::id.ne(self.id))
+                .order(schema::panel::parent_order.asc())
+                .load(&mut connection)
+                .await?
+        }else{
+            Panel::query()
+                .filter(schema::panel::parent_panel.is_null())
+                .filter(schema::panel::schacht_id.eq(self.schacht_id))
+                .filter(schema::panel::id.ne(self.id))
+                .order(schema::panel::parent_order.asc())
+                .load(&mut connection)
+                .await?
+        })
+    }
     async fn all_children_recursive(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Panel>> {
         let mut connection = get_connection(ctx).await?;
         let raw_sql = r#"
