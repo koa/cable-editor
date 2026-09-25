@@ -15,7 +15,7 @@ use std::{future::Future, pin::pin, rc::Rc, time::Duration};
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, Storage, window};
 use yew::{
-    AttrValue, Callback, Html, Properties, UseStateHandle, function_component, hook, html,
+    AttrValue, Callback, Html, Properties, UseStateHandle, classes, function_component, hook, html,
     html::IntoPropValue,
     platform::{spawn_local, time::sleep},
     prelude::SubmitEvent,
@@ -114,12 +114,40 @@ pub fn PrinterStatusBar() -> Html {
     }
 }
 
-#[derive(Properties, PartialEq)]
-pub struct PrintLabelButtonProps {
+/// One text choice for a label, e.g. the panel name or its whole path.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LabelText {
+    /// Name of the choice shown in the dialog.
+    pub label: AttrValue,
     pub text: AttrValue,
 }
 
-/// Connects, asks for the cable diameter and prints `text` as cable label.
+impl LabelText {
+    pub fn new(label: impl Into<AttrValue>, text: impl Into<AttrValue>) -> Self {
+        LabelText {
+            label: label.into(),
+            text: text.into(),
+        }
+    }
+
+    /// A label without choice.
+    pub fn single(text: impl Into<AttrValue>) -> Rc<[LabelText]> {
+        Rc::new([LabelText::new("Text", text)])
+    }
+}
+
+#[derive(Properties, PartialEq)]
+pub struct PrintLabelButtonProps {
+    /// Text choices, the first is preselected. The dialog only offers a choice for several.
+    pub texts: Rc<[LabelText]>,
+    /// Ask for the cable diameter to cap the text height, else print the largest text.
+    #[prop_or(true)]
+    pub diameter: bool,
+    #[prop_or(AttrValue::Static("Drucken"))]
+    pub label: AttrValue,
+}
+
+/// Connects, asks for the text choice and cable diameter and prints the label.
 #[function_component]
 pub fn PrintLabelButton(props: &PrintLabelButtonProps) -> Html {
     let brady = use_brady().expect("Missing BradyProvider");
@@ -127,21 +155,21 @@ pub fn PrintLabelButton(props: &PrintLabelButtonProps) -> Html {
     let error = use_state(|| None);
     let busy = use_state(|| false);
     let onclick = {
-        let (sdk, text) = (brady.sdk.clone(), props.text.clone());
+        let (sdk, texts, diameter) = (brady.sdk.clone(), props.texts.clone(), props.diameter);
         let (error, busy) = (error.clone(), busy.clone());
         Callback::from(move |_| {
             let Some(backdrop) = backdrop.clone() else {
                 return;
             };
-            let (sdk, text) = (sdk.clone(), text.clone());
+            let (sdk, texts) = (sdk.clone(), texts.clone());
             let (print_error, print_busy) = (error.clone(), busy.clone());
             run(&error, &busy, async move {
                 let geometry = prepare(&sdk).await?;
                 let onsubmit = {
-                    let (backdrop, text) = (backdrop.clone(), text.clone());
-                    Callback::from(move |diameter| {
+                    let backdrop = backdrop.clone();
+                    Callback::from(move |(text, diameter): (AttrValue, Option<f64>)| {
                         backdrop.close();
-                        let task = print_label(sdk.clone(), text.clone(), diameter, geometry);
+                        let task = print_label(sdk.clone(), text, diameter, geometry);
                         run(&print_error, &print_busy, task);
                     })
                 };
@@ -152,7 +180,7 @@ pub fn PrintLabelButton(props: &PrintLabelButtonProps) -> Html {
                 backdrop.open(Backdrop::new(html! {
                     <Bullseye>
                         <Modal title="Etikett drucken" variant={ModalVariant::Small}>
-                            <DiameterForm {text} {geometry} {onsubmit} {oncancel}/>
+                            <LabelForm {texts} {diameter} {geometry} {onsubmit} {oncancel}/>
                         </Modal>
                     </Bullseye>
                 }));
@@ -162,32 +190,40 @@ pub fn PrintLabelButton(props: &PrintLabelButtonProps) -> Html {
     };
     html! {
         <>
-            <Button variant={ButtonVariant::Secondary} label="Drucken" {onclick} disabled={*busy}/>
+            <Button variant={ButtonVariant::Secondary} label={props.label.to_string()} {onclick} disabled={*busy}/>
             {error.as_ref().map(IntoPropValue::<Html>::into_prop_value)}
         </>
     }
 }
 
 #[derive(Properties, PartialEq)]
-struct DiameterFormProps {
-    text: AttrValue,
+struct LabelFormProps {
+    texts: Rc<[LabelText]>,
+    diameter: bool,
     geometry: LabelGeometry,
-    onsubmit: Callback<Option<f64>>,
+    onsubmit: Callback<(AttrValue, Option<f64>)>,
     oncancel: Callback<()>,
 }
 
-/// Asks for the cable diameter in mm (empty for the largest text) and previews the label.
+/// Offers the text choices, asks for the cable diameter in mm (empty for the largest text)
+/// and previews the label.
 #[function_component]
-fn DiameterForm(props: &DiameterFormProps) -> Html {
+fn LabelForm(props: &LabelFormProps) -> Html {
+    let selected = use_state(|| 0);
     let value = use_state(|| {
         storage()
             .and_then(|s| s.get_item(DIAMETER_KEY).ok().flatten())
             .unwrap_or_default()
     });
-    let diameter = parse_diameter(&value);
-    let valid = value.trim().is_empty() || diameter.is_some();
+    let text = props
+        .texts
+        .get(*selected)
+        .map(|t| t.text.clone())
+        .unwrap_or(AttrValue::Static(""));
+    let diameter = props.diameter.then(|| parse_diameter(&value)).flatten();
+    let valid = !props.diameter || value.trim().is_empty() || diameter.is_some();
     let preview = use_memo(
-        (props.text.clone(), diameter, props.geometry),
+        (text.clone(), diameter, props.geometry),
         |(text, diameter, geometry)| {
             let canvas = render_label(text, *diameter, geometry)?;
             let length =
@@ -198,21 +234,48 @@ fn DiameterForm(props: &DiameterFormProps) -> Html {
     let preview = match &*preview {
         Ok((src, length)) => html! {
             <>
-                <img src={src.clone()} alt={props.text.clone()} style="display: block; max-width: 100%; max-height: 48px; border: 1px solid #8a8d90;"/>
+                <img src={src.clone()} alt={text.clone()} style="display: block; max-width: 100%; max-height: 48px; border: 1px solid #8a8d90;"/>
                 {format!("Etikett ca. {length:.0} mm (+{:.0} mm Vorschub)", props.geometry.feed_inch * MM_PER_INCH)}
             </>
         },
         Err(e) => (&FrontendError::from(e.clone())).into_prop_value(),
     };
+    let choices = (props.texts.len() > 1).then(|| {
+        let items = props.texts.iter().enumerate().map(|(index, choice)| {
+            let active = index == *selected;
+            let onclick = {
+                let selected = selected.clone();
+                Callback::from(move |_| selected.set(index))
+            };
+            html! {
+                <div class="pf-v6-c-toggle-group__item">
+                    <button type="button" class={classes!("pf-v6-c-toggle-group__button", active.then_some("pf-m-selected"))} aria-pressed={active.to_string()} {onclick}>
+                        <span class="pf-v6-c-toggle-group__text">{choice.label.clone()}</span>
+                    </button>
+                </div>
+            }
+        });
+        html! {
+            <FormGroup label="Text">
+                <div class="pf-v6-c-toggle-group">{for items}</div>
+            </FormGroup>
+        }
+    });
     let onsubmit = {
-        let (onsubmit, value) = (props.onsubmit.clone(), value.clone());
+        let (onsubmit, value, has_diameter) =
+            (props.onsubmit.clone(), value.clone(), props.diameter);
+        let text = text.clone();
         Callback::from(move |event: SubmitEvent| {
             event.prevent_default();
-            if let Some(storage) = storage() {
-                // Only a convenience, ignore failures
-                let _ = storage.set_item(DIAMETER_KEY, value.trim());
+            let mut diameter = None;
+            if has_diameter {
+                if let Some(storage) = storage() {
+                    // Only a convenience, ignore failures
+                    let _ = storage.set_item(DIAMETER_KEY, value.trim());
+                }
+                diameter = parse_diameter(&value);
             }
-            onsubmit.emit(parse_diameter(&value));
+            onsubmit.emit((text.clone(), diameter));
         })
     };
     let onchange = {
@@ -221,9 +284,12 @@ fn DiameterForm(props: &DiameterFormProps) -> Html {
     };
     html! {
         <Form {onsubmit}>
-            <FormGroup label="Kabeldurchmesser (mm)">
-                <TextInput r#type={TextInputType::Number} autofocus=true value={(*value).clone()} {onchange} placeholder="leer = maximale Schrift"/>
-            </FormGroup>
+            {choices}
+            if props.diameter {
+                <FormGroup label="Kabeldurchmesser (mm)">
+                    <TextInput r#type={TextInputType::Number} autofocus=true value={(*value).clone()} {onchange} placeholder="leer = maximale Schrift"/>
+                </FormGroup>
+            }
             <FormGroup label="Vorschau">
                 {preview}
             </FormGroup>

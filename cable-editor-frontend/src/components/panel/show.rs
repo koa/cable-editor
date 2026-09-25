@@ -1,5 +1,8 @@
 use crate::{
-    components::fiber::FiberLabel,
+    components::{
+        fiber::FiberLabel,
+        label_printer::{LabelText, PrintLabelButton, use_printer_supported},
+    },
     error::FrontendError,
     graphql::authenticated::{
         PortType,
@@ -17,13 +20,54 @@ use patternfly_yew::prelude::{
     Alert, AlertType, Button, ButtonVariant, Card, CardBody, CardTitle, Divider, Icon, Spinner,
     Title,
 };
-use yew::{Component, Context, Html, Properties, classes, html, platform::spawn_local};
+use std::rc::Rc;
+use yew::{
+    Component, Context, Html, Properties, classes, function_component, html, platform::spawn_local,
+    use_memo,
+};
 use yew_nested_router::components::Link;
 
 #[derive(Properties, PartialEq, Clone)]
 pub struct ShowPanelProps {
     pub plan_id: i32,
     pub panel_id: i32,
+}
+
+#[derive(Properties, PartialEq)]
+struct PanelLabelButtonProps {
+    id: i32,
+    name: Option<String>,
+    /// Names of the parent panels, root first.
+    parents: Vec<String>,
+}
+
+/// Prints the panel name or its path from the root panel as label.
+#[function_component]
+fn PanelLabelButton(props: &PanelLabelButtonProps) -> Html {
+    let printing = use_printer_supported();
+    let texts = use_memo(
+        (props.id, props.name.clone(), props.parents.clone()),
+        |(id, name, parents)| {
+            let name = name.clone().unwrap_or_else(|| format!("Panel {id}"));
+            let path = parents
+                .iter()
+                .map(String::as_str)
+                .chain([name.as_str()])
+                .collect::<Vec<_>>()
+                .join(" - ");
+            let mut texts = vec![LabelText::new("Name", name.clone())];
+            if path != name {
+                texts.push(LabelText::new("Pfad", path));
+            }
+            Rc::<[LabelText]>::from(texts)
+        },
+    );
+    if !printing {
+        return Html::default();
+    }
+    html! {
+        <PrintLabelButton texts={(*texts).clone()} diameter=false label="Etikett drucken"/>
+    }
 }
 
 pub enum Msg {
@@ -223,6 +267,11 @@ impl Component for ShowPanel {
                                     icon={Icon::Print}
                                     label="Drucken / PDF"
                                     onclick={ctx.link().callback(|_| Msg::Print)}
+                                />
+                                <PanelLabelButton
+                                    id={root_panel.id}
+                                    name={root_panel.name.clone()}
+                                    parents={root_panel.parent_chain.iter().filter_map(|p| p.name.clone()).collect::<Vec<_>>()}
                                 />
                                 <Link<AppRoute>
                                     to={AppRoute::Plan {

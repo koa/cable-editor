@@ -1,7 +1,7 @@
 use crate::{
     components::{
         cabinet::edit::EditCabinet,
-        label_printer::{PrintLabelButton, use_printer_supported},
+        label_printer::{LabelText, PrintLabelButton, use_printer_supported},
         plan_link::PlanLink,
     },
     graphql::authenticated::schacht_cables::{SchachtCableEnd, SchachtCables},
@@ -44,7 +44,9 @@ impl TableEntryRenderer<Columns> for SchachtCableEnd {
             }
             Columns::Destination => Cell::new(self.path.far_schacht.name.as_str().into()),
             Columns::Label => Cell::new(self.label_text().into_prop_value()),
-            Columns::Print => Cell::new(html!(<PrintLabelButton text={self.label_text()}/>)),
+            Columns::Print => {
+                Cell::new(html!(<PrintLabelButton texts={LabelText::single(self.label_text())}/>))
+            }
         }
     }
 }
