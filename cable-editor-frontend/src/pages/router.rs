@@ -21,7 +21,7 @@ use std::borrow::Cow;
 use yew::virtual_dom::VNode;
 use yew::{
     Callback, Component, Context, ContextHandle, Html, Properties, function_component, html,
-    html::IntoPropValue, html_nested, platform::spawn_local,
+    html::IntoPropValue, html_nested, platform::spawn_local, use_effect_with,
 };
 use yew_nested_router::prelude::{RouterContext, Target, use_router};
 
@@ -159,9 +159,20 @@ where
     }
 }
 
+/// Rendered for URLs that match no route: replaces them with the list of plans.
+#[function_component(RedirectToPlans)]
+pub fn redirect_to_plans() -> Html {
+    let router = use_router::<AppRoute>();
+    use_effect_with((), move |_| {
+        if let Some(router) = router {
+            router.replace(AppRoute::ListOfPlans);
+        }
+    });
+    Html::default()
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Target, Default)]
 pub enum AppRoute {
-    NotFound,
     //Map,
     //MapTest,
     #[default]
@@ -292,7 +303,6 @@ impl AppRoute {
         let bc = self.breadcrumb();
 
         match self {
-            AppRoute::NotFound => html! {<h1>{"Not Found"}</h1>},
             AppRoute::ListOfPlans => {
                 html! {
                     <>
@@ -314,7 +324,6 @@ impl AppRoute {
     fn breadcrumb(&self) -> Html {
         let mut item_contents = Vec::new();
         item_contents.push(match self {
-            AppRoute::NotFound => Html::default(),
             AppRoute::ListOfPlans => {
                 html!(<ListPlan/>)
             }

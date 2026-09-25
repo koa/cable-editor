@@ -14,7 +14,7 @@ use crate::{
         anonymous::{AuthenticationData, AuthenticationQuery},
         query_anonymous,
     },
-    pages::router::{AppRoute, Sidebar},
+    pages::router::{AppRoute, RedirectToPlans, Sidebar},
 };
 use brady_web_sdk::BradyProvider;
 use cynic::GraphQlResponse;
@@ -124,8 +124,8 @@ pub fn main_oauth2(props: &MainOAuth2Props) -> Html {
             <BackdropViewer>
                 <ToastViewer>
                     <Authenticated>
-                        <Router<AppRoute> default={AppRoute::default()}>
-                            <Switch<AppRoute> render={AppRoute::content}/>
+                        <Router<AppRoute>>
+                            <Switch<AppRoute> render={AppRoute::content} default={html!(<RedirectToPlans/>)}/>
                         </Router<AppRoute>>
                         <PrinterStatusBar/>
                     </Authenticated>
