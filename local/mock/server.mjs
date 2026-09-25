@@ -192,7 +192,12 @@ const panel = (id) => {
       return chain;
     },
     children,
-    siblings: () => (parentId === null ? [self] : panel(parentId).children()),
+    // Like the backend: the panels at the same level, without this one
+    siblings: () =>
+      (parentId === null
+        ? panelRows.filter((p) => p[2] === schachtId && p[3] === null).map((p) => panel(p[0]))
+        : panel(parentId).children()
+      ).filter((p) => p.id !== id),
     allChildrenRecursive: () => children().flatMap((c) => [c, ...c.allChildrenRecursive()]),
     ports: ({ portType } = {}) => portsOf(id).filter((p) => !portType || p.portType === portType).map((p) => panelPort(p.id)),
     countPorts: ({ portType } = {}) => portsOf(id).filter((p) => !portType || p.portType === portType).length,
