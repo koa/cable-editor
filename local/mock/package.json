@@ -1,0 +1,15 @@
+{
+  "name": "cable-editor-mock",
+  "private": true,
+  "type": "module",
+  "description": "Mock backend and screenshot tool for the frontend, see run-mock.sh",
+  "scripts": {
+    "start": "node server.mjs",
+    "screenshot": "node screenshot.mjs"
+  },
+  "dependencies": {
+    "graphql": "^16.14.2",
+    "jose": "^5.10.0",
+    "playwright": "1.62.1"
+  }
+}

@@ -8,3 +8,5 @@
 .diesel_lock
 /cable-editor-frontend/target/
 /cable-editor-chart/charts/
+/local/mock/node_modules/
+/local/mock/screenshots/

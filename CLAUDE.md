@@ -21,6 +21,8 @@ Cargo workspace (`default-members = cable-editor-binary`):
 # Local dev environment (Postgres/PostGIS + Keycloak via podman, writes .env and config.yaml, then `trunk serve`)
 local/run-local.sh
 local/import-data.sh              # load local/data.sql into the cable-db container
+local/mock/run-mock.sh            # frontend on :8099 against a mock backend (no DB/Keycloak): fake OIDC login, in-memory GraphQL data
+node local/mock/screenshot.mjs [--desktop] [--full] /plan/0/cabinet/1/overview   # Playwright screenshots (phone by default), reports layout overflow and console errors
 
 # Frontend (from cable-editor-frontend/; pre_build hook runs `npm install` in node/)
 trunk serve                       # dev server on :8082, proxies /graphql and /graphql_anonymous to :8080
