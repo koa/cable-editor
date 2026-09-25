@@ -169,10 +169,11 @@ pub fn PrintLabelButton(props: &PrintLabelButtonProps) -> Html {
             let (sdk, texts) = (sdk.clone(), texts.clone());
             let (print_error, print_busy) = (error.clone(), busy.clone());
             run(&error, &busy, async move {
-                let geometry = prepare(&sdk).await?;
+                // Fails early if the printer or tape is unusable, the dialog follows changes
+                prepare(&sdk).await?;
                 let onsubmit = {
                     let backdrop = backdrop.clone();
-                    Callback::from(move |(text, diameter): (AttrValue, Option<f64>)| {
+                    Callback::from(move |(text, diameter, geometry)| {
                         backdrop.close();
                         let task = print_label(sdk.clone(), text, diameter, geometry);
                         run(&print_error, &print_busy, task);
@@ -185,7 +186,7 @@ pub fn PrintLabelButton(props: &PrintLabelButtonProps) -> Html {
                 backdrop.open(Backdrop::new(html! {
                     <Bullseye>
                         <Modal title="Etikett drucken" variant={ModalVariant::Small}>
-                            <LabelForm {texts} {diameter} {geometry} {onsubmit} {oncancel}/>
+                            <LabelForm {texts} {diameter} {onsubmit} {oncancel}/>
                         </Modal>
                     </Bullseye>
                 }));
@@ -205,8 +206,7 @@ pub fn PrintLabelButton(props: &PrintLabelButtonProps) -> Html {
 struct LabelFormProps {
     texts: Rc<[LabelText]>,
     diameter: bool,
-    geometry: LabelGeometry,
-    onsubmit: Callback<(AttrValue, Option<f64>)>,
+    onsubmit: Callback<(AttrValue, Option<f64>, LabelGeometry)>,
     oncancel: Callback<()>,
 }
 
@@ -214,6 +214,8 @@ struct LabelFormProps {
 /// and previews the label.
 #[function_component]
 fn LabelForm(props: &LabelFormProps) -> Html {
+    // Rendered by the BackdropViewer, the BradyProvider sits above it
+    let brady = use_brady().expect("Missing BradyProvider");
     let selected = use_state(|| 0);
     let value = use_state(|| {
         storage()
@@ -226,29 +228,42 @@ fn LabelForm(props: &LabelFormProps) -> Html {
         .map(|t| t.text.clone())
         .unwrap_or(AttrValue::Static(""));
     let diameter = props.diameter.then(|| parse_diameter(&value)).flatten();
-    let valid = !props.diameter || value.trim().is_empty() || diameter.is_some();
+    // Follows the tape, e.g. after a cartridge change while the dialog is open
+    let geometry = LabelGeometry::from_status(&brady.status);
+    let valid =
+        geometry.is_ok() && (!props.diameter || value.trim().is_empty() || diameter.is_some());
     let preview = use_memo(
-        (text.clone(), diameter, props.geometry),
+        (text.clone(), diameter, geometry.as_ref().ok().copied()),
         |(text, diameter, geometry)| {
-            let canvas = render_label(text, *diameter, geometry)?;
-            let length =
-                f64::from(canvas.width()) / f64::from(canvas.height()) * geometry.band_inch;
-            let (_, copies) = text_layout(*diameter, geometry.band_inch);
-            Ok::<_, brady_web_sdk::Error>((canvas.to_data_url()?, length * MM_PER_INCH, copies))
+            let geometry = (*geometry)?;
+            Some((|| {
+                let canvas = render_label(text, *diameter, &geometry)?;
+                let length =
+                    f64::from(canvas.width()) / f64::from(canvas.height()) * geometry.band_inch;
+                let (_, copies) = text_layout(*diameter, geometry.band_inch);
+                Ok::<_, brady_web_sdk::Error>((
+                    canvas.to_data_url()?,
+                    length * MM_PER_INCH,
+                    copies,
+                    geometry.feed_inch,
+                ))
+            })())
         },
     );
-    let preview = match &*preview {
-        Ok((src, length, copies)) => html! {
+    let preview = match (&geometry, &*preview) {
+        (Err(e), _) => e.into_prop_value(),
+        (Ok(_), None) => Html::default(),
+        (Ok(_), Some(Ok((src, length, copies, feed_inch)))) => html! {
             <>
                 <img src={src.clone()} alt={text.clone()} style="display: block; max-width: 100%; max-height: 48px; border: 1px solid #8a8d90;"/>
                 {format!(
                     "Etikett ca. {length:.0} mm{} (+{:.0} mm Vorschub)",
                     if *copies > 1 { format!(", Text {copies}×") } else { String::new() },
-                    props.geometry.feed_inch * MM_PER_INCH,
+                    feed_inch * MM_PER_INCH,
                 )}
             </>
         },
-        Err(e) => (&FrontendError::from(e.clone())).into_prop_value(),
+        (Ok(_), Some(Err(e))) => (&FrontendError::from(e.clone())).into_prop_value(),
     };
     let choices = (props.texts.len() > 1).then(|| {
         let items = props.texts.iter().enumerate().map(|(index, choice)| {
@@ -274,9 +289,13 @@ fn LabelForm(props: &LabelFormProps) -> Html {
     let onsubmit = {
         let (onsubmit, value, has_diameter) =
             (props.onsubmit.clone(), value.clone(), props.diameter);
-        let text = text.clone();
+        let (text, geometry) = (text.clone(), geometry.as_ref().ok().copied());
         Callback::from(move |event: SubmitEvent| {
             event.prevent_default();
+            // Enter submits even while the print button is disabled
+            let Some(geometry) = geometry else {
+                return;
+            };
             let mut diameter = None;
             if has_diameter {
                 if let Some(storage) = storage() {
@@ -285,7 +304,7 @@ fn LabelForm(props: &LabelFormProps) -> Html {
                 }
                 diameter = parse_diameter(&value);
             }
-            onsubmit.emit((text.clone(), diameter));
+            onsubmit.emit((text.clone(), diameter, geometry));
         })
     };
     let onchange = {
@@ -371,6 +390,9 @@ struct LabelGeometry {
 
 impl LabelGeometry {
     fn from_status(status: &PrinterStatus) -> Result<Self, FrontendError> {
+        if !status.connected {
+            return Err(FrontendError::PrinterDisconnected);
+        }
         let width = status.supply_width.ok_or(FrontendError::PrinterNoSupply)?;
         if status.media_is_die_cut {
             return Err(FrontendError::UnsupportedTape);

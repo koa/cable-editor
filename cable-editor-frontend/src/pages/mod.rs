@@ -119,21 +119,22 @@ pub fn main_oauth2(props: &MainOAuth2Props) -> Html {
     let scopes = oauth2_config.scopes.clone();
     html! {
      <OAuth2 config={oauth2_config.clone()} {scopes}>
-        <BackdropViewer>
-            <ToastViewer>
-                <Authenticated>
-                    <BradyProvider>
+        // Above BackdropViewer, so dialogs can follow the printer status
+        <BradyProvider>
+            <BackdropViewer>
+                <ToastViewer>
+                    <Authenticated>
                         <Router<AppRoute> default={AppRoute::default()}>
                             <Switch<AppRoute> render={AppRoute::content}/>
                         </Router<AppRoute>>
                         <PrinterStatusBar/>
-                    </BradyProvider>
-                </Authenticated>
-                <NotAuthenticated>
-                    <AutoLogin/>
-                </NotAuthenticated>
-            </ToastViewer>
-        </BackdropViewer>
+                    </Authenticated>
+                    <NotAuthenticated>
+                        <AutoLogin/>
+                    </NotAuthenticated>
+                </ToastViewer>
+            </BackdropViewer>
+        </BradyProvider>
       </OAuth2>
     }
 }

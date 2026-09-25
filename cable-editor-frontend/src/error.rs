@@ -24,6 +24,8 @@ pub enum FrontendError {
     NotFound,
     #[error("Printer error: {0}")]
     Printer(#[from] brady_web_sdk::Error),
+    #[error("Printer not connected")]
+    PrinterDisconnected,
     #[error("Printer did not report its supply")]
     PrinterNoSupply,
     #[error("Unsupported tape, only continuous tape is supported")]
@@ -81,6 +83,9 @@ impl IntoPropValue<Html> for &FrontendError {
             }
             FrontendError::Printer(e) => {
                 html!(<Alert inline=true title={format!("Druckfehler: {e}")} r#type={AlertType::Danger} />)
+            }
+            FrontendError::PrinterDisconnected => {
+                html!(<Alert inline=true title={"Drucker nicht verbunden".to_string()} r#type={AlertType::Danger} />)
             }
             FrontendError::PrinterNoSupply => {
                 html!(<Alert inline=true title={"Drucker hat kein Etikett gemeldet".to_string()} r#type={AlertType::Danger} />)
