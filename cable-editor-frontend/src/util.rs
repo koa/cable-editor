@@ -1,4 +1,3 @@
-use log::debug;
 use patternfly_yew::prelude::Backdropper;
 use web_sys::{Element, window};
 use yew::html::Scope;
@@ -15,7 +14,6 @@ impl<C: BaseComponent + 'static> From<AppHandle<C>> for GuardAppHandle<C> {
 impl<C: BaseComponent + 'static> Drop for GuardAppHandle<C> {
     fn drop(&mut self) {
         if let Some(handle) = self.0.take() {
-            debug!("Destroy handle");
             handle.destroy();
         }
     }

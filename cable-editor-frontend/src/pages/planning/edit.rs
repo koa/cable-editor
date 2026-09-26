@@ -13,7 +13,6 @@ use crate::{
     icons::{IconLink, IconUnlink},
     util::{get_backdrop, get_credentials},
 };
-use log::info;
 use patternfly_yew::prelude::{
     ActionGroup, Alert, AlertType, Backdrop, Bullseye, Button, ButtonVariant, Cell, CellContext,
     ExpansionState, Form, FormGroup, Level, MemoizedTableModel, Modal, ModalVariant, Spinner,
@@ -250,7 +249,6 @@ impl Component for EditPlan {
                 true
             }
             Msg::SyncNetbox => {
-                info!("Sync Netbox");
                 if let Some(backdrop) = get_backdrop(ctx.link())
                     && let Some(data) = &self.details
                 {
