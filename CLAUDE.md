@@ -29,7 +29,7 @@ trunk serve                       # dev server on :8082, proxies /graphql and /g
 trunk build [--release]           # outputs dist/, which the binary embeds
 
 # Backend server (root) — needs DATABASE_URL (from .env) and config.yaml
-cargo run                         # API on :8080, metrics/health on :9080 (port + 1000)
+cargo run                         # API on :8080, /metrics, /health (liveness) and /ready (DB reachable) on :9080 (port + 1000)
 cargo build -p cable-editor-frontend --target wasm32-unknown-unknown   # typecheck frontend
 cargo clippy --workspace          # (frontend needs the wasm target to compile cleanly)
 # The frontend build script links the backend, so libpq must be installed (-lpq) even for wasm checks.

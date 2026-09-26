@@ -26,13 +26,13 @@ use cable_editor_backend::{
 };
 use cached::cached;
 use env_logger::Env;
-use log::{info, trace};
+use log::{info, trace, warn};
 use mime_guess::from_path;
 use prometheus::{HistogramVec, histogram_opts};
 use reqwest::Client;
 use rust_embed::RustEmbed;
 use serde::Deserialize;
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::sync::Mutex;
 use tracing_actix_web::TracingLogger;
@@ -211,9 +211,34 @@ async fn graphql_anonymous(
     response.into()
 }
 
+/// Liveness: the process answers. Doesn't check the database, restarting doesn't fix it.
 #[get("/health")]
 async fn health() -> &'static str {
     "Ok"
+}
+
+/// Readiness: requests can be served, i.e. the database answers within a second (the pool has
+/// no wait timeout of its own, the probe's timeout is longer).
+#[get("/ready")]
+async fn ready(pool: Data<DB>) -> HttpResponse {
+    let check = async {
+        let mut connection = pool.get().await.map_err(|e| e.to_string())?;
+        sql_query("SELECT 1")
+            .execute(&mut connection)
+            .await
+            .map_err(|e| e.to_string())
+    };
+    match tokio::time::timeout(Duration::from_secs(1), check).await {
+        Ok(Ok(_)) => HttpResponse::Ok().body("Ok"),
+        Ok(Err(e)) => {
+            warn!("Database not reachable: {e}");
+            HttpResponse::ServiceUnavailable().body("Database not reachable")
+        }
+        Err(_) => {
+            warn!("Database didn't answer within a second");
+            HttpResponse::ServiceUnavailable().body("Database not reachable")
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -289,7 +314,7 @@ async fn main() -> Result<(), BackendError> {
         graphql_request_histogram,
         schema,
         anonymous_schema,
-        pool: connection_pool,
+        pool: connection_pool.clone(),
     });
     let main_server = HttpServer::new(move || {
         App::new()
@@ -334,10 +359,17 @@ async fn main() -> Result<(), BackendError> {
         .endpoint("/metrics")
         .build()
         .unwrap();
-    let mgmt_server = HttpServer::new(move || App::new().wrap(prometheus.clone()).service(health))
-        .bind((bind_addr, mgmt_port))?
-        .workers(2)
-        .run();
+    let pool = Data::new(connection_pool);
+    let mgmt_server = HttpServer::new(move || {
+        App::new()
+            .wrap(prometheus.clone())
+            .app_data(pool.clone())
+            .service(health)
+            .service(ready)
+    })
+    .bind((bind_addr, mgmt_port))?
+    .workers(2)
+    .run();
     if let Some(e) = join_all(vec![main_server, mgmt_server])
         .await
         .into_iter()
