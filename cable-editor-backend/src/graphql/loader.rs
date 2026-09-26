@@ -10,7 +10,7 @@ use crate::{
             WGS84,
             cable::Cable,
             schacht::{Schacht, SchachtTyp},
-            st_transform,
+            st_length, st_transform,
         },
         schema,
     },
@@ -69,6 +69,10 @@ pub struct SchachtLocation(pub i32);
 /// Line of a duct in WGS84 including its Schächte, missing without geometry.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct DuctLine(pub i32);
+
+/// Length of a duct in metres (from Schacht A to Z), missing without geometry.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct DuctLength(pub i32);
 
 /// Cables through a duct, missing for an empty duct.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -195,5 +199,26 @@ impl Loader<DuctCables> for DbLoader {
             cables.entry(DuctCables(duct)).or_default().push(cable);
         }
         Ok(cables)
+    }
+}
+
+impl Loader<DuctLength> for DbLoader {
+    type Value = f64;
+    type Error = async_graphql::Error;
+
+    async fn load(&self, keys: &[DuctLength]) -> Result<HashMap<DuctLength, f64>, Self::Error> {
+        let mut connection = self.connection.lock().await;
+        let list: Vec<(i32, Option<f64>)> = schema::trassen_mit_endpunkten::table
+            .filter(schema::trassen_mit_endpunkten::id.eq_any(ids(keys, |k| k.0)))
+            .select((
+                schema::trassen_mit_endpunkten::id,
+                st_length(schema::trassen_mit_endpunkten::geom),
+            ))
+            .load(&mut connection)
+            .await?;
+        Ok(list
+            .into_iter()
+            .filter_map(|(id, length)| Some((DuctLength(id), length?)))
+            .collect())
     }
 }

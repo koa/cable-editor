@@ -11,24 +11,20 @@ use crate::{
         schema,
     },
     graphql::{
-        authenticated::get_connection,
-        loader::{DuctCables, DuctLine, SchachtId, get_loader, load_one},
+        loader::{DuctCables, DuctLength, DuctLine, SchachtId, get_loader, load_one},
         model::GeoPoint,
     },
 };
 use async_graphql::{Context, Object};
 use cable::Cable;
 use diesel::{
-    AsExpression, FromSqlRow, HasQuery, Identifiable, Insertable, QueryDsl, QueryableByName,
-    deserialize,
+    AsExpression, FromSqlRow, HasQuery, Identifiable, Insertable, QueryableByName, deserialize,
     deserialize::FromSql,
-    dsl::sum,
     pg::{Pg, PgValue},
     serialize,
     serialize::{IsNull, Output, ToSql},
     sql_types::{Integer, Nullable},
 };
-use diesel_async::RunQueryDsl;
 use postgis_diesel::{
     sql_types::Geometry,
     types::{GeometryContainer, Point},
@@ -94,13 +90,9 @@ impl Duct {
     async fn schacht_z(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
         load_one(ctx, SchachtId(self.schacht_z)).await
     }
+    /// Metres, missing without geometry
     async fn length(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<f64>> {
-        let mut connection = get_connection(ctx).await?;
-        Ok(schema::trassen_mit_endpunkten::table
-            .find(self.id)
-            .select(sum(st_length(schema::trassen_mit_endpunkten::geom)))
-            .first(&mut connection)
-            .await?)
+        get_loader(ctx)?.load_one(DuctLength(self.id)).await
     }
 }
 
