@@ -60,6 +60,9 @@ impl Mutation {
         fibers: Option<UpdateCableStructure>,
         path: Option<Vec<i32>>,
     ) -> async_graphql::Result<Option<Cable>> {
+        if path.as_ref().is_some_and(Vec::is_empty) {
+            return Err("Ein Kabel braucht mindestens ein Segment".into());
+        }
         let mut connection = authenticated::get_connection(ctx).await?;
         let (buendel_anz, faser_anz) = if let Some(UpdateCableStructure {
             bundle_count,

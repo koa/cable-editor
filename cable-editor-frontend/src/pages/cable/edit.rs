@@ -485,6 +485,9 @@ impl EditCable {
                         .as_ref()
                         .map(|p| p.duct_sequence().collect::<Vec<_>>());
                 has_changes |= path_changed;
+                // A cable needs at least one segment
+                let no_path = self.path.is_none();
+                has_error |= no_path;
 
                 let scope = ctx.link().clone();
 
@@ -721,6 +724,11 @@ impl EditCable {
                         <FormGroup label="Anzahl der Bündel">{bundle_count_edit}</FormGroup>
                         <FormGroup label="Anzahl der Fasern">{fiber_count_edit}</FormGroup>
                         {cable_path}
+                        if no_path && !readonly {
+                            <p class="cable-edit__hint">
+                                {"Ein Kabel braucht mindestens ein Segment: eine Trasse auswählen."}
+                            </p>
+                        }
                         <FormGroup>{save_button}</FormGroup>
                     </Form>
                 }
