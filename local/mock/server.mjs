@@ -13,6 +13,8 @@ import { generateKeyPair, exportJWK, SignJWT } from 'jose';
 
 const FRONTEND = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../cable-editor-frontend');
 const PORT = Number(process.env.MOCK_PORT ?? 8099);
+// Role of the mock user (READER, PLANNER or ADMIN), to check what the frontend hides
+const ROLE = process.env.MOCK_ROLE ?? 'ADMIN';
 const ORIGIN = `http://localhost:${PORT}`;
 const ISSUER = `${ORIGIN}/realms/cable`;
 const CLIENT_ID = 'cable-editor';
@@ -232,7 +234,13 @@ const device = (id) => {
 };
 
 const root = {
-  currentUser: { displayName: 'Mo Monteur', groups: [], preferredUsername: 'monteur', picture: '' },
+  currentUser: {
+    displayName: 'Mo Monteur',
+    groups: { ADMIN: ['cable-admins'], PLANNER: ['cable-planners'] }[ROLE] ?? [],
+    preferredUsername: 'monteur',
+    picture: '',
+    role: ROLE,
+  },
   listSchacht: () => schachtRows.map((s) => schacht(s[0])),
   schacht: ({ schachtId }) => schacht(schachtId),
   listSchachtTyp: () => [],

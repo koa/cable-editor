@@ -4,7 +4,11 @@ use crate::components::menu::list_panel::ListPanel;
 use crate::components::menu::list_plan::ListPlan;
 use crate::components::menu::{MenuDropdown, MenuEntry};
 use crate::{
-    components::panel::{attach_fiber::AttachFiber, loop_editor::LoopPortEditor, show::ShowPanel},
+    components::{
+        panel::{attach_fiber::AttachFiber, loop_editor::LoopPortEditor, show::ShowPanel},
+        user::{RequireRole, UserMenu},
+    },
+    graphql::authenticated::current_user::Role,
     pages::{
         cabinet::{edit::EditCabinetPanels, list::ListOfCabinets, overview::CabinetOverview},
         cable::edit::EditCable,
@@ -201,6 +205,7 @@ impl AppRoute {
     /// scrolls instead of the main container (`.app-page` in `style.scss`).
     pub fn content(self) -> Html {
         let breadcrumb = self.breadcrumb();
+        let role = self.required_role();
         let content = match self {
             AppRoute::ListOfPlans => html!(<ListOfPlannings/>),
             AppRoute::Plan { plan_id, view } => view.content(plan_id),
@@ -209,11 +214,22 @@ impl AppRoute {
             <div class="pf-v6-c-page pf-m-no-sidebar app-page">
                 <div class="pf-v6-c-page__main-container">
                     <main class="pf-v6-c-page__main" id="main-content" tabindex="-1">
-                        <PageSection r#type={PageSectionType::Breadcrumbs}>{breadcrumb}</PageSection>
-                        {content}
+                        <PageSection r#type={PageSectionType::Breadcrumbs}>
+                            <div class="breadcrumb-bar">{breadcrumb}<UserMenu/></div>
+                        </PageSection>
+                        <RequireRole {role}>{content}</RequireRole>
                     </main>
                 </div>
             </div>
+        }
+    }
+    /// Role needed for the page: the editors of a Schacht's panels and of a panel need
+    /// `Planner`, all other pages can be read by everyone and hide the changes they offer.
+    /// Menus leave out the pages the user may not open.
+    pub fn required_role(&self) -> Role {
+        match self {
+            AppRoute::ListOfPlans => Role::Reader,
+            AppRoute::Plan { view, .. } => view.required_role(),
         }
     }
     fn breadcrumb(&self) -> Html {
@@ -241,6 +257,20 @@ impl AppRoute {
 }
 
 impl PlanView {
+    /// See `AppRoute::required_role`.
+    pub fn required_role(&self) -> Role {
+        match self {
+            PlanView::Cabinet {
+                view: CabinetView::Edit,
+                ..
+            }
+            | PlanView::Panel {
+                view: PanelView::Edit | PanelView::Loop | PanelView::Attach,
+                ..
+            } => Role::Planner,
+            _ => Role::Reader,
+        }
+    }
     fn content(self, plan_id: i32) -> Html {
         match self {
             PlanView::Edit => html!(<EditPlan {plan_id}/>),

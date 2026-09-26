@@ -1,8 +1,8 @@
-use crate::pages::router::AppRoute;
+use crate::{graphql::authenticated::current_user::Role, pages::router::AppRoute};
 use patternfly_yew::prelude::MenuToggleVariant;
 use popup::{MenuGroup, MenuLinkItem, PopupMenu};
 use std::borrow::Cow;
-use yew::{Html, Properties, function_component, html};
+use yew::{Html, Properties, function_component, html, use_context};
 
 pub mod list_cabinet;
 pub mod list_cable;
@@ -47,11 +47,15 @@ pub fn BreadcrumbDivider() -> Html {
 }
 
 /// Dropdown for a breadcrumb item: a `PopupMenu` of router links, the current page marked.
+/// Leaves out the pages the user may not open (`AppRoute::required_role`).
 #[function_component]
 pub fn MenuDropdown(props: &MenuDropdownProps) -> Html {
+    let role = use_context::<Role>().unwrap_or(Role::Reader);
+    let allowed = |entry: &&MenuEntry| entry.target.required_role() <= role;
     let links = |entries: &[MenuEntry]| {
         entries
             .iter()
+            .filter(allowed)
             .map(|entry| {
                 html! {
                     <MenuLinkItem
@@ -65,11 +69,11 @@ pub fn MenuDropdown(props: &MenuDropdownProps) -> Html {
             })
             .collect::<Html>()
     };
-    let has_entries = !props.entries.is_empty();
+    let has_entries = props.entries.iter().any(|entry| allowed(&entry));
     let groups = props
         .groups
         .iter()
-        .filter(|group| !group.entries.is_empty())
+        .filter(|group| group.entries.iter().any(|entry| allowed(&entry)))
         .enumerate()
         .map(|(i, group)| {
             let divider = has_entries || i > 0;

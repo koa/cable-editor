@@ -7,7 +7,7 @@ pub mod panel;
 pub mod planning;
 pub mod router;
 
-use crate::components::label_printer::PrinterStatusBar;
+use crate::components::{label_printer::PrinterStatusBar, user::UserProvider};
 use crate::{
     error::FrontendError,
     graphql::{
@@ -106,9 +106,11 @@ pub fn main_oauth2(props: &MainOAuth2Props) -> Html {
             <BackdropViewer>
                 <ToastViewer>
                     <Authenticated>
-                        <Router<AppRoute>>
-                            <Switch<AppRoute> render={AppRoute::content} default={html!(<RedirectToPlans/>)}/>
-                        </Router<AppRoute>>
+                        <UserProvider>
+                            <Router<AppRoute>>
+                                <Switch<AppRoute> render={AppRoute::content} default={html!(<RedirectToPlans/>)}/>
+                            </Router<AppRoute>>
+                        </UserProvider>
                         <PrinterStatusBar/>
                     </Authenticated>
                     <NotAuthenticated>

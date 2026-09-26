@@ -9,7 +9,7 @@ use crate::{
     error::FrontendError,
     graphql::authenticated::schacht_cables::{SchachtCableEnd, SchachtCables, SchachtPanelEntry},
     pages::router::{CabinetView, PlanView},
-    util::get_credentials,
+    util::{get_credentials, get_role},
 };
 use patternfly_yew::prelude::{
     Cell, CellContext, ExpansionState, Level, MemoizedTableModel, Spinner, Table, TableColumn,
@@ -195,11 +195,13 @@ impl CabinetOverview {
                         {for panels.iter().map(view_panel)}
                     </ul>
                 }
-                <div class="pf-v6-u-mb-xl">
-                    <PlanLink to={edit_panels} class="pf-v6-c-button pf-m-secondary">
-                        {"Panels bearbeiten"}
-                    </PlanLink>
-                </div>
+                if get_role(ctx.link()) >= edit_panels.required_role() {
+                    <div class="pf-v6-u-mb-xl">
+                        <PlanLink to={edit_panels} class="pf-v6-c-button pf-m-secondary">
+                            {"Panels bearbeiten"}
+                        </PlanLink>
+                    </div>
+                }
                 <Title level={Level::H2}>{"Kabel"}</Title>
                 <Table<Columns, ListModel<Columns, MemoizedTableModel<SchachtCableEnd>>>
                     mode={TableMode::Compact}

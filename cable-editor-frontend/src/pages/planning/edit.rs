@@ -8,10 +8,11 @@ use crate::{
     error::FrontendError,
     graphql::authenticated::{
         PortSide,
+        current_user::Role,
         plan_details::{PlanDetails, PortUsage},
     },
     icons::{IconLink, IconUnlink},
-    util::{get_backdrop, get_credentials},
+    util::{get_backdrop, get_credentials, get_role},
 };
 use patternfly_yew::prelude::{
     ActionGroup, Alert, AlertType, Backdrop, Bullseye, Button, ButtonVariant, Cell, CellContext,
@@ -292,6 +293,8 @@ impl EditPlan {
         };
 
         let is_open = !details.is_baseline;
+        let role = get_role(ctx.link());
+        let can_rename = is_open && role >= Role::Planner;
         let name_changed = self.edit_name != details.name;
 
         // Tabelle aufbereiten: Usages nach Port-ID gruppieren
@@ -374,19 +377,21 @@ impl EditPlan {
                                     <TextInput
                                         value={self.edit_name.clone()}
                                         onchange={ctx.link().callback(Msg::UpdateNameInput)}
-                                        disabled={!is_open || self.saving}
+                                        disabled={!can_rename || self.saving}
                                     />
                                     <Button
                                         label="Umbenennen"
                                         variant={ButtonVariant::Secondary}
-                                        disabled={!is_open || !name_changed || self.saving}
+                                        disabled={!can_rename || !name_changed || self.saving}
                                         onclick={ctx.link().callback(|_| Msg::SaveName)}
                                     />
                                 </div>
                             </FormGroup>
-                            <ActionGroup>
-                                <Button variant={ButtonVariant::Secondary} label="Sync Netbox" onclick={sync_netbox}/>
-                            </ActionGroup>
+                            if role >= Role::Admin {
+                                <ActionGroup>
+                                    <Button variant={ButtonVariant::Secondary} label="Sync Netbox" onclick={sync_netbox}/>
+                                </ActionGroup>
+                            }
                         </Form>
 
                         if is_open {
@@ -399,16 +404,18 @@ impl EditPlan {
                                     entries={table_model}
                                 />
                             </div>
-                            <div class="pf-v6-u-mt-xl">
-                                <ActionGroup>
-                                    <Button
-                                        label="Planung abschliessen (Implementieren)"
-                                        variant={ButtonVariant::Primary}
-                                        disabled={self.saving}
-                                        onclick={ctx.link().callback(|_| Msg::AskImplement)}
-                                    />
-                                </ActionGroup>
-                            </div>
+                            if role >= Role::Admin {
+                                <div class="pf-v6-u-mt-xl">
+                                    <ActionGroup>
+                                        <Button
+                                            label="Planung abschliessen (Implementieren)"
+                                            variant={ButtonVariant::Primary}
+                                            disabled={self.saving}
+                                            onclick={ctx.link().callback(|_| Msg::AskImplement)}
+                                        />
+                                    </ActionGroup>
+                                </div>
+                            }
                         }
                     </div>
                 </div>

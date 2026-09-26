@@ -2,9 +2,9 @@ use crate::components::page_layout::PageLayout;
 use crate::{
     components::table::ListModel,
     error::FrontendError,
-    graphql::authenticated::list_plans::PlanListEntry,
+    graphql::authenticated::{current_user::Role, list_plans::PlanListEntry},
     pages::router::{AppRoute, PlanView},
-    util::{get_backdrop, get_credentials},
+    util::{get_backdrop, get_credentials, get_role},
 };
 use patternfly_yew::prelude::{
     ActionGroup, Backdrop, Bullseye, Button, ButtonVariant, Cell, CellContext, ExpansionState,
@@ -107,6 +107,7 @@ impl ListOfPlannings {
             };
 
             let create_button = get_backdrop(ctx.link())
+                .filter(|_| get_role(ctx.link()) >= Role::Planner)
                 .map(|bd| {
                     let scope=ctx.link().clone();
                     let onclick = Callback::from(move |_|{

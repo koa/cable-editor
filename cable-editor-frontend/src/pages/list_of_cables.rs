@@ -5,8 +5,11 @@ use crate::{
         table::ListModel,
     },
     error::FrontendError,
-    graphql::authenticated::list_cables::{CableListEntry, create_cable, fetch_cables_list},
-    util::{get_backdrop, get_credentials},
+    graphql::authenticated::{
+        current_user::Role,
+        list_cables::{CableListEntry, create_cable, fetch_cables_list},
+    },
+    util::{get_backdrop, get_credentials, get_role},
 };
 use patternfly_yew::prelude::{
     ActionGroup, Backdrop, Bullseye, Button, ButtonVariant, Cell, CellContext, ExpansionState,
@@ -205,7 +208,9 @@ impl ListOfCables {
                     {header}
                     {entries}
                 />
-                <Button variant={ButtonVariant::Primary} label="Neues Kabel" onclick={ctx.link().callback(|_| Msg::AddCable)}/>
+                if get_role(ctx.link()) >= Role::Planner {
+                    <Button variant={ButtonVariant::Primary} label="Neues Kabel" onclick={ctx.link().callback(|_| Msg::AddCable)}/>
+                }
             </>
         }
     }

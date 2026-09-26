@@ -7,6 +7,7 @@ use crate::{
             CableDetails, CableDuct, CablePath, CablePathSegment, CableSegmentEndSchacht,
             PotentialDuct, UpdateCableStructure,
         },
+        current_user::Role,
         list_cables::delete_cable,
         select_duct::DuctListEntry,
     },
@@ -14,7 +15,7 @@ use crate::{
         duct::select_duct::SelectDuct,
         router::{AppRoute, PlanView},
     },
-    util::{get_backdrop, get_credentials, get_toaster},
+    util::{get_backdrop, get_credentials, get_role, get_toaster},
 };
 use patternfly_yew::prelude::{
     AlertType, Backdrop, Bullseye, Button, ButtonVariant, Cell, CellContext, ExpansionState, Form,
@@ -429,8 +430,13 @@ impl Component for EditCable {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
+        let view = if get_role(ctx.link()) >= Role::Planner {
+            "Kabel bearbeiten"
+        } else {
+            "Kabel"
+        };
         html! {
-            <PageLayout title={object_title("Kabel bearbeiten", match &self.state { DataState::Data(data) => Some(&data.name), _ => None })}>{self.view_content(ctx)}</PageLayout>
+            <PageLayout title={object_title(view, match &self.state { DataState::Data(data) => Some(&data.name), _ => None })}>{self.view_content(ctx)}</PageLayout>
         }
     }
 
@@ -445,6 +451,9 @@ impl EditCable {
     fn view_content(&self, ctx: &Context<Self>) -> Html {
         match &self.state {
             DataState::Data(data) => {
+                // Readers see the cable without the means to change it
+                let role = get_role(ctx.link());
+                let readonly = role < Role::Planner;
                 let mut has_changes = false;
                 let mut has_error = false;
                 let name_edit = {
@@ -459,7 +468,7 @@ impl EditCable {
                         has_changes = true;
                         InputState::Success
                     };
-                    html! {<TextInput {value} {onchange} {state}/>}
+                    html! {<TextInput {value} {onchange} {state} {readonly}/>}
                 };
                 let bundle_count_edit = {
                     let value = self.bundle_count.clone();
@@ -475,7 +484,7 @@ impl EditCable {
                             InputState::Error
                         }
                     };
-                    html! {<TextInput {value} {onchange} {state}/>}
+                    html! {<TextInput {value} {onchange} {state} {readonly}/>}
                 };
                 let fiber_count_edit = {
                     let value = self.fiber_count.clone();
@@ -498,7 +507,7 @@ impl EditCable {
                             InputState::Error
                         }
                     };
-                    html! {<TextInput {value} {onchange} {state}/>}
+                    html! {<TextInput {value} {onchange} {state} {readonly}/>}
                 };
 
                 let path_changed = data
@@ -515,44 +524,48 @@ impl EditCable {
 
                 let save_button = {
                     let on_save = Callback::from(move |_| scope.send_message(Msg::Save));
-                    if self.saving {
+                    if readonly {
+                        Html::default()
+                    } else if self.saving {
                         html!(<Spinner/>)
                     } else {
                         let scope = ctx.link().clone();
-                        let delete_button = get_backdrop(ctx.link()).map(|backdropper| {
-                            let onclick = {
-                                let backdropper = backdropper.clone();
-                                let scope = scope.clone();
-                                Callback::from(move |_| {
+                        let delete_button = get_backdrop(ctx.link())
+                            .filter(|_| role >= Role::Admin)
+                            .map(|backdropper| {
+                                let onclick = {
                                     let backdropper = backdropper.clone();
                                     let scope = scope.clone();
-                                    let on_confirm = {
+                                    Callback::from(move |_| {
                                         let backdropper = backdropper.clone();
                                         let scope = scope.clone();
-                                        Callback::from(move |_| {
-                                            backdropper.close();
-                                            scope.send_message(Msg::RemoveEntry);
-                                        })
-                                    };
-                                    let on_cancel = {
-                                        let backdropper = backdropper.clone();
-                                        Callback::from(move |_| {
-                                            backdropper.close();
-                                        })
-                                    };
-                                    backdropper.open(Backdrop::new(html! {
-                                        <DeleteConfirmationDialog {on_confirm} {on_cancel} />
-                                    }));
-                                })
-                            };
-                            html! {
-                            <Button variant={ButtonVariant::DangerSecondary}
-                                label="Löschen"
-                                {onclick}
-                                disabled={has_changes}
-                            />
-                            }
-                        });
+                                        let on_confirm = {
+                                            let backdropper = backdropper.clone();
+                                            let scope = scope.clone();
+                                            Callback::from(move |_| {
+                                                backdropper.close();
+                                                scope.send_message(Msg::RemoveEntry);
+                                            })
+                                        };
+                                        let on_cancel = {
+                                            let backdropper = backdropper.clone();
+                                            Callback::from(move |_| {
+                                                backdropper.close();
+                                            })
+                                        };
+                                        backdropper.open(Backdrop::new(html! {
+                                            <DeleteConfirmationDialog {on_confirm} {on_cancel} />
+                                        }));
+                                    })
+                                };
+                                html! {
+                                <Button variant={ButtonVariant::DangerSecondary}
+                                    label="Löschen"
+                                    {onclick}
+                                    disabled={has_changes}
+                                />
+                                }
+                            });
                         html! {
                             <>
                             <Button variant={ButtonVariant::Primary}
@@ -597,7 +610,7 @@ impl EditCable {
                     }
                     let credentials = get_credentials(ctx.link());
                     let toaster = get_toaster(ctx.link());
-                    if let Some(backdrop) = get_backdrop(ctx.link()) {
+                    if let Some(backdrop) = get_backdrop(ctx.link()).filter(|_| !readonly) {
                         for (idx, end) in [(0, PathEnd::Front), (entries.len() - 1, PathEnd::Tail)] {
                             if let Some(first_schacht) = entries.get_mut(idx) && let DuctPathEntry::Schacht { on_extend, schacht, .. } = first_schacht {
                                 let backdrop = backdrop.clone();
@@ -650,7 +663,7 @@ impl EditCable {
                             }
                         }
                     }
-                    for (idx, end) in [(1, PathEnd::Front), (entries.len() - 2, PathEnd::Tail)] {
+                    for (idx, end) in [(1, PathEnd::Front), (entries.len() - 2, PathEnd::Tail)].into_iter().filter(|_| !readonly) {
                         if let Some(duct) = entries.get_mut(idx) && let DuctPathEntry::Duct { on_remove, .. } = duct {
                             *on_remove = Some(scope.callback(move |_| Msg::RemoveSegment { end }));
                         }
@@ -685,7 +698,9 @@ impl EditCable {
                             </FormGroup>
                         }
                     }).unwrap_or_else(|| {
-                    if let Some(backdrop) = get_backdrop(ctx.link()) {
+                    if readonly {
+                        html!(<FormGroup label="Kabelweg">{"Kein Kabelweg erfasst"}</FormGroup>)
+                    } else if let Some(backdrop) = get_backdrop(ctx.link()) {
                         let scope=ctx.link().clone();
                         let onclick = Callback::from(move |_| {
                             let scope=scope.clone();

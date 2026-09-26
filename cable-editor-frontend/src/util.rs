@@ -1,3 +1,4 @@
+use crate::graphql::authenticated::current_user::Role;
 use patternfly_yew::prelude::{Backdropper, Toaster};
 use web_sys::{Element, window};
 use yew::html::Scope;
@@ -44,6 +45,12 @@ pub fn get_backdrop(scope: &Scope<impl BaseComponent>) -> Option<Backdropper> {
     scope
         .context::<Backdropper>(Callback::noop())
         .map(|(c, _)| c)
+}
+/// Role of the logged in user (`components::user::UserProvider`), `Reader` outside of it.
+pub fn get_role(scope: &Scope<impl BaseComponent>) -> Role {
+    scope
+        .context::<Role>(Callback::noop())
+        .map_or(Role::Reader, |(role, _)| role)
 }
 /// For errors that shouldn't replace the page, e.g. of a failed request behind a button.
 pub fn get_toaster(scope: &Scope<impl BaseComponent>) -> Option<Toaster> {

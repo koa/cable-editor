@@ -1,6 +1,7 @@
 use crate::components::page_layout::{PageLayout, object_title};
+use crate::graphql::authenticated::current_user::Role;
 use crate::graphql::authenticated::list_plans::BASELINE_PLAN_ID;
-use crate::util::is_wide_screen;
+use crate::util::{get_role, is_wide_screen};
 use crate::{
     components::{
         fiber::FiberLabel,
@@ -129,6 +130,8 @@ impl Component for ShowPanel {
 
 impl ShowPanel {
     fn view_content(&self, ctx: &Context<Self>) -> Html {
+        // Links to the editors of a planned change, not in the current state
+        let can_plan = self.plan_id != BASELINE_PLAN_ID && get_role(ctx.link()) >= Role::Planner;
         if self.loading {
             return html! {
                 <div class="pf-v6-u-p-xl pf-v6-u-text-align-center">
@@ -385,7 +388,7 @@ impl ShowPanel {
                                         name={child.panel.name.clone()}
                                         parents={child.panel.parent_chain.iter().filter_map(|p| p.name.clone()).collect::<Vec<_>>()}
                                     />
-                                    if self.plan_id != BASELINE_PLAN_ID {
+                                    if can_plan {
                                         if has_direct_ports {
                                             <Link<AppRoute>
                                                 to={AppRoute::Plan {

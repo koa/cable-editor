@@ -11,3 +11,4 @@ pub mod panel;
 pub mod plan;
 pub mod plan_link;
 pub mod table;
+pub mod user;

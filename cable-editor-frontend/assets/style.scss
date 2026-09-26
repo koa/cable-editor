@@ -734,6 +734,23 @@ body {
   margin-inline-start: var(--pf-t--global--spacer--sm);
 }
 
+// Breadcrumb and user menu (components/user.rs) in one row, the user menu at the end
+.breadcrumb-bar {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--pf-t--global--spacer--md);
+
+  > .pf-v6-c-breadcrumb {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+}
+
+// Information only, not a choice
+.user-menu__entry {
+  cursor: default;
+}
+
 // Dropdown menu (components/menu/popup.rs); always opens downwards, so no popper
 .popup-menu {
   position: relative;
@@ -761,6 +778,11 @@ body {
   .app-page .pf-v6-c-page__main-breadcrumb,
   .app-page .pf-v6-c-page__main-section {
     position: relative;
+  }
+
+  // The icon is enough on phones, the breadcrumb needs the room
+  .user-menu__name {
+    display: none;
   }
 
   .popup-menu {

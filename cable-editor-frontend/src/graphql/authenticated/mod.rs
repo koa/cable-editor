@@ -4,6 +4,7 @@ use uuid::Uuid;
 pub mod cabinet_details;
 pub mod cable_details;
 pub mod connections;
+pub mod current_user;
 pub mod edit_cabinet;
 pub mod edit_ports;
 pub mod list_cables;
