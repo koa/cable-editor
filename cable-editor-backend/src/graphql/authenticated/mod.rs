@@ -14,6 +14,7 @@ use crate::{
     },
     graphql::{
         context::UserInfo,
+        duct_line::{self, DuctLineCheck, LineInput},
         geo::{self, ConvertedPoint, PositionInput},
         loader::SharedConnection,
     },
@@ -132,6 +133,18 @@ impl Query {
     ) -> async_graphql::Result<ConvertedPoint> {
         let mut connection = get_connection(ctx).await?;
         geo::convert(&mut connection, position).await
+    }
+    /// A duct's course from a file, as it would be stored: turned to run from Schacht A to Z,
+    /// its ends repeating the Schächte left out.
+    async fn check_duct_line(
+        &self,
+        ctx: &Context<'_>,
+        schacht_a: i32,
+        schacht_z: i32,
+        line: LineInput,
+    ) -> async_graphql::Result<DuctLineCheck> {
+        let mut connection = get_connection(ctx).await?;
+        duct_line::check(&mut connection, schacht_a, schacht_z, &line).await
     }
     async fn netbox_devices(&self) -> async_graphql::Result<Vec<DeviceWithRearPorts>> {
         Ok(fetch_devices_and_ports().await?)
