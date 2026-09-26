@@ -4,14 +4,17 @@ use crate::{
         page_layout::PageLayout,
     },
     error::FrontendError,
-    graphql::authenticated::map::{GeoPoint, MapData, MapDuct, fetch_map_data},
+    geo::map::{create_map, lat_lng, set_option},
+    graphql::authenticated::{
+        GeoPoint,
+        map::{MapData, MapDuct, fetch_map_data},
+    },
     pages::router::{AppRoute, CabinetView, PlanView},
     util::get_credentials,
 };
-use js_sys::{Array, Object, Reflect};
+use js_sys::{Array, Object};
 use leaflet::{
-    CircleMarker, CircleOptions, LatLng, LatLngBounds, MapOptions, MouseEvent, MouseEvents,
-    Polyline, PolylineOptions, TileLayer, TileLayerOptions, TileLayerWms, TileLayerWmsOptions,
+    CircleMarker, CircleOptions, LatLngBounds, MouseEvent, MouseEvents, Polyline, PolylineOptions,
     Tooltip, TooltipOptions,
 };
 use patternfly_yew::prelude::{
@@ -25,9 +28,6 @@ use yew::{
     platform::spawn_local,
 };
 use yew_nested_router::prelude::RouterContext;
-
-/// Center of Switzerland, shown while no Schacht has a position.
-const SWITZERLAND: (f64, f64) = (46.8, 8.23);
 
 /// Map of the plan's objects: the Schächte with a position, labelled with their name (a click
 /// opens the Schacht's overview), and the ducts (a click selects one and shows its Schächte and
@@ -159,10 +159,8 @@ impl Component for Map {
         let Some(container) = self.container.cast::<HtmlElement>() else {
             return;
         };
-        match leaflet::Map::new_with_element(&container, &MapOptions::default()) {
+        match create_map(&container) {
             Ok(map) => {
-                add_background(&map);
-                map.set_view(&LatLng::new(SWITZERLAND.0, SWITZERLAND.1), 8.0);
                 // A click on a duct doesn't reach the map (bubbling_mouse_events)
                 let scope = ctx.link().clone();
                 map.on_mouse_click(Box::new(move |_: MouseEvent| {
@@ -243,29 +241,6 @@ fn view_duct(ctx: &Context<Map>, duct: &MapDuct) -> Html {
     }
 }
 
-/// swisstopo's national map, from zoom 17 on the cadastral map (official survey).
-fn add_background(map: &leaflet::Map) {
-    let options = TileLayerOptions::default();
-    options.set_max_zoom(20.0);
-    options.set_max_native_zoom(18.0);
-    options.set_attribution("© swisstopo".to_string());
-    TileLayer::new_options(
-        "https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.pixelkarte-farbe/default/current/3857/{z}/{x}/{y}.jpeg",
-        &options,
-    )
-    .add_to(map);
-
-    let options = TileLayerWmsOptions::default();
-    options.set_layers("ch.kantone.cadastralwebmap-farbe".to_string());
-    options.set_format("image/png".to_string());
-    options.set_transparent(true);
-    options.set_version("1.3.0".to_string());
-    options.set_min_zoom(17.0);
-    options.set_max_zoom(20.0);
-    options.set_attribution("© Kantone, swisstopo".to_string());
-    TileLayerWms::new_options("https://wms.geo.admin.ch/", &options).add_to(map);
-}
-
 fn show_data(ctx: &Context<Map>, map: &leaflet::Map, data: &MapData) {
     let corners = Array::new();
     // Ducts first, so the Schächte lie above them
@@ -274,7 +249,7 @@ fn show_data(ctx: &Context<Map>, map: &leaflet::Map, data: &MapData) {
             continue;
         };
         for point in line {
-            corners.push(&LatLng::new(point.lat, point.lng));
+            corners.push(&lat_lng(*point));
         }
         let options = duct_options("map-view__duct");
         options.set_interactive(false);
@@ -295,7 +270,7 @@ fn show_data(ctx: &Context<Map>, map: &leaflet::Map, data: &MapData) {
         let Some(location) = schacht.location else {
             continue;
         };
-        let position = LatLng::new(location.lat, location.lng);
+        let position = lat_lng(location);
         corners.push(&position);
 
         let options = CircleOptions::default();
@@ -338,12 +313,6 @@ fn duct_options(class: &str) -> PolylineOptions {
 
 fn points(line: &[GeoPoint]) -> Array {
     line.iter()
-        .map(|point| JsValue::from(LatLng::new(point.lat, point.lng)))
+        .map(|point| JsValue::from(lat_lng(*point)))
         .collect()
-}
-
-/// Sets an option the crate has no setter for.
-fn set_option(options: &Object, name: &str, value: &JsValue) {
-    // Only fails on a frozen object or a throwing setter, which plain options aren't
-    let _ = Reflect::set(options, &JsValue::from_str(name), value);
 }

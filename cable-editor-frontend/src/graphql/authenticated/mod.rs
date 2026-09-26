@@ -57,6 +57,13 @@ pub struct Point {
     pub y: f64,
 }
 
+/// WGS84, for the map
+#[derive(cynic::QueryFragment, Debug, Clone, Copy, PartialEq)]
+pub struct GeoPoint {
+    pub lat: f64,
+    pub lng: f64,
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub enum IdOrNew {
     Id(i32),

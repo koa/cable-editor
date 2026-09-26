@@ -1,3 +1,44 @@
+use patternfly_yew::prelude::{Bullseye, Button, ButtonVariant, Modal, ModalVariant};
+use yew::{Callback, Html, Properties, function_component, html};
+
+/// Asks before deleting; the page opens it in its backdrop.
+#[derive(Debug, Clone, PartialEq, Properties)]
+pub struct DeleteConfirmationDialogProperties {
+    #[prop_or_default]
+    pub on_confirm: Callback<()>,
+    #[prop_or_default]
+    pub on_cancel: Callback<()>,
+}
+
+#[function_component]
+pub fn DeleteConfirmationDialog(props: &DeleteConfirmationDialogProperties) -> Html {
+    let footer = html! {
+        <>
+            <Button
+                label="Ja"
+                onclick={props.on_confirm.reform(|_| ())}
+                variant={ButtonVariant::Danger}
+            />
+            <Button
+                label="Nein"
+                onclick={props.on_cancel.reform(|_| ())}
+                variant={ButtonVariant::Secondary}
+            />
+        </>
+    };
+    html! {
+        <Bullseye>
+            <Modal
+                title="Bestätigung"
+                variant={ModalVariant::Small}
+                {footer}
+            >
+                <p>{"Wirklich löschen?"}</p>
+            </Modal>
+        </Bullseye>
+    }
+}
+
 #[macro_export]
 macro_rules! create_simple_dialog {
     (

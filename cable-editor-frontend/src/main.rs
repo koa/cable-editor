@@ -1,5 +1,6 @@
 pub mod components;
 pub mod error;
+pub mod geo;
 pub mod graphql;
 pub mod icons;
 pub mod pages;

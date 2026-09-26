@@ -1,4 +1,7 @@
-use crate::components::page_layout::{PageLayout, object_title};
+use crate::components::{
+    dialog::DeleteConfirmationDialog,
+    page_layout::{PageLayout, object_title},
+};
 use crate::{
     components::table::ListModel,
     error::FrontendError,
@@ -135,43 +138,6 @@ struct DuctSelectionDialogProperties {
     pub on_select: Callback<PotentialDuct>,
     #[prop_or_default]
     pub on_cancel: Callback<()>,
-}
-
-#[derive(Debug, Clone, PartialEq, Properties)]
-struct DeleteConfirmationDialogProperties {
-    #[prop_or_default]
-    pub on_confirm: Callback<()>,
-    #[prop_or_default]
-    pub on_cancel: Callback<()>,
-}
-
-#[function_component]
-fn DeleteConfirmationDialog(props: &DeleteConfirmationDialogProperties) -> Html {
-    let footer = html! {
-        <>
-            <Button
-                label="Ja"
-                onclick={props.on_confirm.reform(|_| ())}
-                variant={ButtonVariant::Danger}
-            />
-            <Button
-                label="Nein"
-                onclick={props.on_cancel.reform(|_| ())}
-                variant={ButtonVariant::Secondary}
-            />
-        </>
-    };
-    html! {
-        <Bullseye>
-            <Modal
-                title="Bestätigung"
-                variant={ModalVariant::Small}
-                {footer}
-            >
-                <p>{"Wirklich löschen?"}</p>
-            </Modal>
-        </Bullseye>
-    }
 }
 
 #[function_component]

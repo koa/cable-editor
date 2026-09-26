@@ -1,6 +1,9 @@
 use crate::{
     error::FrontendError,
-    graphql::{authenticated::schema, query},
+    graphql::{
+        authenticated::{GeoPoint, schema},
+        query,
+    },
 };
 use yew_oauth2::context::OAuth2Context;
 
@@ -47,13 +50,6 @@ pub struct MapDuctEnd {
 pub struct MapCable {
     pub id: i32,
     pub name: String,
-}
-
-/// WGS84
-#[derive(cynic::QueryFragment, Debug, Clone, Copy, PartialEq)]
-pub struct GeoPoint {
-    pub lat: f64,
-    pub lng: f64,
 }
 
 pub async fn fetch_map_data(credentials: Option<&OAuth2Context>) -> Result<MapData, FrontendError> {
