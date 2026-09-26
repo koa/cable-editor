@@ -5,6 +5,18 @@
     <script type="importmap">
         { "imports": { "brady-web-sdk": "/brady-web-sdk/bundle.js" } }
     </script>
+    <!-- PatternFly's dark theme follows the system setting, set before the first render so the
+         page doesn't flash light. Not while printing: paper stays light. -->
+    <script>
+        (() => {
+            const dark = matchMedia("(prefers-color-scheme: dark)");
+            const apply = (on) => document.documentElement.classList.toggle("pf-v6-theme-dark", on);
+            apply(dark.matches);
+            dark.addEventListener("change", () => apply(dark.matches));
+            addEventListener("beforeprint", () => apply(false));
+            addEventListener("afterprint", () => apply(dark.matches));
+        })();
+    </script>
     <!-- resizes-content: the on-screen keyboard shrinks the layout, so dialogs stay above it -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
     <link data-trunk rel="scss" href="assets/style.scss">
