@@ -1,4 +1,5 @@
 use crate::components::{
+    cable_map::{CableMap, PathEdit, PathEnd},
     dialog::DeleteConfirmationDialog,
     page_layout::{PageLayout, object_title},
 };
@@ -231,11 +232,6 @@ pub enum Msg {
         schacht_z: CableSegmentEndSchacht,
     },
     RemoveEntry,
-}
-#[derive(Copy, Clone, Debug)]
-pub enum PathEnd {
-    Front,
-    Tail,
 }
 impl Component for EditCable {
     type Message = Msg;
@@ -718,19 +714,43 @@ impl EditCable {
                     }
                 });
 
+                let onedit = ctx.link().callback(|edit| match edit {
+                    PathEdit::Append {
+                        end,
+                        duct,
+                        other_schacht,
+                    } => Msg::AppendSegment {
+                        end,
+                        duct,
+                        other_schacht,
+                    },
+                    PathEdit::Remove(end) => Msg::RemoveSegment { end },
+                    PathEdit::Start {
+                        schacht_a,
+                        duct,
+                        schacht_z,
+                    } => Msg::InitFirstSegment {
+                        schacht_a,
+                        duct,
+                        schacht_z,
+                    },
+                });
                 html! {
-                    <Form>
-                        <FormGroup label="Name">{name_edit}</FormGroup>
-                        <FormGroup label="Anzahl der Bündel">{bundle_count_edit}</FormGroup>
-                        <FormGroup label="Anzahl der Fasern">{fiber_count_edit}</FormGroup>
-                        {cable_path}
-                        if no_path && !readonly {
-                            <p class="cable-edit__hint">
-                                {"Ein Kabel braucht mindestens ein Segment: eine Trasse auswählen."}
-                            </p>
-                        }
-                        <FormGroup>{save_button}</FormGroup>
-                    </Form>
+                    <div class="map-layout">
+                        <Form>
+                            <FormGroup label="Name">{name_edit}</FormGroup>
+                            <FormGroup label="Anzahl der Bündel">{bundle_count_edit}</FormGroup>
+                            <FormGroup label="Anzahl der Fasern">{fiber_count_edit}</FormGroup>
+                            {cable_path}
+                            if no_path && !readonly {
+                                <p class="cable-edit__hint">
+                                    {"Ein Kabel braucht mindestens ein Segment: eine Trasse auswählen oder auf der Karte anklicken."}
+                                </p>
+                            }
+                            <FormGroup>{save_button}</FormGroup>
+                        </Form>
+                        <CableMap path={self.path.clone()} editable={!readonly} {onedit}/>
+                    </div>
                 }
             }
             DataState::Error(error) => error.into_prop_value(),

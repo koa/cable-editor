@@ -244,7 +244,10 @@ fn show_data(ctx: &Context<Map>, map: &leaflet::Map, data: &MapData) {
         duct_line(line, "map-view__duct").add_to(map);
         let id = duct.id;
         let scope = ctx.link().clone();
-        duct_hit_line(line, move || scope.send_message(Msg::SelectDuct(Some(id)))).add_to(map);
+        duct_hit_line(line, "", move || {
+            scope.send_message(Msg::SelectDuct(Some(id)))
+        })
+        .add_to(map);
     }
     for schacht in &data.schaechte {
         let Some(location) = schacht.location else {

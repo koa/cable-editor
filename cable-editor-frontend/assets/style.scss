@@ -948,3 +948,21 @@ body {
 .cable-edit__hint {
   color: var(--pf-t--global--text--color--subtle);
 }
+
+// The cable's path while editing, over the other ducts (components/cable_map.rs)
+.map-view__duct--cable {
+  stroke: var(--pf-t--global--color--status--danger--default);
+  stroke-width: 7;
+  stroke-opacity: 1;
+}
+
+// What a click on a duct does, shown on hover
+.map-view__duct-hit--add:hover {
+  stroke: var(--pf-t--global--color--status--success--default);
+  stroke-opacity: 0.5;
+}
+
+.map-view__duct-hit--remove:hover {
+  stroke: var(--pf-t--global--color--status--danger--default);
+  stroke-opacity: 0.35;
+}

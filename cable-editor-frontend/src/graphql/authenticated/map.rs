@@ -33,6 +33,8 @@ pub struct MapDuct {
     pub description: Option<String>,
     /// From Schacht A to Schacht Z, missing without geometry
     pub line: Option<Vec<GeoPoint>>,
+    /// Metres, missing without geometry
+    pub length: Option<f64>,
     pub schacht_a: MapDuctEnd,
     pub schacht_z: MapDuctEnd,
     pub cables: Vec<MapCable>,

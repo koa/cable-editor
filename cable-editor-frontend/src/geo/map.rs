@@ -109,10 +109,11 @@ pub fn duct_line(line: &[GeoPoint], class: &str) -> Polyline {
 }
 
 /// A wide invisible line over a duct that takes the clicks, the visible one is hard to hit on
-/// a phone. The click doesn't reach the map.
-pub fn duct_hit_line(line: &[GeoPoint], on_click: impl Fn() + 'static) -> Polyline {
+/// a phone. The click doesn't reach the map. `class` adds to `map-view__duct-hit`, e.g. a
+/// colour on hover.
+pub fn duct_hit_line(line: &[GeoPoint], class: &str, on_click: impl Fn() + 'static) -> Polyline {
     let options = PolylineOptions::default();
-    options.set_class_name("map-view__duct-hit".to_string());
+    options.set_class_name(format!("map-view__duct-hit {class}"));
     options.set_weight(20.0);
     options.set_bubbling_mouse_events(false);
     let hit = Polyline::new_with_options(&points(line), &options);
@@ -137,4 +138,14 @@ fn points(line: &[GeoPoint]) -> Array {
     line.iter()
         .map(|point| JsValue::from(lat_lng(*point)))
         .collect()
+}
+
+/// A text following the pointer over the layer, e.g. what a click does.
+pub fn hover_text(layer: &leaflet::Layer, text: &str) {
+    let options = TooltipOptions::default();
+    options.set_sticky(true);
+    options.set_direction("top".to_string());
+    let tooltip = Tooltip::new(&options, None);
+    tooltip.set_content(&JsValue::from_str(text));
+    layer.bind_tooltip(&tooltip);
 }

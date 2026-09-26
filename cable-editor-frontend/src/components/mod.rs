@@ -1,4 +1,5 @@
 pub mod cabinet;
+pub mod cable_map;
 pub mod dialog;
 pub mod fiber;
 pub mod label_printer;
