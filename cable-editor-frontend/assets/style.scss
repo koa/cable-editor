@@ -861,3 +861,42 @@ body {
   padding-inline-start: 0;
   list-style: none;
 }
+
+// pages/cabinet/properties.rs: form and map side by side, stacked on phones
+.schacht-properties {
+  display: grid;
+  gap: var(--pf-t--global--spacer--lg);
+  grid-template-columns: minmax(0, 1fr);
+
+  @media screen and (min-width: 62rem) {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  }
+}
+
+.schacht-properties__map {
+  // Keeps Leaflet's z-indexes inside the map, see .map-view
+  isolation: isolate;
+  height: 60vh;
+  min-height: 20rem;
+  border-radius: var(--pf-t--global--border--radius--small);
+}
+
+.schacht-properties__coordinates {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--pf-t--global--spacer--md);
+}
+
+.schacht-properties__hint {
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+// Leaflet divIcon for the Schacht's position (geo::map::div_icon)
+.schacht-properties__marker {
+  box-sizing: border-box;
+  border: 4px solid var(--pf-t--global--color--brand--default);
+  border-radius: 50%;
+  background: var(--pf-t--global--background--color--primary--default);
+  box-shadow: var(--pf-t--global--box-shadow--sm);
+  cursor: grab;
+}

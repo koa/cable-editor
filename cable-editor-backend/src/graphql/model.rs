@@ -33,3 +33,18 @@ impl From<types::Point> for GeoPoint {
         }
     }
 }
+
+/// LV95 (EPSG:2056), what the database stores: east and north in metres.
+#[derive(SimpleObject, Clone, Copy, Debug, PartialEq)]
+pub struct Lv95Point {
+    pub e: f64,
+    pub n: f64,
+}
+impl From<types::Point> for Lv95Point {
+    fn from(point: types::Point) -> Self {
+        Self {
+            e: point.x,
+            n: point.y,
+        }
+    }
+}

@@ -1,9 +1,13 @@
 use crate::components::page_layout::PageLayout;
 use crate::{
-    components::{links::SchachtLink, table::ListModel},
+    components::{links::SchachtLink, plan_link::PlanLink, table::ListModel},
     error::FrontendError,
-    graphql::authenticated::list_schacht::{SchachtListEntry, fetch_schacht_list},
-    util::get_credentials,
+    graphql::authenticated::{
+        current_user::Role,
+        list_schacht::{SchachtListEntry, fetch_schacht_list},
+    },
+    pages::router::PlanView,
+    util::{get_credentials, get_role},
 };
 use patternfly_yew::prelude::{
     Cell, CellContext, ExpansionState, MemoizedTableModel, Spinner, Table, TableColumn,
@@ -98,13 +102,23 @@ impl ListOfCabinets {
                     <TableColumn<Columns> label="Panels" index={Columns::Cabinets} onsort={onsort.clone()} sortby={self.sort}/>
                 </TableHeader<Columns>>
             };
+            let new_schacht = (get_role(ctx.link()) >= Role::Planner).then(|| {
+                html! {
+                    <PlanLink to={PlanView::NewCabinet} class="pf-v6-c-button pf-m-primary">
+                        {"Neuer Schacht"}
+                    </PlanLink>
+                }
+            });
             html! {
+                <>
                 <Table<Columns, ListModel<Columns, MemoizedTableModel<SchachtListEntry>>>
                     mode={TableMode::Compact}
                     grid={TableGridMode::Medium}
                     {header}
                     {entries}
                 />
+                {new_schacht}
+                </>
             }
         } else {
             html!(<Spinner/>)

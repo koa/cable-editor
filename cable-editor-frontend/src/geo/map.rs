@@ -1,13 +1,13 @@
-//! Shared pieces for pages with a Leaflet map (`pages/map.rs`).
+//! Shared pieces for pages with a Leaflet map (`pages/map.rs`, `pages/cabinet/properties.rs`).
 //! The page owns the map: it renders an empty `div` for it (Leaflet owns its children) and
 //! creates the map in `rendered`.
 
 use crate::graphql::authenticated::GeoPoint;
-use js_sys::{Object, Reflect};
+use js_sys::{Function, Object, Reflect};
 use leaflet::{
-    LatLng, Map, MapOptions, TileLayer, TileLayerOptions, TileLayerWms, TileLayerWmsOptions,
+    Icon, LatLng, Map, MapOptions, TileLayer, TileLayerOptions, TileLayerWms, TileLayerWmsOptions,
 };
-use wasm_bindgen::JsValue;
+use wasm_bindgen::{JsCast, JsValue};
 use web_sys::HtmlElement;
 
 /// Center of Switzerland, shown while there is nothing to show.
@@ -52,4 +52,16 @@ pub fn lat_lng(point: GeoPoint) -> LatLng {
 pub fn set_option(options: &Object, name: &str, value: &JsValue) {
     // Only fails on a frozen object or a throwing setter, which plain options aren't
     let _ = Reflect::set(options, &JsValue::from_str(name), value);
+}
+
+/// An icon drawn by CSS (the class) instead of an image. The crate's `DivIcon::new` creates an
+/// `L.Icon` (it binds the wrong constructor), so this calls `L.divIcon` itself.
+pub fn div_icon(class: &str, size: f64) -> Result<Icon, JsValue> {
+    let leaflet = Reflect::get(&js_sys::global(), &JsValue::from_str("L"))?;
+    let factory: Function = Reflect::get(&leaflet, &JsValue::from_str("divIcon"))?.dyn_into()?;
+    let options = Object::new();
+    set_option(&options, "className", &JsValue::from_str(class));
+    let size_value = js_sys::Array::of2(&JsValue::from_f64(size), &JsValue::from_f64(size));
+    set_option(&options, "iconSize", &size_value);
+    Ok(factory.call1(&leaflet, &options)?.unchecked_into())
 }

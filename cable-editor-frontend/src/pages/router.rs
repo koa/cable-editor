@@ -8,9 +8,12 @@ use crate::{
         panel::{attach_fiber::AttachFiber, loop_editor::LoopPortEditor, show::ShowPanel},
         user::{RequireRole, UserMenu},
     },
-    graphql::authenticated::current_user::Role,
+    graphql::authenticated::{IdOrNew, current_user::Role},
     pages::{
-        cabinet::{edit::EditCabinetPanels, list::ListOfCabinets, overview::CabinetOverview},
+        cabinet::{
+            edit::EditCabinetPanels, list::ListOfCabinets, overview::CabinetOverview,
+            properties::CabinetProperties,
+        },
         cable::edit::EditCable,
         list_of_cables::ListOfCables,
         map::Map,
@@ -84,6 +87,7 @@ pub enum CableView {
 #[derive(Debug, Clone, PartialEq, Eq, Target)]
 pub enum CabinetView {
     Overview,
+    Properties,
     Edit,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Target)]
@@ -117,6 +121,7 @@ impl PanelView {
 pub enum PlanView {
     Edit,
     ListOfCabinets,
+    NewCabinet,
     Cabinet {
         id: i32,
         #[target(nested)]
@@ -141,9 +146,10 @@ impl PlanView {
         // The area the current page lies in: its entry leads to the area's start page
         let (title, area): (Cow<'static, str>, PlanView) = match self {
             PlanView::Edit => ("Ändern".into(), PlanView::Edit),
-            PlanView::Cabinet { .. } | PlanView::ListOfCabinets | PlanView::Panel { .. } => {
-                ("Schacht".into(), PlanView::ListOfCabinets)
-            }
+            PlanView::Cabinet { .. }
+            | PlanView::ListOfCabinets
+            | PlanView::NewCabinet
+            | PlanView::Panel { .. } => ("Schacht".into(), PlanView::ListOfCabinets),
             PlanView::Cable { .. } | PlanView::ListOfCables => {
                 ("Kabel".into(), PlanView::ListOfCables)
             }
@@ -205,6 +211,7 @@ impl PlanView {
                 item_contents
                     .push(html!(<ListPanel {plan_id} panel_id={*id} view={view.clone()}/>));
             }
+            PlanView::NewCabinet => item_contents.push(html!("Neuer Schacht")),
             _ => {}
         }
     }
@@ -276,6 +283,7 @@ impl PlanView {
                 view: CabinetView::Edit,
                 ..
             }
+            | PlanView::NewCabinet
             | PlanView::Panel {
                 view: PanelView::Edit | PanelView::Loop | PanelView::Attach,
                 ..
@@ -287,6 +295,9 @@ impl PlanView {
         match self {
             PlanView::Edit => html!(<EditPlan {plan_id}/>),
             PlanView::ListOfCabinets => html! {<ListOfCabinets {plan_id}/>},
+            PlanView::NewCabinet => {
+                html!(<CabinetProperties {plan_id} cabinet={IdOrNew::default()}/>)
+            }
             PlanView::Cabinet { id, view } => view.content(plan_id, id),
             PlanView::ListOfCables => html! {<ListOfCables/>},
             PlanView::Cable { id, view } => view.content(plan_id, id),
@@ -310,15 +321,23 @@ impl CabinetView {
     fn content(self, plan_id: i32, cabinet_id: i32) -> Html {
         match self {
             CabinetView::Overview => html!(<CabinetOverview {plan_id} {cabinet_id}/>),
+            CabinetView::Properties => {
+                html!(<CabinetProperties {plan_id} cabinet={IdOrNew::Id(cabinet_id)}/>)
+            }
             CabinetView::Edit => html!(<EditCabinetPanels {plan_id} {cabinet_id}/>),
         }
     }
 
-    pub const ALL: [CabinetView; 2] = [CabinetView::Overview, CabinetView::Edit];
+    pub const ALL: [CabinetView; 3] = [
+        CabinetView::Overview,
+        CabinetView::Properties,
+        CabinetView::Edit,
+    ];
 
     pub fn title(&self) -> &'static str {
         match self {
             CabinetView::Overview => "Übersicht",
+            CabinetView::Properties => "Eigenschaften",
             CabinetView::Edit => "Panels bearbeiten",
         }
     }

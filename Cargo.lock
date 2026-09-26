@@ -878,6 +878,7 @@ dependencies = [
  "cynic",
  "cynic-codegen",
  "futures",
+ "gloo-timers 0.3.0",
  "gloo-utils 0.2.0",
  "itertools 0.15.0",
  "js-sys",

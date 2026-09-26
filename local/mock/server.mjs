@@ -37,11 +37,45 @@ async function idToken(nonce) {
 // ---------------------------------------------------------------- data
 // Plan 0 is the current state; plan 1 is open and changes two ports of Spleisskassette 2.
 const schachtRows = [
-  // id, name, [lat, lng] (the real data is LV95, the backend delivers WGS84)
-  [1, 'SCH 101 Bahnhofstrasse', [47.41963, 8.88611]], [2, 'SCH 102 Dorfplatz', [47.41988, 8.88618]],
-  [3, 'SCH 103 Schulhaus', [47.42074, 8.88590]], [4, 'SCH 104 Industrie Nord', [47.41778, 8.88441]],
-  [5, 'SCH 105 Werkhof', [47.41803, 8.88398]],
+  // id, name, [lat, lng] or null, type id (the real data is LV95, the backend delivers WGS84)
+  [1, 'SCH 101 Bahnhofstrasse', [47.41963, 8.88611], 1], [2, 'SCH 102 Dorfplatz', [47.41988, 8.88618], 1],
+  [3, 'SCH 103 Schulhaus', [47.42074, 8.88590], 2], [4, 'SCH 104 Industrie Nord', [47.41778, 8.88441], 0],
+  [5, 'SCH 105 Werkhof', [47.41803, 8.88398], null],
 ];
+const schachtTypes = [
+  { id: 0, name: 'Normschacht', icon: '<svg xmlns="http://www.w3.org/2000/svg"/>' },
+  { id: 1, name: 'Kabelschacht', icon: '<svg xmlns="http://www.w3.org/2000/svg"/>' },
+  { id: 2, name: 'Verteilkasten', icon: '<svg xmlns="http://www.w3.org/2000/svg"/>' },
+];
+
+// swisstopo's approximate formulas (about 1 m); the backend lets PostGIS convert exactly
+const toLv95 = ({ lat, lng }) => {
+  const p = (lat * 3600 - 169028.66) / 10000, l = (lng * 3600 - 26782.5) / 10000;
+  return {
+    e: 2600072.37 + 211455.93 * l - 10938.51 * l * p - 0.36 * l * p * p - 44.54 * l ** 3,
+    n: 1200147.07 + 308807.95 * p + 3745.25 * l * l + 76.63 * p * p - 194.56 * l * l * p + 119.79 * p ** 3,
+  };
+};
+const toWgs84 = ({ e, n }) => {
+  const y = (e - 2600000) / 1e6, x = (n - 1200000) / 1e6;
+  const l = 2.6779094 + 4.728982 * y + 0.791484 * y * x + 0.1306 * y * x * x - 0.0436 * y ** 3;
+  const p = 16.9023892 + 3.238272 * x - 0.270978 * y * y - 0.002528 * x * x - 0.0447 * y * y * x - 0.014 * x ** 3;
+  return { lat: (p * 100) / 36, lng: (l * 100) / 36 };
+};
+// convertPoint's position: { lv95: { e, n } } or { wgs84: { lat, lng } }, as WGS84
+const positionToWgs84 = (position) => {
+  const wgs84 = position.lv95 ? toWgs84(position.lv95) : position.wgs84;
+  const { e, n } = toLv95(wgs84);
+  if (!(e >= 2480000 && e <= 2840000 && n >= 1070000 && n <= 1300000)) {
+    throw new Error(`Position E ${e.toFixed(2)} / N ${n.toFixed(2)} liegt nicht in der Schweiz`);
+  }
+  return wgs84;
+};
+const schachtFromInput = ({ name, typeId, position }) => {
+  if (!name.trim()) throw new Error('Der Schacht braucht einen Namen');
+  const wgs84 = position ? positionToWgs84(position) : null;
+  return [name.trim(), wgs84 ? [wgs84.lat, wgs84.lng] : null, typeId ?? null];
+};
 const cableRows = [
   // id, name, bundles, fibers, length, schacht a, schacht z
   [11, 'K-1001', 4, 12, 420.5, 1, 2], [12, 'K-1002', 2, 12, 310, 1, 3],
@@ -97,8 +131,9 @@ const schacht = (id) => {
   const r = schachtRows.find((s) => s[0] === id);
   if (!r) return null;
   return {
-    id, name: r[1], typ: null, position: { x: 2700000 + id * 10, y: 1260000 + id * 10 },
-    location: { lat: r[2][0], lng: r[2][1] },
+    id, name: r[1], typ: schachtTypes.find((t) => t.id === r[3]) ?? null,
+    position: r[2] && (({ e, n }) => ({ x: e, y: n }))(toLv95({ lat: r[2][0], lng: r[2][1] })),
+    location: r[2] && { lat: r[2][0], lng: r[2][1] },
     connectingDuct: () => [],
     rootPanels: () => panelRows.filter((p) => p[2] === id && p[3] === null).map((p) => panel(p[0])),
     cable: ({ cableId }) => cablesAt(id).find((c) => c.cable.id === cableId) ?? null,
@@ -110,6 +145,7 @@ const cablesAt = (schachtId) =>
 // Each cable runs through a duct of its own, bent a little between its Schächte
 const ductLine = (c) => {
   const a = schacht(c[5]).location, z = schacht(c[6]).location;
+  if (!a || !z) return null;
   const bend = { lat: (a.lat + z.lat) / 2 + 0.00005 * (c[0] % 3 - 1), lng: (a.lng + z.lng) / 2 + 0.00005 };
   return [a, bend, z];
 };
@@ -257,7 +293,11 @@ const root = {
   },
   listSchacht: () => schachtRows.map((s) => schacht(s[0])),
   schacht: ({ schachtId }) => schacht(schachtId),
-  listSchachtTyp: () => [],
+  listSchachtTyp: () => schachtTypes,
+  convertPoint: ({ position }) => {
+    const wgs84 = positionToWgs84(position);
+    return { lv95: toLv95(wgs84), wgs84 };
+  },
   listCable: () => cableRows.map((c) => cable(c[0])),
   cable: ({ cableId }) => (cableRows.some((c) => c[0] === cableId) ? cable(cableId) : null),
   listDuct: () => cableRows.map(duct),
@@ -272,6 +312,24 @@ const root = {
   updateCabinetPanels: () => true, updatePanelPorts: () => true, setPortUsage: () => true,
   updatePlan: ({ planId }) => plan(planId), implementPlan: ({ planId }) => plan(planId),
   syncPlanToNetbox: () => [],
+  createSchacht: ({ schacht: input }) => {
+    const id = Math.max(...schachtRows.map((r) => r[0])) + 1;
+    schachtRows.push([id, ...schachtFromInput(input)]);
+    return schacht(id);
+  },
+  updateSchacht: ({ schachtId, schacht: input }) => {
+    const row = schachtRows.find((r) => r[0] === schachtId);
+    if (!row) throw new Error(`Schacht ${schachtId} not found`);
+    row.splice(1, 3, ...schachtFromInput(input));
+    return schacht(schachtId);
+  },
+  deleteSchacht: ({ schachtId }) => {
+    const panels = panelRows.filter((p) => p[2] === schachtId).length;
+    const ducts = cableRows.filter((c) => c[5] === schachtId || c[6] === schachtId).length;
+    if (panels || ducts) throw new Error(`Der Schacht hat noch ${panels} Panels und ${ducts} Trassen`);
+    schachtRows.splice(schachtRows.findIndex((r) => r[0] === schachtId), 1);
+    return true;
+  },
 };
 
 // graphql-js 16 predefines @oneOf

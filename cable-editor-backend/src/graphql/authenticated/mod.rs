@@ -12,7 +12,11 @@ use crate::{
         },
         schema::{kabel, panel, plan, schacht},
     },
-    graphql::{context::UserInfo, loader::SharedConnection},
+    graphql::{
+        context::UserInfo,
+        geo::{self, ConvertedPoint, PositionInput},
+        loader::SharedConnection,
+    },
     netbox::{fetch::DeviceWithRearPorts, fetch_device_with_ports, fetch_devices_and_ports},
 };
 use async_graphql::{Context, EmptySubscription, Object, Schema};
@@ -111,6 +115,15 @@ impl Query {
             .first(&mut connection)
             .await
             .optional()?)
+    }
+    /// A position in LV95 and WGS84, e.g. to preview a typed position on the map.
+    async fn convert_point(
+        &self,
+        ctx: &Context<'_>,
+        position: PositionInput,
+    ) -> async_graphql::Result<ConvertedPoint> {
+        let mut connection = get_connection(ctx).await?;
+        geo::convert(&mut connection, position).await
     }
     async fn netbox_devices(&self) -> async_graphql::Result<Vec<DeviceWithRearPorts>> {
         Ok(fetch_devices_and_ports().await?)

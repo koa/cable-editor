@@ -17,6 +17,7 @@ pub mod panel_navigation;
 pub mod panel_overview;
 pub mod plan_details;
 pub mod schacht_cables;
+pub mod schacht_properties;
 pub mod select_duct;
 
 #[cynic::schema("authenticated")]
@@ -62,6 +63,13 @@ pub struct Point {
 pub struct GeoPoint {
     pub lat: f64,
     pub lng: f64,
+}
+
+/// LV95 (EPSG:2056), east and north in metres
+#[derive(cynic::QueryFragment, Debug, Clone, Copy, PartialEq)]
+pub struct Lv95Point {
+    pub e: f64,
+    pub n: f64,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Ord, PartialOrd)]
