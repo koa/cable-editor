@@ -2,7 +2,6 @@ use crate::{
     error::FrontendError,
     graphql::{authenticated::schema, mutate},
 };
-use std::fmt::Write;
 use yew_oauth2::context::OAuth2Context;
 
 #[derive(cynic::QueryVariables)]
@@ -61,7 +60,7 @@ impl PanelPortInfo {
             result.push_str(": ");
             result.push_str(label);
         } else {
-            write!(&mut result, ": Port {}", self.order_number).expect("Strange error");
+            result.push_str(&format!(": Port {}", self.order_number));
         }
         result
     }

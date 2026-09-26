@@ -22,6 +22,8 @@ pub enum FrontendError {
     PlanNotFound(i32),
     #[error("Expected data not found")]
     NotFound,
+    #[error("The panels of the Schacht don't form a tree")]
+    InvalidPanelTree,
     #[error("Printer error: {0}")]
     Printer(#[from] brady_web_sdk::Error),
     #[error("Printer not connected")]
@@ -70,6 +72,9 @@ impl IntoPropValue<Html> for &FrontendError {
             }
             FrontendError::NotFound => {
                 html!(<Alert inline=true title={"Daten nicht gefunden".to_string()} r#type={AlertType::Danger} />)
+            }
+            FrontendError::InvalidPanelTree => {
+                html!(<Alert inline=true title={"Die Panels des Schachts bilden keinen gültigen Baum".to_string()} r#type={AlertType::Danger} />)
             }
             FrontendError::Printer(e) => {
                 html!(<Alert inline=true title={format!("Druckfehler: {e}")} r#type={AlertType::Danger} />)

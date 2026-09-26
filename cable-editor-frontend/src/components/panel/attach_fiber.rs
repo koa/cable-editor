@@ -547,7 +547,7 @@ impl AttachFiber {
             && edit.port_id == port.id
             && edit.side == side
         {
-            return self.view_inline_edit(ctx);
+            return self.view_inline_edit(ctx, edit);
         }
 
         let state = self
@@ -617,9 +617,10 @@ impl AttachFiber {
         }
     }
 
-    fn view_inline_edit(&self, ctx: &Context<Self>) -> Html {
-        let edit = self.edit_slot.as_ref().unwrap();
-        let situation = self.current_situation.as_ref().unwrap();
+    fn view_inline_edit(&self, ctx: &Context<Self>, edit: &SlotEdit) -> Html {
+        let Some(situation) = &self.current_situation else {
+            return Html::default();
+        };
 
         // 1. Sammle alle verf gbaren Kombinationen aus Kabel + B ndel, die noch freie Fasern haben
         let mut available_bundles = Vec::new();

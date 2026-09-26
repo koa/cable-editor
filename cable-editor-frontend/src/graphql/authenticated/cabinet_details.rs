@@ -147,9 +147,12 @@ impl PanelTreeEntry {
             .into_iter()
             .map(|root_id| collect_children(root_id, &mut children, &mut panel_data))
             .collect();
-        assert!(children.is_empty());
-        assert!(panel_data.is_empty());
-        Ok(data)
+        // Left over: panels not reachable from a root, e.g. in a cycle
+        if children.is_empty() && panel_data.is_empty() {
+            Ok(data)
+        } else {
+            Err(FrontendError::InvalidPanelTree)
+        }
     }
 }
 

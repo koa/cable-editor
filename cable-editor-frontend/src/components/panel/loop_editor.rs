@@ -499,7 +499,6 @@ impl LoopPortEditor {
             return html!(<Spinner />);
         }
 
-        let is_pair_defined = self.cable_a.is_some() && self.cable_b.is_some();
         let unmodified = self.calculate_current_states(ctx.props().panel_id) == self.fiber_states;
 
         html! {
@@ -511,10 +510,8 @@ impl LoopPortEditor {
                         }
 
                         // 1. KABELPAAR AUSWAHL / ANZEIGE
-                        if !is_pair_defined {
-                            { self.render_cable_selection(ctx) }
-                        } else {
-                            { self.render_active_pair(ctx) }
+                        if let (Some(cable_a), Some(cable_b)) = (&self.cable_a, &self.cable_b) {
+                            { render_active_pair(cable_a, cable_b) }
 
                             // 2. FASER-MATRIX (Nur wenn Paar definiert ist)
                             <div class="pf-v6-u-mt-lg">
@@ -524,6 +521,8 @@ impl LoopPortEditor {
                             <ActionGroup>
                                 <Button label="Änderungen Speichern" disabled={unmodified} variant={ButtonVariant::Primary} onclick={ctx.link().callback(|_| Msg::Save)} />
                             </ActionGroup>
+                        } else {
+                            { self.render_cable_selection(ctx) }
                         }
                     </div>
                 </div>
@@ -603,25 +602,6 @@ impl LoopPortEditor {
             </Grid>
         }
     }
-    fn render_active_pair(&self, _ctx: &Context<Self>) -> Html {
-        let a = self.cable_a.as_ref().unwrap();
-        let b = self.cable_b.as_ref().unwrap();
-        let connection_description = format!(
-            "{}({})->{}({}) ({}x{}).",
-            a.path.far_schacht.name,
-            a.cable.name,
-            b.path.far_schacht.name,
-            b.cable.name,
-            a.cable.bundle_count,
-            a.cable.fiber_count
-        );
-        html! {
-            <Alert title="Verbindung" r#type={AlertType::Info} inline=true>
-                <p>{connection_description}</p>
-            </Alert>
-        }
-    }
-
     fn render_fiber_table(&self, ctx: &Context<Self>) -> Html {
         let mut entries = Vec::new();
         let scope = ctx.link().clone();
@@ -741,5 +721,23 @@ impl LoopPortEditor {
             }
         }
         states
+    }
+}
+
+/// The selected pair of cables whose fibers are looped.
+fn render_active_pair(a: &CableEnd, b: &CableEnd) -> Html {
+    let connection_description = format!(
+        "{}({})->{}({}) ({}x{}).",
+        a.path.far_schacht.name,
+        a.cable.name,
+        b.path.far_schacht.name,
+        b.cable.name,
+        a.cable.bundle_count,
+        a.cable.fiber_count
+    );
+    html! {
+        <Alert title="Verbindung" r#type={AlertType::Info} inline=true>
+            <p>{connection_description}</p>
+        </Alert>
     }
 }
