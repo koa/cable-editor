@@ -218,6 +218,7 @@ pub enum Msg {
     SetBundleCount(String),
     SetFiberCount(String),
     Save,
+    SaveFailed(FrontendError),
     AppendSegment {
         end: PathEnd,
         duct: CableDuct,
@@ -282,6 +283,18 @@ impl Component for EditCable {
                     let path = self.path.clone();
                     let cable_details = data.clone();
                     update_cable(scope, cable_name, bundle_count, string, path, cable_details);
+                }
+                true
+            }
+            Msg::SaveFailed(error) => {
+                self.saving = false;
+                if let Some(toaster) = get_toaster(ctx.link()) {
+                    toaster.toast(Toast {
+                        title: "Kabel konnte nicht gespeichert werden".into(),
+                        r#type: AlertType::Danger,
+                        body: html!(error.to_string()),
+                        ..Toast::default()
+                    });
                 }
                 true
             }
@@ -819,7 +832,8 @@ fn update_cable(
             .await
             {
                 Ok(Some(updated)) => Msg::Data(updated),
-                Err(e) => Msg::Error(e),
+                // A toast: an error page would drop the unsaved changes
+                Err(error) => Msg::SaveFailed(error),
                 Ok(None) => Msg::NotFound,
             },
         );
