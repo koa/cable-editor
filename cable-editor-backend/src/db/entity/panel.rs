@@ -6,7 +6,7 @@ use crate::{
     },
     graphql::{
         authenticated::get_connection,
-        loader::{SchachtId, load_one},
+        loader::{PanelId, PanelPortId, PlanId, SchachtId, load_one},
     },
     netbox::{
         fetch::{DeviceWithRearPorts, RearPort},
@@ -171,18 +171,10 @@ impl PortUsage {
         }
     }
     async fn port(&self, ctx: &Context<'_>) -> async_graphql::Result<PanelPort> {
-        let mut connection = get_connection(ctx).await?;
-        Ok(PanelPort::query()
-            .filter(schema::panel_port::id.eq(self.port_id))
-            .first(&mut connection)
-            .await?)
+        load_one(ctx, PanelPortId(self.port_id)).await
     }
     async fn plan(&self, ctx: &Context<'_>) -> async_graphql::Result<Plan> {
-        let mut connection = get_connection(ctx).await?;
-        Ok(Plan::query()
-            .filter(schema::plan::id.eq(self.plan_id))
-            .first(&mut connection)
-            .await?)
+        load_one(ctx, PlanId(self.plan_id)).await
     }
     async fn other_side(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<PortUsage>> {
         let mut connection = get_connection(ctx).await?;
@@ -502,11 +494,7 @@ impl PanelPort {
         self.port_order
     }
     async fn panel(&self, ctx: &Context<'_>) -> async_graphql::Result<Panel> {
-        let mut connection = get_connection(ctx).await?;
-        Ok(Panel::query()
-            .filter(schema::panel::id.eq(self.panel_id))
-            .first(&mut connection)
-            .await?)
+        load_one(ctx, PanelId(self.panel_id)).await
     }
     async fn label(&self) -> Option<&str> {
         self.label.as_deref()

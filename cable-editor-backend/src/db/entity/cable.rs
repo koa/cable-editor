@@ -5,28 +5,25 @@ use crate::{
             Duct, WGS84,
             panel::PortUsage,
             path::{DirectedDuct, DuctAlignmentError, align_ducts},
-            schacht::{Schacht, fetch_schacht},
-            st_length,
+            schacht::Schacht,
         },
         schema,
     },
     graphql::{
         authenticated::get_connection,
-        loader::{CableId, SchachtId, load_one},
+        loader::{
+            CableDucts, CableEndUsages, CableId, CableLength, SchachtId, get_loader, load_one,
+        },
         model::GeoPoint,
     },
 };
 use async_graphql::{Context, Object};
 use diesel::{
     AsChangeset, ExpressionMethods, HasQuery, Identifiable, Insertable, OptionalExtension,
-    QueryDsl, QueryableByName,
-    dsl::sum,
-    sql_query,
+    QueryDsl, QueryableByName, sql_query,
     sql_types::{Integer, Nullable},
 };
-use diesel_async::{
-    AsyncConnection, AsyncPgConnection, RunQueryDsl, pooled_connection::deadpool::Object,
-};
+use diesel_async::{AsyncPgConnection, RunQueryDsl, pooled_connection::deadpool::Object};
 use postgis_diesel::{
     sql_types::Geometry,
     types::{LineString, Point},
@@ -57,19 +54,9 @@ pub struct CableDuct {
     pub sequenz: i32,
 }
 impl Cable {
-    async fn build_cable_path(
-        &self,
-        mut connection: &mut Object<AsyncPgConnection>,
-    ) -> async_graphql::Result<Option<CablePath>> {
-        let vec = schema::trasse::table
-            .inner_join(schema::kabel_trasse::table)
-            .filter(schema::kabel_trasse::kabel.eq(self.id))
-            .order(schema::kabel_trasse::sequenz.asc())
-            .select((schema::trasse::all_columns, schema::kabel_trasse::sequenz))
-            .load::<(Duct, i32)>(&mut connection)
-            .await?;
-
-        let segments = align_ducts(vec.into_iter())
+    /// The cable's path from its ducts (with their sequence), `None` without ducts.
+    fn path_from_ducts(&self, ducts: Vec<(Duct, i32)>) -> async_graphql::Result<Option<CablePath>> {
+        let segments = align_ducts(ducts.into_iter())
             .map(|r| {
                 r.map(|segment| CablePathSegment {
                     far_schacht: segment.schacht_z(),
@@ -101,6 +88,14 @@ impl Cable {
                 segments,
             }))
     }
+    /// The path, its ducts loaded in batches with the other cables' of the request.
+    async fn load_path(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<CablePath>> {
+        let ducts = get_loader(ctx)?
+            .load_one(CableDucts(self.id))
+            .await?
+            .unwrap_or_default();
+        self.path_from_ducts(ducts)
+    }
     async fn cable_end(
         &self,
         schacht_id: i32,
@@ -131,19 +126,13 @@ impl Cable {
     async fn fiber_count(&self) -> u32 {
         self.faser_anz as u32
     }
+    /// Metres along its ducts, missing without ducts
     async fn length(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<f64>> {
-        let mut connection = get_connection(ctx).await?;
-        Ok(schema::trassen_mit_endpunkten::table
-            .inner_join(schema::kabel_trasse::table)
-            .filter(schema::kabel_trasse::kabel.eq(self.id))
-            .select(sum(st_length(schema::trassen_mit_endpunkten::geom)))
-            .first(&mut connection)
-            .await?)
+        get_loader(ctx)?.load_one(CableLength(self.id)).await
     }
 
     async fn path(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<CablePath>> {
-        let mut connection = get_connection(ctx).await?;
-        self.build_cable_path(&mut connection).await
+        self.load_path(ctx).await
     }
     /// Course in WGS84 for the map; missing without ducts or with a gap between them
     async fn line(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<Vec<GeoPoint>>> {
@@ -179,13 +168,15 @@ pub struct CableEnd {
     pub cable: Cable,
     pub schacht: Schacht,
 }
-impl CableEnd {
-    async fn used_ports_impl(
-        &self,
-        connection: &mut Object<AsyncPgConnection>,
-        plan_id: i32,
-    ) -> Result<Vec<PortUsage>, diesel::result::Error> {
-        let raw_sql = r#"
+/// The cable's port usages at the Schacht as they are in the plan: the plan's own and the
+/// current state's (plan 0) not overridden by the plan at the same port.
+pub async fn cable_usages_at(
+    connection: &mut AsyncPgConnection,
+    plan_id: i32,
+    cable_id: i32,
+    schacht_id: i32,
+) -> Result<Vec<PortUsage>, diesel::result::Error> {
+    let raw_sql = r#"
         -- 1. Echte Belegungen für dieses Kabel im aktuellen Plan, direkt auf den Schacht gefiltert
         SELECT u.*
         FROM port_usage u
@@ -216,12 +207,29 @@ impl CableEnd {
           )
     "#;
 
-        diesel::sql_query(raw_sql)
-            .bind::<diesel::sql_types::Integer, _>(plan_id)
-            .bind::<diesel::sql_types::Integer, _>(self.cable.id)
-            .bind::<diesel::sql_types::Integer, _>(self.schacht.id)
-            .load::<PortUsage>(connection)
-            .await
+    diesel::sql_query(raw_sql)
+        .bind::<diesel::sql_types::Integer, _>(plan_id)
+        .bind::<diesel::sql_types::Integer, _>(cable_id)
+        .bind::<diesel::sql_types::Integer, _>(schacht_id)
+        .load::<PortUsage>(connection)
+        .await
+}
+
+impl CableEnd {
+    /// `cable_usages_at`, loaded in batches with the request's other cable ends.
+    async fn usages(
+        &self,
+        ctx: &Context<'_>,
+        plan_id: i32,
+    ) -> async_graphql::Result<Vec<PortUsage>> {
+        Ok(get_loader(ctx)?
+            .load_one(CableEndUsages {
+                cable: self.cable.id,
+                schacht: self.schacht.id,
+                plan: plan_id,
+            })
+            .await?
+            .unwrap_or_default())
     }
 }
 
@@ -234,18 +242,12 @@ impl CableEnd {
         &self.schacht
     }
     async fn path(&self, ctx: &Context<'_>) -> async_graphql::Result<CablePath> {
-        let mut connection = get_connection(ctx).await?;
-
-        let path = self
-            .cable
-            .build_cable_path(&mut connection)
-            .await?
-            .ok_or_else(|| {
-                async_graphql::Error::new(format!(
-                    "invalid cable end on duct {} for cable {}",
-                    self.schacht.id, self.cable.id
-                ))
-            })?;
+        let path = self.cable.load_path(ctx).await?.ok_or_else(|| {
+            async_graphql::Error::new(format!(
+                "invalid cable end on duct {} for cable {}",
+                self.schacht.id, self.cable.id
+            ))
+        })?;
         Ok(if path.near_schacht == self.schacht.id {
             path
         } else {
@@ -258,8 +260,7 @@ impl CableEnd {
         ctx: &Context<'_>,
         plan_id: i32,
     ) -> async_graphql::Result<Vec<PortUsage>> {
-        let mut connection = get_connection(ctx).await?;
-        Ok(self.used_ports_impl(&mut connection, plan_id).await?)
+        self.usages(ctx, plan_id).await
     }
     async fn fibers(&self) -> Vec<FiberEnd> {
         (1..=self.cable.buendel_anz)
@@ -290,72 +291,48 @@ impl FiberEnd {
     async fn fiber(&self) -> i32 {
         self.fiber
     }
+    /// The port the fiber ends at in the plan, if any; a usage of the plan wins over one of the
+    /// current state.
     async fn used_port(
         &self,
         ctx: &Context<'_>,
         plan_id: i32,
     ) -> async_graphql::Result<Option<PortUsage>> {
-        let mut connection = get_connection(ctx).await?;
-        let found_usage: Option<PortUsage> = PortUsage::query()
-            .filter(schema::port_usage::cable.eq(self.cable.cable.id))
-            .filter(schema::port_usage::bundle.eq(self.bundle))
-            .filter(schema::port_usage::fiber.eq(self.fiber))
-            .filter(schema::port_usage::plan_id.eq_any([0, plan_id]))
-            .inner_join(schema::panel_port::table.inner_join(schema::panel::table))
-            .filter(schema::panel::schacht_id.eq(self.cable.schacht.id))
-            .order(schema::port_usage::plan_id.desc())
-            .first(&mut connection)
-            .await
-            .optional()?;
-
-        if let Some(usage) = found_usage {
-            if usage.plan_id == BASELINE_PLAN_ID && plan_id != BASELINE_PLAN_ID {
-                let override_exists: bool = diesel::select(diesel::dsl::exists(
-                    schema::port_usage::table
-                        .filter(schema::port_usage::port_id.eq(usage.port_id))
-                        .filter(schema::port_usage::side.eq(usage.side))
-                        .filter(schema::port_usage::plan_id.eq(plan_id)),
-                ))
-                .get_result(&mut connection)
-                .await?;
-
-                if override_exists {
-                    return Ok(None);
-                }
-            }
-
-            return Ok(Some(usage));
-        }
-        Ok(None)
+        let usages = self.cable.usages(ctx, plan_id).await?;
+        Ok(fiber_usage(&usages, self.bundle, self.fiber).cloned())
     }
     async fn other_end(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<FiberEnd>> {
-        let mut connection = get_connection(ctx).await?;
-        connection
-            .transaction(async move |conn| {
-                Ok(
-                    if let Some(path) = self.cable.cable.build_cable_path(conn).await? {
-                        let other_schacht_id = if path.near_schacht == self.cable.schacht.id {
-                            path.far_schacht_id()
-                        } else {
-                            path.near_schacht
-                        };
-                        let schacht = fetch_schacht(conn, other_schacht_id).await?;
-                        let end = CableEnd {
-                            cable: self.cable.cable.clone(),
-                            schacht,
-                        };
-                        Some(FiberEnd {
-                            cable: end,
-                            bundle: self.bundle,
-                            fiber: self.fiber,
-                        })
-                    } else {
-                        None
-                    },
-                )
-            })
-            .await
+        let Some(path) = self.cable.cable.load_path(ctx).await? else {
+            return Ok(None);
+        };
+        let other_schacht_id = if path.near_schacht == self.cable.schacht.id {
+            path.far_schacht_id()
+        } else {
+            path.near_schacht
+        };
+        let schacht = load_one(ctx, SchachtId(other_schacht_id)).await?;
+        Ok(Some(FiberEnd {
+            cable: CableEnd {
+                cable: self.cable.cable.clone(),
+                schacht,
+            },
+            bundle: self.bundle,
+            fiber: self.fiber,
+        }))
     }
+}
+
+/// The fiber's usage among a cable end's (`cable_usages_at`): the plan's wins over the
+/// current state's.
+fn fiber_usage(usages: &[PortUsage], bundle: i32, fiber: i32) -> Option<&PortUsage> {
+    let of_fiber = || {
+        usages
+            .iter()
+            .filter(move |u| u.bundle == Some(bundle) && u.fiber == Some(fiber))
+    };
+    of_fiber()
+        .find(|u| u.plan_id != BASELINE_PLAN_ID)
+        .or_else(|| of_fiber().next())
 }
 
 pub struct PotentialPathSegment {
@@ -485,5 +462,36 @@ pub struct UpdateCableChangeset {
 impl UpdateCableChangeset {
     pub fn any(&self) -> bool {
         self.name.is_some() || self.buendel_anz.is_some() || self.faser_anz.is_some()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::entity::panel::PortSide;
+
+    fn usage(port_id: i32, plan_id: i32, bundle: i32, fiber: i32) -> PortUsage {
+        PortUsage {
+            port_id,
+            plan_id,
+            side: PortSide::Front,
+            cable: Some(11),
+            bundle: Some(bundle),
+            fiber: Some(fiber),
+        }
+    }
+
+    #[test]
+    fn finds_the_fibers_usage() {
+        let usages = [usage(1, 0, 1, 1), usage(2, 0, 1, 2)];
+        assert_eq!(fiber_usage(&usages, 1, 2).map(|u| u.port_id), Some(2));
+        assert_eq!(fiber_usage(&usages, 2, 1), None);
+    }
+
+    #[test]
+    fn the_plans_usage_wins() {
+        // Moved in the plan from port 1 to port 5; the current state's usage comes first
+        let usages = [usage(1, 0, 1, 1), usage(5, 3, 1, 1)];
+        assert_eq!(fiber_usage(&usages, 1, 1).map(|u| u.port_id), Some(5));
     }
 }

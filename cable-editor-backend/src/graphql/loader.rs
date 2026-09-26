@@ -7,8 +7,10 @@
 use crate::{
     db::{
         entity::{
-            WGS84,
-            cable::Cable,
+            Duct, WGS84,
+            cable::{Cable, cable_usages_at},
+            panel::{Panel, PanelPort, PortUsage},
+            plan::Plan,
             schacht::{Schacht, SchachtTyp},
             st_length, st_transform,
         },
@@ -17,7 +19,7 @@ use crate::{
     graphql::model::GeoPoint,
 };
 use async_graphql::{Context, dataloader::DataLoader, dataloader::Loader};
-use diesel::{ExpressionMethods, HasQuery, QueryDsl};
+use diesel::{ExpressionMethods, HasQuery, QueryDsl, dsl::sum};
 use diesel_async::{AsyncPgConnection, RunQueryDsl, pooled_connection::deadpool::Object};
 use postgis_diesel::types::{LineString, Point};
 use std::{collections::HashMap, sync::Arc};
@@ -69,6 +71,35 @@ pub struct SchachtLocation(pub i32);
 /// Line of a duct in WGS84 including its Schächte, missing without geometry.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct DuctLine(pub i32);
+
+/// Root panels of a Schacht, in their order.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct SchachtRootPanels(pub i32);
+
+/// Length of a cable in metres along its ducts, missing without ducts.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct CableLength(pub i32);
+
+/// Ducts of a cable with their sequence, in order; missing without ducts.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct CableDucts(pub i32);
+
+/// Port usages of a cable at a Schacht as they are in a plan (`cable_usages_at`).
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct CableEndUsages {
+    pub cable: i32,
+    pub schacht: i32,
+    pub plan: i32,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct PanelId(pub i32);
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct PanelPortId(pub i32);
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct PlanId(pub i32);
 
 /// Length of a duct in metres (from Schacht A to Z), missing without geometry.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -220,5 +251,152 @@ impl Loader<DuctLength> for DbLoader {
             .into_iter()
             .filter_map(|(id, length)| Some((DuctLength(id), length?)))
             .collect())
+    }
+}
+
+impl Loader<SchachtRootPanels> for DbLoader {
+    type Value = Vec<Panel>;
+    type Error = async_graphql::Error;
+
+    async fn load(
+        &self,
+        keys: &[SchachtRootPanels],
+    ) -> Result<HashMap<SchachtRootPanels, Vec<Panel>>, Self::Error> {
+        let mut connection = self.connection.lock().await;
+        let list: Vec<Panel> = Panel::query()
+            .filter(schema::panel::schacht_id.eq_any(ids(keys, |k| k.0)))
+            .filter(schema::panel::parent_panel.is_null())
+            .order(schema::panel::parent_order.asc())
+            .load(&mut connection)
+            .await?;
+        let mut panels: HashMap<SchachtRootPanels, Vec<Panel>> = HashMap::new();
+        for panel in list {
+            panels
+                .entry(SchachtRootPanels(panel.schacht_id))
+                .or_default()
+                .push(panel);
+        }
+        Ok(panels)
+    }
+}
+
+impl Loader<CableLength> for DbLoader {
+    type Value = f64;
+    type Error = async_graphql::Error;
+
+    async fn load(&self, keys: &[CableLength]) -> Result<HashMap<CableLength, f64>, Self::Error> {
+        let mut connection = self.connection.lock().await;
+        let list: Vec<(i32, Option<f64>)> = schema::trassen_mit_endpunkten::table
+            .inner_join(schema::kabel_trasse::table)
+            .filter(schema::kabel_trasse::kabel.eq_any(ids(keys, |k| k.0)))
+            .group_by(schema::kabel_trasse::kabel)
+            .select((
+                schema::kabel_trasse::kabel,
+                sum(st_length(schema::trassen_mit_endpunkten::geom)),
+            ))
+            .load(&mut connection)
+            .await?;
+        Ok(list
+            .into_iter()
+            .filter_map(|(id, length)| Some((CableLength(id), length?)))
+            .collect())
+    }
+}
+
+impl Loader<CableDucts> for DbLoader {
+    type Value = Vec<(Duct, i32)>;
+    type Error = async_graphql::Error;
+
+    async fn load(
+        &self,
+        keys: &[CableDucts],
+    ) -> Result<HashMap<CableDucts, Vec<(Duct, i32)>>, Self::Error> {
+        let mut connection = self.connection.lock().await;
+        let list: Vec<(i32, Duct, i32)> = schema::trasse::table
+            .inner_join(schema::kabel_trasse::table)
+            .filter(schema::kabel_trasse::kabel.eq_any(ids(keys, |k| k.0)))
+            .order((
+                schema::kabel_trasse::kabel,
+                schema::kabel_trasse::sequenz.asc(),
+            ))
+            .select((
+                schema::kabel_trasse::kabel,
+                schema::trasse::all_columns,
+                schema::kabel_trasse::sequenz,
+            ))
+            .load(&mut connection)
+            .await?;
+        let mut ducts: HashMap<CableDucts, Vec<(Duct, i32)>> = HashMap::new();
+        for (cable, duct, sequence) in list {
+            ducts
+                .entry(CableDucts(cable))
+                .or_default()
+                .push((duct, sequence));
+        }
+        Ok(ducts)
+    }
+}
+
+impl Loader<CableEndUsages> for DbLoader {
+    type Value = Vec<PortUsage>;
+    type Error = async_graphql::Error;
+
+    /// One query per cable end (instead of per fiber); a page shows few cable ends.
+    async fn load(
+        &self,
+        keys: &[CableEndUsages],
+    ) -> Result<HashMap<CableEndUsages, Vec<PortUsage>>, Self::Error> {
+        let mut connection = self.connection.lock().await;
+        let mut usages = HashMap::new();
+        for key in keys {
+            let found = cable_usages_at(&mut connection, key.plan, key.cable, key.schacht).await?;
+            usages.insert(*key, found);
+        }
+        Ok(usages)
+    }
+}
+
+impl Loader<PanelId> for DbLoader {
+    type Value = Panel;
+    type Error = async_graphql::Error;
+
+    async fn load(&self, keys: &[PanelId]) -> Result<HashMap<PanelId, Panel>, Self::Error> {
+        let mut connection = self.connection.lock().await;
+        let list: Vec<Panel> = Panel::query()
+            .filter(schema::panel::id.eq_any(ids(keys, |k| k.0)))
+            .load(&mut connection)
+            .await?;
+        Ok(list.into_iter().map(|p| (PanelId(p.id), p)).collect())
+    }
+}
+
+impl Loader<PanelPortId> for DbLoader {
+    type Value = PanelPort;
+    type Error = async_graphql::Error;
+
+    async fn load(
+        &self,
+        keys: &[PanelPortId],
+    ) -> Result<HashMap<PanelPortId, PanelPort>, Self::Error> {
+        let mut connection = self.connection.lock().await;
+        let list: Vec<PanelPort> = PanelPort::query()
+            .filter(schema::panel_port::id.eq_any(ids(keys, |k| k.0)))
+            .load(&mut connection)
+            .await?;
+        Ok(list.into_iter().map(|p| (PanelPortId(p.id), p)).collect())
+    }
+}
+
+impl Loader<PlanId> for DbLoader {
+    type Value = Plan;
+    type Error = async_graphql::Error;
+
+    async fn load(&self, keys: &[PlanId]) -> Result<HashMap<PlanId, Plan>, Self::Error> {
+        let mut connection = self.connection.lock().await;
+        let list: Vec<Plan> = Plan::query()
+            .filter(schema::plan::id.eq_any(ids(keys, |k| k.0)))
+            .load(&mut connection)
+            .await?;
+        Ok(list.into_iter().map(|p| (PlanId(p.id), p)).collect())
     }
 }

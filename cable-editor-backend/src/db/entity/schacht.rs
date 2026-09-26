@@ -3,7 +3,7 @@ use diesel::{
     Associations, BoolExpressionMethods, ExpressionMethods, HasQuery, Identifiable, Insertable,
     OptionalExtension, QueryDsl,
 };
-use diesel_async::{AsyncPgConnection, RunQueryDsl, pooled_connection::deadpool::Object};
+use diesel_async::RunQueryDsl;
 
 use crate::{
     db::{
@@ -16,7 +16,9 @@ use crate::{
     },
     graphql::{
         authenticated::get_connection,
-        loader::{SchachtId, SchachtLocation, SchachtTypId, get_loader, load_one},
+        loader::{
+            SchachtId, SchachtLocation, SchachtRootPanels, SchachtTypId, get_loader, load_one,
+        },
         model::{self, GeoPoint},
     },
 };
@@ -101,16 +103,10 @@ impl Schacht {
             .collect()
     }
     async fn root_panels(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Panel>> {
-        let mut connection = get_connection(ctx).await?;
-        Ok(Panel::query()
-            .filter(
-                schema::panel::schacht_id
-                    .eq(self.id)
-                    .and(schema::panel::parent_panel.is_null()),
-            )
-            .order(schema::panel::parent_order.asc())
-            .load(&mut connection)
-            .await?)
+        Ok(get_loader(ctx)?
+            .load_one(SchachtRootPanels(self.id))
+            .await?
+            .unwrap_or_default())
     }
     async fn cable(
         &self,
@@ -178,14 +174,4 @@ impl SchachtTyp {
             .load(&mut connection)
             .await?)
     }
-}
-
-pub async fn fetch_schacht(
-    connection: &mut Object<AsyncPgConnection>,
-    id: i32,
-) -> async_graphql::Result<Schacht> {
-    Ok(Schacht::query()
-        .filter(schema::schacht::id.eq(id))
-        .get_result(connection)
-        .await?)
 }
