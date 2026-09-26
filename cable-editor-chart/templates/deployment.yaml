@@ -13,6 +13,11 @@ spec:
     metadata:
       labels:
         {{- include "cable-editor-chart.selectorLabels" . | nindent 8 }}
+      {{- if not .Values.config.netboxTokenSecret.name }}
+      annotations:
+        # Restart the pods when the token in the chart's Secret changes
+        checksum/netbox-token: {{ include (print $.Template.BasePath "/netbox-token-secret.yaml") . | sha256sum }}
+      {{- end }}
     spec:
       containers:
         - name: {{ .Chart.Name }}
@@ -45,6 +50,14 @@ spec:
             # Struct-Feld: auth_issuer
             - name: APP__OAUTH__AUTH_ISSUER
               value: {{ .Values.config.authIssuer | quote }}
+            {{- with .Values.config.userInfoUrl }}
+            - name: APP__OAUTH__USER_INFO_URL
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.config.authScopes }}
+            - name: APP__OAUTH__AUTH_SCOPES
+              value: {{ . | quote }}
+            {{- end }}
             # Struct-Feld: server_port
             - name: APP__OAUTH__SERVER_PORT
               value: {{ .Values.config.serverPort | quote }}
@@ -57,11 +70,18 @@ spec:
             - name: APP__NETBOX__URL
               value: {{ .Values.config.netboxUrl | quote }}
             - name: APP__NETBOX__TOKEN
-              value: {{ .Values.config.netboxToken | quote }}
+              valueFrom:
+                secretKeyRef:
+                  {{- with .Values.config.netboxTokenSecret }}
+                  name: {{ .name | default (printf "%s-netbox-token" (include "cable-editor-chart.fullname" $)) | quote }}
+                  key: {{ if .name }}{{ .key | quote }}{{ else }}"token"{{ end }}
+                  {{- end }}
             - name: APP__NETBOX__PROVIDER_ID
               value: {{ .Values.config.netboxProviderId | quote }}
             - name: APP__NETBOX__TYPE_ID
               value: {{ .Values.config.netboxTypeId | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.config.logLevel | quote }}
             - name: DATABASE_URL
               {{- if .Values.config.databaseSecret}}
               valueFrom:

@@ -40,13 +40,24 @@ config:
   databaseSecret: "cable-editor-db-app"
   databaseUrl: "postgres://user:password@localhost:5432/cable_editor"
   authIssuer: "https://login.berg-turbenthal.ch"
+  # Client ID of the app at the OIDC provider
+  authClientId: "cable-editor"
+  # Optional: userinfo endpoint (default: from the issuer's OIDC discovery)
+  userInfoUrl: ""
+  # Optional: space separated scopes the frontend requests (default: "openid profile groups")
+  authScopes: ""
   serverBindAddress: "0.0.0.0"
   serverPort: "8080"
   serverMgmtPort: "9090"
   # URL der Netbox-Instanz (ohne /graphql)"
   netboxUrl: "http://netbox.local/"
-  # Token der netbox instanz
-  netboxToken: "Veryverysecret"
+  # Token der Netbox-Instanz, nie als Klartext im Deployment:
+  # entweder ein bestehendes Secret (empfohlen, z.B. über Sealed Secrets oder External Secrets) ...
+  netboxTokenSecret:
+    name: ""
+    key: "token"
+  # ... oder der Token selbst, das Chart legt dafür ein Secret an
+  netboxToken: ""
   # Provider ID für die Circuits (Transportnetze)
   netboxProviderId: 1
   # Typ der Circuits

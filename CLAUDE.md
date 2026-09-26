@@ -56,6 +56,7 @@ There are currently no tests in the repo.
 - `DATABASE_URL` env var (`.env`, loaded by dotenvy). Migrations in `cable-editor-backend/migrations` are embedded and run automatically at startup (`run_sync_migrations`).
 - `config.yaml` (gitignored) with `oauth:` (`auth_client_id`, `auth_issuer`, optional `user_info_url` (default: `userinfo_endpoint` from the issuer's OIDC discovery), optional `auth_scopes` (space separated scopes the frontend requests, default `openid profile groups`), `server_port`, ...) and `netbox:` (`url`, `token`, `provider_id`, `type_id`) sections; each value can be overridden by env vars with prefix `APP` and `__` separator (see `backend/src/config.rs`).
 - `LOG_LEVEL` env var controls `env_logger`.
+- Helm chart (`cable-editor-chart`): the Netbox token comes from an existing Secret (`config.netboxTokenSecret.name`/`key`) or from `config.netboxToken`, which the chart stores in a Secret of its own; either way the Deployment only references it. Rendering fails without one.
 
 ## Architecture
 
