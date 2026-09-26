@@ -6,7 +6,7 @@ use crate::{
     error::FrontendError,
     geo::{
         geo_file::{GeoFile, read_geo_file},
-        map::{create_map, duct_line, fit_points, schacht_marker},
+        map::{MapHolder, duct_line, fit_points, schacht_marker},
     },
     graphql::authenticated::{
         GeoPoint, IdOrNew,
@@ -27,7 +27,7 @@ use patternfly_yew::prelude::{
 };
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
-use web_sys::{HtmlElement, HtmlInputElement};
+use web_sys::HtmlInputElement;
 use yew::{
     Callback, Component, Context, Html, NodeRef, Properties, html, html::IntoPropValue,
     html_nested, platform::spawn_local,
@@ -50,10 +50,8 @@ pub struct EditDuctProperties {
     confirmed: bool,
     saving: bool,
     file_input: NodeRef,
-    container: NodeRef,
-    map: Option<leaflet::Map>,
-    /// Drawn on the map, replaced on changes
-    layers: Vec<leaflet::Layer>,
+    /// Its layers are replaced on changes
+    map: MapHolder,
     /// Number of the last check, older answers are dropped
     check_request: u32,
 }
@@ -120,9 +118,7 @@ impl Component for EditDuctProperties {
             confirmed: false,
             saving: false,
             file_input: NodeRef::default(),
-            container: NodeRef::default(),
-            map: None,
-            layers: Vec::new(),
+            map: MapHolder::default(),
             check_request: 0,
         }
     }
@@ -291,7 +287,7 @@ impl Component for EditDuctProperties {
             <PageLayout {title}>
                 <div class="map-layout">
                     <div class="duct-properties__form">{content}</div>
-                    <div class="map-layout__map" ref={self.container.clone()}/>
+                    <div class="map-layout__map" ref={self.map.container()}/>
                 </div>
             </PageLayout>
         }
@@ -301,22 +297,9 @@ impl Component for EditDuctProperties {
         if !first_render {
             return;
         }
-        let Some(container) = self.container.cast::<HtmlElement>() else {
-            return;
-        };
-        match create_map(&container) {
-            Ok(map) => {
-                self.map = Some(map);
-                self.redraw();
-            }
-            Err(error) => self.error = Some(FrontendError::Map(error)),
-        }
-    }
-
-    fn destroy(&mut self, _ctx: &Context<Self>) {
-        self.layers.clear();
-        if let Some(map) = self.map.take() {
-            map.remove();
+        match self.map.create() {
+            Ok(()) => self.redraw(),
+            Err(error) => self.error = Some(error),
         }
     }
 }
@@ -505,23 +488,18 @@ impl EditDuctProperties {
 
     /// The chosen Schächte, the stored course and the checked one from the file.
     fn redraw(&mut self) {
-        let Some(map) = &self.map else {
+        let Some(map) = self.map.map().cloned() else {
             return;
         };
-        for layer in self.layers.drain(..) {
-            layer.remove();
-        }
         let mut layers: Vec<leaflet::Layer> = Vec::new();
         let mut shown: Vec<GeoPoint> = Vec::new();
         if let Some(line) = self.stored().and_then(|duct| duct.line.as_ref()) {
             let stored = duct_line(line, "map-view__duct");
-            stored.add_to(map);
             layers.push(stored.unchecked_into());
             shown.extend(line);
         }
         if let CheckState::Checked(check) = &self.check {
             let preview = duct_line(&check.line, "map-view__duct map-view__duct--preview");
-            preview.add_to(map);
             layers.push(preview.unchecked_into());
             shown.extend(&check.line);
         }
@@ -531,12 +509,11 @@ impl EditDuctProperties {
                 continue;
             };
             let marker = schacht_marker(&schacht.name, location, || {});
-            marker.add_to(map);
             layers.push(marker.unchecked_into());
             shown.push(location);
         }
-        fit_points(map, &shown);
-        self.layers = layers;
+        fit_points(&map, &shown);
+        self.map.replace_layers(layers);
     }
 
     fn view_form(&self, ctx: &Context<Self>, schaechte: &[SchachtChoice]) -> Html {

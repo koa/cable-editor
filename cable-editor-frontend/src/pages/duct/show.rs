@@ -4,27 +4,22 @@ use crate::{
         page_layout::{PageLayout, object_title},
     },
     error::FrontendError,
-    geo::map::{create_map, duct_line, fit_points, schacht_marker},
+    geo::map::{MapHolder, duct_line, fit_points, schacht_marker},
     graphql::authenticated::duct_details::{DuctDetails, fetch_duct_details},
     pages::router::{CabinetView, PlanView},
     util::{get_credentials, navigate},
 };
 use patternfly_yew::prelude::{DescriptionGroup, DescriptionList, Spinner};
 use wasm_bindgen::JsCast;
-use web_sys::HtmlElement;
-use yew::{
-    Component, Context, Html, NodeRef, Properties, html, html::IntoPropValue, platform::spawn_local,
-};
+use yew::{Component, Context, Html, Properties, html, html::IntoPropValue, platform::spawn_local};
 
 /// A duct: its Schächte, length and cables, and a map with its line.
 pub struct ShowDuct {
     /// Missing while loading; `None` inside: the duct doesn't exist
     duct: Option<Option<DuctDetails>>,
     error: Option<FrontendError>,
-    container: NodeRef,
-    map: Option<leaflet::Map>,
-    /// What's drawn for the duct, removed when another duct is shown
-    layers: Vec<leaflet::Layer>,
+    /// Its layers: what's drawn for the duct, replaced when another duct is shown
+    map: MapHolder,
 }
 
 pub enum Msg {
@@ -48,9 +43,7 @@ impl Component for ShowDuct {
         Self {
             duct: None,
             error: None,
-            container: NodeRef::default(),
-            map: None,
-            layers: Vec::new(),
+            map: MapHolder::default(),
         }
     }
 
@@ -107,7 +100,7 @@ impl Component for ShowDuct {
             <PageLayout {title}>
                 <div class="map-layout">
                     <div>{content}</div>
-                    <div class="map-layout__map" ref={self.container.clone()}/>
+                    <div class="map-layout__map" ref={self.map.container()}/>
                 </div>
             </PageLayout>
         }
@@ -117,25 +110,9 @@ impl Component for ShowDuct {
         if !first_render {
             return;
         }
-        let Some(container) = self.container.cast::<HtmlElement>() else {
-            return;
-        };
-        match create_map(&container) {
-            Ok(map) => {
-                self.map = Some(map);
-                self.show_duct(ctx);
-            }
-            Err(error) => {
-                ctx.link()
-                    .send_message(Msg::Error(FrontendError::Map(error)));
-            }
-        }
-    }
-
-    fn destroy(&mut self, _ctx: &Context<Self>) {
-        self.layers.clear();
-        if let Some(map) = self.map.take() {
-            map.remove();
+        match self.map.create() {
+            Ok(()) => self.show_duct(ctx),
+            Err(error) => ctx.link().send_message(Msg::Error(error)),
         }
     }
 }
@@ -157,16 +134,13 @@ impl ShowDuct {
 
     /// Draws the duct and its Schächte, once both the map and the duct are there.
     fn show_duct(&mut self, ctx: &Context<Self>) {
-        let (Some(map), Some(Some(duct))) = (&self.map, &self.duct) else {
+        let (Some(map), Some(Some(duct))) = (self.map.map().cloned(), &self.duct) else {
             return;
         };
-        for layer in self.layers.drain(..) {
-            layer.remove();
-        }
+        let mut layers: Vec<leaflet::Layer> = Vec::new();
         if let Some(line) = &duct.line {
             let line = duct_line(line, "map-view__duct map-view__duct--selected");
-            line.add_to(map);
-            self.layers.push(line.unchecked_into());
+            layers.push(line.unchecked_into());
         }
         for end in [&duct.schacht_a, &duct.schacht_z] {
             let Some(location) = end.location else {
@@ -177,13 +151,13 @@ impl ShowDuct {
             let marker = schacht_marker(&end.name, location, move || {
                 scope.send_message(Msg::OpenSchacht(id))
             });
-            marker.add_to(map);
-            self.layers.push(marker.unchecked_into());
+            layers.push(marker.unchecked_into());
         }
         let ends = [&duct.schacht_a, &duct.schacht_z]
             .into_iter()
             .filter_map(|end| end.location.as_ref());
-        fit_points(map, duct.line.iter().flatten().chain(ends));
+        fit_points(&map, duct.line.iter().flatten().chain(ends));
+        self.map.replace_layers(layers);
     }
 }
 

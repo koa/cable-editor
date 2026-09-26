@@ -3,7 +3,7 @@
 //! The page owns the map: it renders an empty `div` for it (Leaflet owns its children) and
 //! creates the map in `rendered`.
 
-use crate::graphql::authenticated::GeoPoint;
+use crate::{error::FrontendError, graphql::authenticated::GeoPoint};
 use js_sys::{Array, Function, Object, Reflect};
 use leaflet::{
     CircleMarker, CircleOptions, Icon, LatLng, LatLngBounds, Map, MapOptions, MouseEvent,
@@ -12,12 +12,63 @@ use leaflet::{
 };
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::HtmlElement;
+use yew::NodeRef;
+
+/// A component's map: its container, the map once created and the layers drawn for the
+/// component's current state, replaced as a whole. Dropping it removes the map.
+#[derive(Default)]
+pub struct MapHolder {
+    container: NodeRef,
+    map: Option<Map>,
+    layers: Vec<leaflet::Layer>,
+}
+
+impl MapHolder {
+    /// For the empty `div` the map fills; it must stay the same element (Yew matches unkeyed
+    /// siblings from the end, so keep optional siblings before it or always rendered).
+    pub fn container(&self) -> NodeRef {
+        self.container.clone()
+    }
+
+    /// Creates the map in the rendered container, on the component's first render.
+    pub fn create(&mut self) -> Result<(), FrontendError> {
+        if let Some(container) = self.container.cast::<HtmlElement>() {
+            self.map = Some(create_map(&container).map_err(FrontendError::Map)?);
+        }
+        Ok(())
+    }
+
+    pub fn map(&self) -> Option<&Map> {
+        self.map.as_ref()
+    }
+
+    /// Removes the layers drawn before and draws these instead (none: just removes).
+    pub fn replace_layers(&mut self, layers: Vec<leaflet::Layer>) {
+        for layer in self.layers.drain(..) {
+            layer.remove();
+        }
+        if let Some(map) = &self.map {
+            for layer in &layers {
+                layer.add_to(map);
+            }
+            self.layers = layers;
+        }
+    }
+}
+
+impl Drop for MapHolder {
+    fn drop(&mut self) {
+        if let Some(map) = self.map.take() {
+            map.remove();
+        }
+    }
+}
 
 /// Center of Switzerland, shown while there is nothing to show.
 const SWITZERLAND: (f64, f64) = (46.8, 8.23);
 
 /// A map on the container with swisstopo's maps as background, showing Switzerland.
-pub fn create_map(container: &HtmlElement) -> Result<Map, JsValue> {
+fn create_map(container: &HtmlElement) -> Result<Map, JsValue> {
     let map = Map::new_with_element(container, &MapOptions::default())?;
     add_background(&map);
     map.set_view(&LatLng::new(SWITZERLAND.0, SWITZERLAND.1), 8.0);

@@ -5,7 +5,7 @@
 
 use crate::{
     error::FrontendError,
-    geo::map::{create_map, duct_hit_line, duct_line, fit_points, hover_text, schacht_marker},
+    geo::map::{MapHolder, duct_hit_line, duct_line, fit_points, hover_text, schacht_marker},
     graphql::authenticated::{
         GeoPoint,
         cable_details::{CableDuct, CablePath, CableSegmentEndSchacht},
@@ -15,9 +15,8 @@ use crate::{
 };
 use patternfly_yew::prelude::Spinner;
 use wasm_bindgen::JsCast;
-use web_sys::HtmlElement;
 use yew::{
-    Callback, Component, Context, Html, NodeRef, Properties, html, html::IntoPropValue,
+    Callback, Component, Context, Html, Properties, html, html::IntoPropValue,
     platform::spawn_local,
 };
 
@@ -60,12 +59,10 @@ pub struct CableMapProps {
 pub struct CableMap {
     data: Option<MapData>,
     error: Option<FrontendError>,
-    container: NodeRef,
-    map: Option<leaflet::Map>,
+    /// Its layers: the path and the clickable ducts, redrawn on each change of the path
+    map: MapHolder,
     /// Ducts and Schächte, drawn once
     drawn_base: bool,
-    /// The path and the clickable ducts, redrawn on each change of the path
-    layers: Vec<leaflet::Layer>,
     /// Fit the map to the path (or everything) once, later changes keep the view
     fitted: bool,
 }
@@ -91,10 +88,8 @@ impl Component for CableMap {
         Self {
             data: None,
             error: None,
-            container: NodeRef::default(),
-            map: None,
+            map: MapHolder::default(),
             drawn_base: false,
-            layers: Vec::new(),
             fitted: false,
         }
     }
@@ -128,7 +123,7 @@ impl Component for CableMap {
         html! {
             <div class="cable-map">
                 {status}
-                <div class="map-layout__map" ref={self.container.clone()}/>
+                <div class="map-layout__map" ref={self.map.container()}/>
             </div>
         }
     }
@@ -137,24 +132,9 @@ impl Component for CableMap {
         if !first_render {
             return;
         }
-        let Some(container) = self.container.cast::<HtmlElement>() else {
-            return;
-        };
-        match create_map(&container) {
-            Ok(map) => {
-                self.map = Some(map);
-                self.draw(ctx);
-            }
-            Err(error) => ctx
-                .link()
-                .send_message(Msg::Error(FrontendError::Map(error))),
-        }
-    }
-
-    fn destroy(&mut self, _ctx: &Context<Self>) {
-        self.layers.clear();
-        if let Some(map) = self.map.take() {
-            map.remove();
+        match self.map.create() {
+            Ok(()) => self.draw(ctx),
+            Err(error) => ctx.link().send_message(Msg::Error(error)),
         }
     }
 }
@@ -162,23 +142,20 @@ impl Component for CableMap {
 impl CableMap {
     /// Draws what's missing: the base once, the path and the clickable ducts anew.
     fn draw(&mut self, ctx: &Context<Self>) {
-        let (Some(map), Some(data)) = (&self.map, &self.data) else {
+        let (Some(map), Some(data)) = (self.map.map().cloned(), &self.data) else {
             return;
         };
         if !self.drawn_base {
             self.drawn_base = true;
             for line in data.ducts.iter().filter_map(|duct| duct.line.as_deref()) {
-                duct_line(line, "map-view__duct").add_to(map);
+                duct_line(line, "map-view__duct").add_to(&map);
             }
             for schacht in &data.schaechte {
                 if let Some(location) = schacht.location {
                     // No navigation from the editor, it would drop unsaved changes
-                    schacht_marker(&schacht.name, location, || {}).add_to(map);
+                    schacht_marker(&schacht.name, location, || {}).add_to(&map);
                 }
             }
-        }
-        for layer in self.layers.drain(..) {
-            layer.remove();
         }
         let props = ctx.props();
         let path_ducts: Vec<i32> = props
@@ -195,7 +172,6 @@ impl CableMap {
             .filter_map(|&id| find(id)?.line.as_deref())
         {
             let drawn = duct_line(line, "map-view__duct map-view__duct--cable");
-            drawn.add_to(map);
             layers.push(drawn.unchecked_into());
             path_points.extend(line);
         }
@@ -214,11 +190,10 @@ impl CableMap {
                 let hit = duct_hit_line(line, class, move || onedit.emit(edit.clone()));
                 let hit: leaflet::Layer = hit.unchecked_into();
                 hover_text(&hit, text);
-                hit.add_to(map);
                 layers.push(hit);
             }
         }
-        self.layers = layers;
+        self.map.replace_layers(layers);
 
         if !self.fitted {
             self.fitted = true;
@@ -227,9 +202,9 @@ impl CableMap {
                     .ducts
                     .iter()
                     .flat_map(|duct| duct.line.iter().flatten());
-                fit_points(map, all);
+                fit_points(&map, all);
             } else {
-                fit_points(map, &path_points);
+                fit_points(&map, &path_points);
             }
         }
     }

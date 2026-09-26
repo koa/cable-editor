@@ -4,7 +4,7 @@ use crate::{
         page_layout::PageLayout,
     },
     error::FrontendError,
-    geo::map::{create_map, duct_hit_line, duct_line, fit_points, schacht_marker},
+    geo::map::{MapHolder, duct_hit_line, duct_line, fit_points, schacht_marker},
     graphql::authenticated::{
         list_ducts::duct_title,
         map::{MapData, MapDuct, fetch_map_data},
@@ -12,28 +12,24 @@ use crate::{
     pages::router::{CabinetView, PlanView},
     util::{get_credentials, navigate},
 };
-use leaflet::{MouseEvent, Polyline};
+use leaflet::MouseEvent;
 use patternfly_yew::prelude::{
     Alert, AlertType, Button, ButtonVariant, Card, CardBody, CardHeader, CardHeaderActionsObject,
     CardSize, CardTitle, DescriptionGroup, DescriptionList, Icon, Spinner,
 };
-use web_sys::HtmlElement;
-use yew::{
-    Component, Context, Html, NodeRef, Properties, html, html::IntoPropValue, platform::spawn_local,
-};
+use wasm_bindgen::JsCast;
+use yew::{Component, Context, Html, Properties, html, html::IntoPropValue, platform::spawn_local};
 
 /// Map of the plan's objects: the Schächte with a position, labelled with their name (a click
 /// opens the Schacht's overview), and the ducts (a click selects one and shows its Schächte and
 /// cables as links).
 pub struct Map {
-    container: NodeRef,
-    map: Option<leaflet::Map>,
+    /// Its layers: the selected duct drawn above the others
+    map: MapHolder,
     data: Option<MapData>,
     error: Option<FrontendError>,
     /// Id of the duct whose details are shown
     selected_duct: Option<i32>,
-    /// The selected duct drawn above the others
-    highlight: Option<Polyline>,
 }
 
 pub enum Msg {
@@ -62,19 +58,17 @@ impl Component for Map {
             });
         });
         Self {
-            container: NodeRef::default(),
-            map: None,
+            map: MapHolder::default(),
             data: None,
             error: None,
             selected_duct: None,
-            highlight: None,
         }
     }
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Msg::Data(data) => {
-                if let Some(map) = &self.map {
+                if let Some(map) = self.map.map() {
                     show_data(ctx, map, &data);
                 }
                 self.data = Some(data);
@@ -85,17 +79,13 @@ impl Component for Map {
                 true
             }
             Msg::SelectDuct(id) => {
-                if let Some(highlight) = self.highlight.take() {
-                    highlight.remove();
-                }
                 self.selected_duct = id;
-                if let (Some(map), Some(duct)) = (&self.map, self.selected()) {
-                    self.highlight = duct.line.as_deref().map(|line| {
-                        let highlight = duct_line(line, "map-view__duct map-view__duct--selected");
-                        highlight.add_to(map);
-                        highlight
-                    });
-                }
+                let highlight = self
+                    .selected()
+                    .and_then(|duct| duct.line.as_deref())
+                    .map(|line| duct_line(line, "map-view__duct map-view__duct--selected"));
+                self.map
+                    .replace_layers(highlight.into_iter().map(JsCast::unchecked_into).collect());
                 true
             }
             Msg::OpenSchacht(id) => {
@@ -132,7 +122,7 @@ impl Component for Map {
             <PageLayout title="Karte">
                 {status}
                 <div class="map-view">
-                    <div class="map-view__map" ref={self.container.clone()}/>
+                    <div class="map-view__map" ref={self.map.container()}/>
                     <div class="map-view__details">{details}</div>
                 </div>
             </PageLayout>
@@ -143,32 +133,19 @@ impl Component for Map {
         if !first_render {
             return;
         }
-        let Some(container) = self.container.cast::<HtmlElement>() else {
+        if let Err(error) = self.map.create() {
+            ctx.link().send_message(Msg::Error(error));
             return;
-        };
-        match create_map(&container) {
-            Ok(map) => {
-                // A click on a duct doesn't reach the map (bubbling_mouse_events)
-                let scope = ctx.link().clone();
-                map.on_mouse_click(Box::new(move |_: MouseEvent| {
-                    scope.send_message(Msg::SelectDuct(None))
-                }));
-                if let Some(data) = &self.data {
-                    show_data(ctx, &map, data);
-                }
-                self.map = Some(map);
-            }
-            Err(error) => {
-                ctx.link()
-                    .send_message(Msg::Error(FrontendError::Map(error)));
-            }
         }
-    }
-
-    fn destroy(&mut self, _ctx: &Context<Self>) {
-        self.highlight = None;
-        if let Some(map) = self.map.take() {
-            map.remove();
+        if let Some(map) = self.map.map() {
+            // A click on a duct doesn't reach the map (bubbling_mouse_events)
+            let scope = ctx.link().clone();
+            map.on_mouse_click(Box::new(move |_: MouseEvent| {
+                scope.send_message(Msg::SelectDuct(None))
+            }));
+            if let Some(data) = &self.data {
+                show_data(ctx, map, data);
+            }
         }
     }
 }

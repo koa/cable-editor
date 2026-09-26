@@ -6,7 +6,7 @@ use crate::{
     error::FrontendError,
     geo::{
         coordinates::{Check, CoordinateSystem, check, parse_number, split_pair},
-        map::{create_map, div_icon, lat_lng},
+        map::{MapHolder, div_icon, lat_lng},
     },
     graphql::authenticated::{
         GeoPoint, IdOrNew,
@@ -28,9 +28,9 @@ use patternfly_yew::prelude::{
 };
 use wasm_bindgen::{JsCast, JsValue, closure::Closure};
 // The stable (older) names of GeolocationPosition and GeolocationPositionError
-use web_sys::{HtmlElement, Position, PositionError, PositionOptions};
+use web_sys::{Position, PositionError, PositionOptions};
 use yew::{
-    Component, Context, Html, NodeRef, Properties, html, html::IntoPropValue, html_nested,
+    Component, Context, Html, Properties, html, html::IntoPropValue, html_nested,
     platform::spawn_local,
 };
 
@@ -57,8 +57,8 @@ pub struct CabinetProperties {
     accuracy: Option<f64>,
     locating: bool,
     saving: bool,
-    container: NodeRef,
-    map: Option<leaflet::Map>,
+    map: MapHolder,
+    /// The position on the map, moved rather than replaced
     marker: Option<Marker>,
     /// Number of the last conversion request, older answers are dropped
     conversion: u32,
@@ -134,8 +134,7 @@ impl Component for CabinetProperties {
             accuracy: None,
             locating: false,
             saving: false,
-            container: NodeRef::default(),
-            map: None,
+            map: MapHolder::default(),
             marker: None,
             conversion: 0,
             _convert_delay: None,
@@ -333,7 +332,7 @@ impl Component for CabinetProperties {
             <PageLayout {title}>
                 <div class="map-layout">
                     <div class="schacht-properties__form">{content}</div>
-                    <div class="map-layout__map" ref={self.container.clone()}/>
+                    <div class="map-layout__map" ref={self.map.container()}/>
                 </div>
             </PageLayout>
         }
@@ -343,37 +342,27 @@ impl Component for CabinetProperties {
         if !first_render {
             return;
         }
-        let Some(container) = self.container.cast::<HtmlElement>() else {
+        if let Err(error) = self.map.create() {
+            self.error = Some(error);
             return;
-        };
-        match create_map(&container) {
-            Ok(map) => {
-                if self.can_edit(ctx) {
-                    let scope = ctx.link().clone();
-                    map.on_mouse_click(Box::new(move |event: MouseEvent| {
-                        let at = event.lat_lng();
-                        scope.send_message(Msg::Picked(
-                            GeoPoint {
-                                lat: at.lat(),
-                                lng: at.lng(),
-                            },
-                            None,
-                        ))
-                    }));
-                }
-                self.map = Some(map);
-                if let PositionState::Valid(point) = self.position {
-                    self.show_marker(ctx, point.wgs84, true);
-                }
-            }
-            Err(error) => self.error = Some(FrontendError::Map(error)),
         }
-    }
-
-    fn destroy(&mut self, _ctx: &Context<Self>) {
-        self.marker = None;
-        if let Some(map) = self.map.take() {
-            map.remove();
+        if let Some(map) = self.map.map()
+            && self.can_edit(ctx)
+        {
+            let scope = ctx.link().clone();
+            map.on_mouse_click(Box::new(move |event: MouseEvent| {
+                let at = event.lat_lng();
+                scope.send_message(Msg::Picked(
+                    GeoPoint {
+                        lat: at.lat(),
+                        lng: at.lng(),
+                    },
+                    None,
+                ))
+            }));
+        }
+        if let PositionState::Valid(point) = self.position {
+            self.show_marker(ctx, point.wgs84, true);
         }
     }
 }
@@ -487,7 +476,7 @@ impl CabinetProperties {
 
     /// Places the marker (creates it on the first position); `center` brings it into view.
     fn show_marker(&mut self, ctx: &Context<Self>, point: GeoPoint, center: bool) {
-        let Some(map) = &self.map else {
+        let Some(map) = self.map.map() else {
             return;
         };
         let position = lat_lng(point);
