@@ -1,11 +1,14 @@
 use crate::{
     components::{
-        links::{CableLink, SchachtLink},
+        links::{CableLink, DuctLink, SchachtLink},
         page_layout::PageLayout,
     },
     error::FrontendError,
     geo::map::{create_map, duct_hit_line, duct_line, fit_points, schacht_marker},
-    graphql::authenticated::map::{MapData, MapDuct, fetch_map_data},
+    graphql::authenticated::{
+        list_ducts::duct_title,
+        map::{MapData, MapDuct, fetch_map_data},
+    },
     pages::router::{AppRoute, CabinetView, PlanView},
     util::get_credentials,
 };
@@ -185,10 +188,11 @@ impl Map {
 
 /// The selected duct's details in a card above the map.
 fn view_duct(ctx: &Context<Map>, duct: &MapDuct) -> Html {
-    let title = duct
-        .description
-        .clone()
-        .unwrap_or_else(|| format!("Trasse {} – {}", duct.schacht_a.name, duct.schacht_z.name));
+    let title = duct_title(
+        duct.description.as_deref(),
+        &duct.schacht_a.name,
+        &duct.schacht_z.name,
+    );
     let actions = CardHeaderActionsObject {
         actions: html! {
             <Button
@@ -215,7 +219,7 @@ fn view_duct(ctx: &Context<Map>, duct: &MapDuct) -> Html {
     html! {
         <Card size={CardSize::Compact}>
             <CardHeader actions={Some(actions)}>
-                <CardTitle>{title}</CardTitle>
+                <CardTitle><DuctLink id={duct.id} text={title}/></CardTitle>
             </CardHeader>
             <CardBody>
                 <DescriptionList compact=true>

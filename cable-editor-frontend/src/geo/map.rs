@@ -1,4 +1,5 @@
-//! Shared pieces for pages with a Leaflet map (`pages/map.rs`, `pages/cabinet/properties.rs`).
+//! Shared pieces for pages with a Leaflet map (`pages/map.rs`, `pages/cabinet/properties.rs`,
+//! `pages/duct/show.rs`).
 //! The page owns the map: it renders an empty `div` for it (Leaflet owns its children) and
 //! creates the map in `rendered`.
 

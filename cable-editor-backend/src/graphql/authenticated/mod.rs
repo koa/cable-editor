@@ -10,7 +10,7 @@ use crate::{
             plan::Plan,
             schacht::{Schacht, SchachtTyp},
         },
-        schema::{kabel, panel, plan, schacht},
+        schema::{kabel, panel, plan, schacht, trasse},
     },
     graphql::{
         context::UserInfo,
@@ -90,6 +90,14 @@ impl Query {
         let mut connection = get_connection(ctx).await?;
         let query = Duct::query();
         Ok(query.load(&mut connection).await?)
+    }
+    async fn duct(&self, ctx: &Context<'_>, duct_id: i32) -> async_graphql::Result<Option<Duct>> {
+        let mut connection = get_connection(ctx).await?;
+        Ok(Duct::query()
+            .filter(trasse::id.eq(duct_id))
+            .first(&mut connection)
+            .await
+            .optional()?)
     }
     async fn list_plan(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Plan>> {
         let mut connection = get_connection(ctx).await?;

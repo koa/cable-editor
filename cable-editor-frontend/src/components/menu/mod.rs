@@ -6,6 +6,7 @@ use yew::{Html, Properties, function_component, html, use_context};
 
 pub mod list_cabinet;
 pub mod list_cable;
+pub mod list_duct;
 pub mod list_panel;
 pub mod list_plan;
 pub mod popup;

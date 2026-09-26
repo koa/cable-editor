@@ -744,6 +744,11 @@ body {
     flex: 1 1 auto;
     min-width: 0;
   }
+
+  // A plain last item (e.g. "Neuer Schacht") in the size of the menus before it
+  .pf-v6-c-breadcrumb__item {
+    font-size: var(--pf-t--global--font--size--body--default);
+  }
 }
 
 // Information only, not a choice
@@ -862,7 +867,8 @@ body {
   list-style: none;
 }
 
-// A page's content and a map side by side, stacked on phones (pages/cabinet/properties.rs)
+// A page's content and a map side by side, stacked on phones (pages/cabinet/properties.rs,
+// pages/duct/show.rs)
 .map-layout {
   display: grid;
   gap: var(--pf-t--global--spacer--lg);
@@ -899,4 +905,10 @@ body {
   background: var(--pf-t--global--background--color--primary--default);
   box-shadow: var(--pf-t--global--box-shadow--sm);
   cursor: grab;
+}
+
+.duct-page__cables {
+  margin: 0;
+  padding-inline-start: 0;
+  list-style: none;
 }

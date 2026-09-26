@@ -301,6 +301,7 @@ const root = {
   listCable: () => cableRows.map((c) => cable(c[0])),
   cable: ({ cableId }) => (cableRows.some((c) => c[0] === cableId) ? cable(cableId) : null),
   listDuct: () => cableRows.map(duct),
+  duct: ({ ductId }) => { const c = cableRows.find((r) => 700 + r[0] === ductId); return c ? duct(c) : null; },
   listPlan: () => plans.map((p) => plan(p.id)),
   plan: ({ planId }) => plan(planId),
   panel: ({ panelId }) => panel(panelId),

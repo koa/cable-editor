@@ -1,8 +1,8 @@
 //! Links to elements shown on a page, each to the view that fits best: a Schacht to its overview,
-//! a panel to its connection overview, a cable to its page (its only view).
+//! a panel to its connection overview, a cable or a duct to its page (its only view).
 use crate::{
     components::plan_link::PlanLink,
-    pages::router::{CabinetView, CableView, PanelView, PlanView},
+    pages::router::{CabinetView, CableView, DuctView, PanelView, PlanView},
 };
 use yew::{AttrValue, Html, Properties, function_component, html};
 
@@ -36,6 +36,15 @@ pub fn CableLink(props: &ElementLinkProps) -> Html {
     let to = PlanView::Cable {
         id: props.id,
         view: CableView::Edit,
+    };
+    html!(<PlanLink {to}>{props.text.clone()}</PlanLink>)
+}
+
+#[function_component]
+pub fn DuctLink(props: &ElementLinkProps) -> Html {
+    let to = PlanView::Duct {
+        id: props.id,
+        view: DuctView::Show,
     };
     html!(<PlanLink {to}>{props.text.clone()}</PlanLink>)
 }

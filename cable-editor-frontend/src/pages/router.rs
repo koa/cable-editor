@@ -1,5 +1,6 @@
 use crate::components::menu::list_cabinet::ListCabinet;
 use crate::components::menu::list_cable::ListCable;
+use crate::components::menu::list_duct::ListDuct;
 use crate::components::menu::list_panel::ListPanel;
 use crate::components::menu::list_plan::ListPlan;
 use crate::components::menu::{MenuDropdown, MenuEntry};
@@ -15,6 +16,7 @@ use crate::{
             properties::CabinetProperties,
         },
         cable::edit::EditCable,
+        duct::{list::ListOfDucts, show::ShowDuct},
         list_of_cables::ListOfCables,
         map::Map,
         panel::EditPanel,
@@ -85,6 +87,11 @@ pub enum CableView {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Target)]
+pub enum DuctView {
+    Show,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Target)]
 pub enum CabinetView {
     Overview,
     Properties,
@@ -134,6 +141,12 @@ pub enum PlanView {
         view: CableView,
     },
     Map,
+    ListOfDucts,
+    Duct {
+        id: i32,
+        #[target(nested)]
+        view: DuctView,
+    },
     Panel {
         id: i32,
         #[target(nested)]
@@ -152,6 +165,9 @@ impl PlanView {
             | PlanView::Panel { .. } => ("Schacht".into(), PlanView::ListOfCabinets),
             PlanView::Cable { .. } | PlanView::ListOfCables => {
                 ("Kabel".into(), PlanView::ListOfCables)
+            }
+            PlanView::Duct { .. } | PlanView::ListOfDucts => {
+                ("Trasse".into(), PlanView::ListOfDucts)
             }
             PlanView::Map => ("Karte".into(), PlanView::Map),
         };
@@ -186,6 +202,15 @@ impl PlanView {
 
         entries.push(MenuEntry {
             selected: false,
+            text: "Trasse".into(),
+            target: AppRoute::Plan {
+                plan_id,
+                view: PlanView::ListOfDucts,
+            },
+        });
+
+        entries.push(MenuEntry {
+            selected: false,
             text: "Karte".into(),
             target: AppRoute::Plan {
                 plan_id,
@@ -212,6 +237,9 @@ impl PlanView {
                     .push(html!(<ListPanel {plan_id} panel_id={*id} view={view.clone()}/>));
             }
             PlanView::NewCabinet => item_contents.push(html!("Neuer Schacht")),
+            PlanView::Duct { id, view } => {
+                item_contents.push(html!(<ListDuct {plan_id} duct_id={*id} view={view.clone()}/>))
+            }
             _ => {}
         }
     }
@@ -303,6 +331,16 @@ impl PlanView {
             PlanView::Cable { id, view } => view.content(plan_id, id),
             PlanView::Panel { id, view } => view.content(plan_id, id),
             PlanView::Map => html!(<Map {plan_id}/>),
+            PlanView::ListOfDucts => html!(<ListOfDucts/>),
+            PlanView::Duct { id, view } => view.content(plan_id, id),
+        }
+    }
+}
+
+impl DuctView {
+    fn content(self, plan_id: i32, duct_id: i32) -> Html {
+        match self {
+            DuctView::Show => html!(<ShowDuct {plan_id} {duct_id}/>),
         }
     }
 }
