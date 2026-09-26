@@ -3,7 +3,6 @@ pub mod planned;
 
 use crate::{
     db::{
-        DB,
         entity::{
             Duct, FiberPathNode,
             cable::Cable,
@@ -127,13 +126,6 @@ impl Query {
 
 pub fn create_authenticated_schema() -> AuthenticatedGraphqlSchema {
     Schema::build(Query, Mutation, EmptySubscription).finish()
-}
-
-pub async fn get_connection2(
-    ctx: &Context<'_>,
-) -> async_graphql::Result<DpObject<AsyncPgConnection>> {
-    let db = ctx.data::<DB>()?;
-    Ok(db.get().await?)
 }
 
 pub async fn get_connection<'a>(
