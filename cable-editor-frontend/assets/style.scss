@@ -796,3 +796,19 @@ body {
     }
   }
 }
+
+// pages/map.rs: the page scrolls, so the map needs a height of its own
+.map-view {
+  height: 70vh;
+  min-height: 20rem;
+  margin-block-start: var(--pf-t--global--spacer--md);
+  border-radius: var(--pf-t--global--border--radius--small);
+}
+
+// Leaflet sets the colours as SVG attributes, which can't take tokens; CSS wins over them
+.map-view__schacht {
+  stroke: var(--pf-t--global--color--brand--default);
+  fill: var(--pf-t--global--background--color--primary--default);
+  fill-opacity: 1;
+  stroke-width: 3;
+}

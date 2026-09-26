@@ -13,6 +13,7 @@ use crate::{
         cabinet::{edit::EditCabinetPanels, list::ListOfCabinets, overview::CabinetOverview},
         cable::edit::EditCable,
         list_of_cables::ListOfCables,
+        map::Map,
         panel::EditPanel,
         planning::{edit::EditPlan, list::ListOfPlannings},
     },
@@ -127,6 +128,7 @@ pub enum PlanView {
         #[target(nested)]
         view: CableView,
     },
+    Map,
     Panel {
         id: i32,
         #[target(nested)]
@@ -145,6 +147,7 @@ impl PlanView {
             PlanView::Cable { .. } | PlanView::ListOfCables => {
                 ("Kabel".into(), PlanView::ListOfCables)
             }
+            PlanView::Map => ("Karte".into(), PlanView::Map),
         };
 
         let mut entries = Vec::new();
@@ -172,6 +175,15 @@ impl PlanView {
             target: AppRoute::Plan {
                 plan_id,
                 view: PlanView::ListOfCables,
+            },
+        });
+
+        entries.push(MenuEntry {
+            selected: false,
+            text: "Karte".into(),
+            target: AppRoute::Plan {
+                plan_id,
+                view: PlanView::Map,
             },
         });
 
@@ -279,6 +291,7 @@ impl PlanView {
             PlanView::ListOfCables => html! {<ListOfCables/>},
             PlanView::Cable { id, view } => view.content(plan_id, id),
             PlanView::Panel { id, view } => view.content(plan_id, id),
+            PlanView::Map => html!(<Map {plan_id}/>),
         }
     }
 }

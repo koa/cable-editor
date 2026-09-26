@@ -2,6 +2,7 @@ use cynic::http::CynicReqwestError;
 use patternfly_yew::prelude::{Alert, AlertType};
 use reqwest::header::InvalidHeaderValue;
 use thiserror::Error;
+use wasm_bindgen::{JsCast, JsValue};
 use yew::{Html, html, html::IntoPropValue};
 
 #[derive(Error, Debug)]
@@ -34,6 +35,8 @@ pub enum FrontendError {
     PrinterNoSupply,
     #[error("Unsupported tape, only continuous tape is supported")]
     UnsupportedTape,
+    #[error("Map error: {0:?}")]
+    Map(JsValue),
 }
 
 impl IntoPropValue<Html> for &FrontendError {
@@ -93,6 +96,20 @@ impl IntoPropValue<Html> for &FrontendError {
             FrontendError::UnsupportedTape => {
                 html!(<Alert inline=true title={"Etikettentyp wird nicht unterstützt (nur Endlosband)".to_string()} r#type={AlertType::Danger} />)
             }
+            FrontendError::Map(e) => {
+                html!(<Alert inline=true title={format!("Karte konnte nicht angezeigt werden: {}", js_message(e))} r#type={AlertType::Danger} />)
+            }
         }
+    }
+}
+
+/// Message of an error thrown by JavaScript: an `Error`'s message, a thrown string itself.
+fn js_message(value: &JsValue) -> String {
+    if let Some(error) = value.dyn_ref::<js_sys::Error>() {
+        String::from(error.message())
+    } else if let Some(text) = value.as_string() {
+        text
+    } else {
+        format!("{value:?}")
     }
 }
