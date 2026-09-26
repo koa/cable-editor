@@ -54,9 +54,10 @@ const panelRows = [
   [32, 'Kassette A', 2, 31, 0, ['SPLICE', 12, 'A']],
 ];
 const plans = [
-  { id: 0, name: 'Ist-Zustand', status: 'IMPLEMENTED' },
-  { id: 1, name: 'Erschliessung Gewerbe Nord', status: 'OPEN' },
-  { id: 2, name: 'Umbau Dorfplatz 2025', status: 'IMPLEMENTED' },
+  // Plan 0 is the baseline (current state); implemented plans are deleted
+  { id: 0, name: 'Ist-Zustand' },
+  { id: 1, name: 'Erschliessung Gewerbe Nord' },
+  { id: 2, name: 'Umbau Dorfplatz 2025' },
 ];
 const devices = [{ id: 501, name: 'ODF-SCH101-1', deviceType: 'ODF 144', locationName: 'SCH 101', ports: 24 }];
 
@@ -155,6 +156,7 @@ const plan = (id) => {
   if (!p) return null;
   return {
     ...p,
+    isBaseline: id === 0,
     rootPanels: () => panelRows.filter((r) => r[3] === null).map((r) => plannedPanel(r[0], id)),
     panel: ({ panelId }) => plannedPanel(panelId, id),
     usage: () => (planUsage[id] || []).map((u) => portUsage(id, u[0], u[1])),
