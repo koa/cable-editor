@@ -169,18 +169,23 @@ body {
 .swisscom-fiber-11 { --pf-v6-c-label--BackgroundColor: var(--swisscom-fiber-11); --pf-v6-c-label--Color: #000000; }
 .swisscom-fiber-12 { --pf-v6-c-label--BackgroundColor: var(--swisscom-fiber-12); --pf-v6-c-label--Color: #000000; }
 
-/* Ringsignierung für Fasern 13–24 */
+/* Fasern 13-24: Ringe an beiden Enden in Kontrastfarbe (wie auf dem Kabel: dunkel, auf
+   Schwarz hell), die Mitte mit der Nummer bleibt in der Grundfarbe. `isolation` und
+   `z-index: -1` legen die Ringe über die Farbe, die PatternFly auf
+   `.pf-v6-c-label__content::before` malt, aber unter die Schrift. */
+.swisscom-fiber-ring {
+  isolation: isolate;
+  --swisscom-fiber-ring: color-mix(in srgb, var(--pf-v6-c-label--Color) 60%, transparent);
+}
+
 .swisscom-fiber-ring::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: repeating-linear-gradient(
-          45deg,
-          transparent,
-          transparent 4px,
-          rgba(0, 0, 0, 0.5) 4px,
-          rgba(0, 0, 0, 0.5) 7px
-  );
+  z-index: -1;
+  background:
+    repeating-linear-gradient(90deg, var(--swisscom-fiber-ring) 0 3px, transparent 3px 6px) left 0.45em center / 0.95em 100% no-repeat,
+    repeating-linear-gradient(90deg, var(--swisscom-fiber-ring) 0 3px, transparent 3px 6px) right 0.45em center / 0.95em 100% no-repeat;
   pointer-events: none;
 }
 
