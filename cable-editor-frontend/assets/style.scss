@@ -862,8 +862,8 @@ body {
   list-style: none;
 }
 
-// pages/cabinet/properties.rs: form and map side by side, stacked on phones
-.schacht-properties {
+// A page's content and a map side by side, stacked on phones (pages/cabinet/properties.rs)
+.map-layout {
   display: grid;
   gap: var(--pf-t--global--spacer--lg);
   grid-template-columns: minmax(0, 1fr);
@@ -873,7 +873,7 @@ body {
   }
 }
 
-.schacht-properties__map {
+.map-layout__map {
   // Keeps Leaflet's z-indexes inside the map, see .map-view
   isolation: isolate;
   height: 60vh;

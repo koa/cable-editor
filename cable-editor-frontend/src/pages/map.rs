@@ -4,24 +4,16 @@ use crate::{
         page_layout::PageLayout,
     },
     error::FrontendError,
-    geo::map::{create_map, lat_lng, set_option},
-    graphql::authenticated::{
-        GeoPoint,
-        map::{MapData, MapDuct, fetch_map_data},
-    },
+    geo::map::{create_map, duct_hit_line, duct_line, fit_points, schacht_marker},
+    graphql::authenticated::map::{MapData, MapDuct, fetch_map_data},
     pages::router::{AppRoute, CabinetView, PlanView},
     util::get_credentials,
 };
-use js_sys::{Array, Object};
-use leaflet::{
-    CircleMarker, CircleOptions, LatLngBounds, MouseEvent, MouseEvents, Polyline, PolylineOptions,
-    Tooltip, TooltipOptions,
-};
+use leaflet::{MouseEvent, Polyline};
 use patternfly_yew::prelude::{
     Alert, AlertType, Button, ButtonVariant, Card, CardBody, CardHeader, CardHeaderActionsObject,
     CardSize, CardTitle, DescriptionGroup, DescriptionList, Icon, Spinner,
 };
-use wasm_bindgen::JsValue;
 use web_sys::HtmlElement;
 use yew::{
     Callback, Component, Context, Html, NodeRef, Properties, html, html::IntoPropValue,
@@ -98,9 +90,7 @@ impl Component for Map {
                 self.selected_duct = id;
                 if let (Some(map), Some(duct)) = (&self.map, self.selected()) {
                     self.highlight = duct.line.as_deref().map(|line| {
-                        let options = duct_options("map-view__duct map-view__duct--selected");
-                        options.set_interactive(false);
-                        let highlight = Polyline::new_with_options(&points(line), &options);
+                        let highlight = duct_line(line, "map-view__duct map-view__duct--selected");
                         highlight.add_to(map);
                         highlight
                     });
@@ -242,77 +232,31 @@ fn view_duct(ctx: &Context<Map>, duct: &MapDuct) -> Html {
 }
 
 fn show_data(ctx: &Context<Map>, map: &leaflet::Map, data: &MapData) {
-    let corners = Array::new();
     // Ducts first, so the Schächte lie above them
     for duct in &data.ducts {
         let Some(line) = &duct.line else {
             continue;
         };
-        for point in line {
-            corners.push(&lat_lng(*point));
-        }
-        let options = duct_options("map-view__duct");
-        options.set_interactive(false);
-        Polyline::new_with_options(&points(line), &options).add_to(map);
-        // A wide invisible line takes the clicks, the visible one is hard to hit on a phone
-        let options = duct_options("map-view__duct-hit");
-        options.set_weight(20.0);
-        options.set_bubbling_mouse_events(false);
-        let hit = Polyline::new_with_options(&points(line), &options);
+        duct_line(line, "map-view__duct").add_to(map);
         let id = duct.id;
         let scope = ctx.link().clone();
-        hit.on_click(Box::new(move |_: MouseEvent| {
-            scope.send_message(Msg::SelectDuct(Some(id)))
-        }));
-        hit.add_to(map);
+        duct_hit_line(line, move || scope.send_message(Msg::SelectDuct(Some(id)))).add_to(map);
     }
     for schacht in &data.schaechte {
         let Some(location) = schacht.location else {
             continue;
         };
-        let position = lat_lng(location);
-        corners.push(&position);
-
-        let options = CircleOptions::default();
-        options.set_radius(7.0);
-        options.set_class_name("map-view__schacht".to_string());
-        let marker = CircleMarker::new_with_options(&position, &options);
-
-        let tooltip = TooltipOptions::default();
-        tooltip.set_permanent(true);
-        tooltip.set_direction("right".to_string());
-        tooltip.set_offset(leaflet::Point::new(8.0, 0.0));
-        // Lets a click on the name open the Schacht too, easier to hit on a phone
-        set_option(&tooltip, "interactive", &JsValue::TRUE);
-        // The crate's bind_tooltip_with_content calls a method Leaflet doesn't have
-        let tooltip = Tooltip::new(&tooltip, None);
-        tooltip.set_content(&JsValue::from_str(&schacht.name));
-        marker.bind_tooltip(&tooltip);
-
         let id = schacht.id;
         let scope = ctx.link().clone();
-        marker.on_click(Box::new(move |_: MouseEvent| {
+        schacht_marker(&schacht.name, location, move || {
             scope.send_message(Msg::OpenSchacht(id))
-        }));
-        marker.add_to(map);
+        })
+        .add_to(map);
     }
-    if corners.length() > 0 {
-        // A single Schacht would otherwise be shown at the deepest zoom
-        let options = Object::new();
-        set_option(&options, "maxZoom", &JsValue::from_f64(18.0));
-        map.fit_bounds_with_options(&LatLngBounds::new_from_list(&corners), &options);
-    }
-}
-
-/// The colours come from the CSS class, see `.map-view__schacht`.
-fn duct_options(class: &str) -> PolylineOptions {
-    let options = PolylineOptions::default();
-    options.set_class_name(class.to_string());
-    options
-}
-
-fn points(line: &[GeoPoint]) -> Array {
-    line.iter()
-        .map(|point| JsValue::from(lat_lng(*point)))
-        .collect()
+    let duct_points = data
+        .ducts
+        .iter()
+        .flat_map(|duct| duct.line.iter().flatten());
+    let schacht_points = data.schaechte.iter().filter_map(|s| s.location.as_ref());
+    fit_points(map, duct_points.chain(schacht_points));
 }

@@ -348,9 +348,9 @@ impl Component for CabinetProperties {
         // The map's div is always there, so Leaflet keeps its element (see pages/map.rs)
         html! {
             <PageLayout {title}>
-                <div class="schacht-properties">
+                <div class="map-layout">
                     <div class="schacht-properties__form">{content}</div>
-                    <div class="schacht-properties__map" ref={self.container.clone()}/>
+                    <div class="map-layout__map" ref={self.container.clone()}/>
                 </div>
             </PageLayout>
         }
