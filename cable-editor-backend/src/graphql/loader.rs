@@ -4,16 +4,22 @@
 //! The loader uses the request's connection, so it sees the request's transaction. Resolvers
 //! must not hold `get_connection`'s guard while waiting for the loader, that would deadlock.
 
-use crate::db::{
-    entity::{
-        cable::Cable,
-        schacht::{Schacht, SchachtTyp},
+use crate::{
+    db::{
+        entity::{
+            WGS84,
+            cable::Cable,
+            schacht::{Schacht, SchachtTyp},
+            st_transform,
+        },
+        schema,
     },
-    schema,
+    graphql::model::GeoPoint,
 };
 use async_graphql::{Context, dataloader::DataLoader, dataloader::Loader};
 use diesel::{ExpressionMethods, HasQuery, QueryDsl};
 use diesel_async::{AsyncPgConnection, RunQueryDsl, pooled_connection::deadpool::Object};
+use postgis_diesel::types::{LineString, Point};
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex;
 
@@ -55,6 +61,18 @@ pub struct SchachtTypId(pub i32);
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct CableId(pub i32);
+
+/// Position of a Schacht in WGS84, missing without geometry.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct SchachtLocation(pub i32);
+
+/// Line of a duct in WGS84 including its Schächte, missing without geometry.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct DuctLine(pub i32);
+
+/// Cables through a duct, missing for an empty duct.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct DuctCables(pub i32);
 
 fn ids<K>(keys: &[K], id: impl Fn(&K) -> i32) -> Vec<i32> {
     keys.iter().map(id).collect()
@@ -102,5 +120,80 @@ impl Loader<CableId> for DbLoader {
             .load(&mut connection)
             .await?;
         Ok(list.into_iter().map(|c| (CableId(c.id), c)).collect())
+    }
+}
+
+impl Loader<SchachtLocation> for DbLoader {
+    type Value = GeoPoint;
+    type Error = async_graphql::Error;
+
+    async fn load(
+        &self,
+        keys: &[SchachtLocation],
+    ) -> Result<HashMap<SchachtLocation, GeoPoint>, Self::Error> {
+        let mut connection = self.connection.lock().await;
+        let list: Vec<(i32, Option<Point>)> = schema::schacht::table
+            .filter(schema::schacht::id.eq_any(ids(keys, |k| k.0)))
+            .select((
+                schema::schacht::id,
+                st_transform(schema::schacht::geom, WGS84),
+            ))
+            .load(&mut connection)
+            .await?;
+        Ok(list
+            .into_iter()
+            .filter_map(|(id, point)| Some((SchachtLocation(id), point?.into())))
+            .collect())
+    }
+}
+
+impl Loader<DuctLine> for DbLoader {
+    type Value = Vec<GeoPoint>;
+    type Error = async_graphql::Error;
+
+    async fn load(
+        &self,
+        keys: &[DuctLine],
+    ) -> Result<HashMap<DuctLine, Vec<GeoPoint>>, Self::Error> {
+        let mut connection = self.connection.lock().await;
+        let list: Vec<(i32, Option<LineString<Point>>)> = schema::trassen_mit_endpunkten::table
+            .filter(schema::trassen_mit_endpunkten::id.eq_any(ids(keys, |k| k.0)))
+            .select((
+                schema::trassen_mit_endpunkten::id,
+                st_transform(schema::trassen_mit_endpunkten::geom, WGS84),
+            ))
+            .load(&mut connection)
+            .await?;
+        Ok(list
+            .into_iter()
+            .filter_map(|(id, line)| {
+                let points = line?.points.into_iter().map(GeoPoint::from).collect();
+                Some((DuctLine(id), points))
+            })
+            .collect())
+    }
+}
+
+impl Loader<DuctCables> for DbLoader {
+    type Value = Vec<Cable>;
+    type Error = async_graphql::Error;
+
+    async fn load(
+        &self,
+        keys: &[DuctCables],
+    ) -> Result<HashMap<DuctCables, Vec<Cable>>, Self::Error> {
+        let mut connection = self.connection.lock().await;
+        let list: Vec<(i32, Cable)> = schema::kabel_trasse::table
+            .inner_join(schema::kabel::table)
+            .filter(schema::kabel_trasse::trasse.eq_any(ids(keys, |k| k.0)))
+            .order(schema::kabel::name.asc())
+            .select((schema::kabel_trasse::trasse, schema::kabel::all_columns))
+            .load(&mut connection)
+            .await?;
+        let mut cables: HashMap<DuctCables, Vec<Cable>> = HashMap::new();
+        for (duct, cable) in list {
+            cables.entry(DuctCables(duct)).or_default().push(cable);
+        }
+        Ok(cables)
     }
 }

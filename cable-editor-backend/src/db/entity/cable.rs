@@ -2,7 +2,7 @@ use crate::db::entity::plan::BASELINE_PLAN_ID;
 use crate::{
     db::{
         entity::{
-            Duct,
+            Duct, WGS84,
             panel::PortUsage,
             path::{DirectedDuct, DuctAlignmentError, align_ducts},
             schacht::{Schacht, fetch_schacht},
@@ -13,15 +13,23 @@ use crate::{
     graphql::{
         authenticated::get_connection,
         loader::{CableId, SchachtId, load_one},
+        model::GeoPoint,
     },
 };
 use async_graphql::{Context, Object};
 use diesel::{
     AsChangeset, ExpressionMethods, HasQuery, Identifiable, Insertable, OptionalExtension,
-    QueryDsl, QueryableByName, dsl::sum,
+    QueryDsl, QueryableByName,
+    dsl::sum,
+    sql_query,
+    sql_types::{Integer, Nullable},
 };
 use diesel_async::{
     AsyncConnection, AsyncPgConnection, RunQueryDsl, pooled_connection::deadpool::Object,
+};
+use postgis_diesel::{
+    sql_types::Geometry,
+    types::{LineString, Point},
 };
 
 #[derive(Identifiable, Insertable, HasQuery, Debug, Clone, PartialEq, QueryableByName)]
@@ -32,6 +40,12 @@ pub struct Cable {
     pub name: String,
     pub buendel_anz: i32,
     pub faser_anz: i32,
+}
+
+#[derive(QueryableByName)]
+struct CableLine {
+    #[diesel(sql_type = Nullable<Geometry>)]
+    line: Option<LineString<Point>>,
 }
 
 #[derive(Insertable, HasQuery, Debug, Clone, PartialEq)]
@@ -130,6 +144,29 @@ impl Cable {
     async fn path(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<CablePath>> {
         let mut connection = get_connection(ctx).await?;
         self.build_cable_path(&mut connection).await
+    }
+    /// Course in WGS84 for the map; missing without ducts or with a gap between them
+    async fn line(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<Vec<GeoPoint>>> {
+        let mut connection = get_connection(ctx).await?;
+        // Unlike the view kabel_pfad, which fails on a gap (no LineString to cast to)
+        let line: Option<CableLine> = sql_query(
+            r#"
+            SELECT ST_Transform(merged, $2) AS line
+            FROM (SELECT ST_LineMerge(ST_Collect(t.geom ORDER BY kt.sequenz)) AS merged
+                  FROM kabel_trasse kt
+                  JOIN trassen_mit_endpunkten t ON t.id = kt.trasse
+                  WHERE kt.kabel = $1) m
+            WHERE GeometryType(merged) = 'LINESTRING'
+            "#,
+        )
+        .bind::<Integer, _>(self.id)
+        .bind::<Integer, _>(WGS84)
+        .get_result(&mut connection)
+        .await
+        .optional()?;
+        Ok(line
+            .and_then(|l| l.line)
+            .map(|l| l.points.into_iter().map(GeoPoint::from).collect()))
     }
     async fn end(&self, ctx: &Context<'_>, schacht_id: i32) -> async_graphql::Result<CableEnd> {
         let mut connection = get_connection(ctx).await?;

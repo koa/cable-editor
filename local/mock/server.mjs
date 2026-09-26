@@ -37,8 +37,10 @@ async function idToken(nonce) {
 // ---------------------------------------------------------------- data
 // Plan 0 is the current state; plan 1 is open and changes two ports of Spleisskassette 2.
 const schachtRows = [
-  [1, 'SCH 101 Bahnhofstrasse'], [2, 'SCH 102 Dorfplatz'], [3, 'SCH 103 Schulhaus'],
-  [4, 'SCH 104 Industrie Nord'], [5, 'SCH 105 Werkhof'],
+  // id, name, [lat, lng] (the real data is LV95, the backend delivers WGS84)
+  [1, 'SCH 101 Bahnhofstrasse', [47.41963, 8.88611]], [2, 'SCH 102 Dorfplatz', [47.41988, 8.88618]],
+  [3, 'SCH 103 Schulhaus', [47.42074, 8.88590]], [4, 'SCH 104 Industrie Nord', [47.41778, 8.88441]],
+  [5, 'SCH 105 Werkhof', [47.41803, 8.88398]],
 ];
 const cableRows = [
   // id, name, bundles, fibers, length, schacht a, schacht z
@@ -95,7 +97,8 @@ const schacht = (id) => {
   const r = schachtRows.find((s) => s[0] === id);
   if (!r) return null;
   return {
-    id, name: r[1], typ: null, position: { x: 8.7 + id / 100, y: 47.4 },
+    id, name: r[1], typ: null, position: { x: 2700000 + id * 10, y: 1260000 + id * 10 },
+    location: { lat: r[2][0], lng: r[2][1] },
     connectingDuct: () => [],
     rootPanels: () => panelRows.filter((p) => p[2] === id && p[3] === null).map((p) => panel(p[0])),
     cable: ({ cableId }) => cablesAt(id).find((c) => c.cable.id === cableId) ?? null,
@@ -104,12 +107,22 @@ const schacht = (id) => {
 };
 const cablesAt = (schachtId) =>
   cableRows.filter((c) => c[5] === schachtId || c[6] === schachtId).map((c) => cableEnd(c[0], schachtId));
-const duct = (c) => ({ id: 700 + c[0], description: `Rohr ${c[1]}`, schachtA: schacht(c[5]), schachtZ: schacht(c[6]), length: c[4] });
+// Each cable runs through a duct of its own, bent a little between its Schächte
+const ductLine = (c) => {
+  const a = schacht(c[5]).location, z = schacht(c[6]).location;
+  const bend = { lat: (a.lat + z.lat) / 2 + 0.00005 * (c[0] % 3 - 1), lng: (a.lng + z.lng) / 2 + 0.00005 };
+  return [a, bend, z];
+};
+const duct = (c) => ({
+  id: 700 + c[0], description: `Rohr ${c[1]}`, schachtA: schacht(c[5]), schachtZ: schacht(c[6]), length: c[4],
+  ownWork: c[0] !== 13, cables: () => [cable(c[0])], line: ductLine(c),
+});
 const cable = (id) => {
   const c = cableRows.find((r) => r[0] === id);
   return {
     id, name: c[1], bundleCount: c[2], fiberCount: c[3], length: c[4],
     path: () => cablePath(id, c[5]),
+    line: ductLine(c),
     end: ({ schachtId }) => cableEnd(id, schachtId),
   };
 };

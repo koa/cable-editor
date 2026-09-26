@@ -12,10 +12,12 @@ use crate::{
     },
     graphql::{
         authenticated::get_connection,
-        loader::{SchachtId, load_one},
+        loader::{DuctCables, DuctLine, SchachtId, get_loader, load_one},
+        model::GeoPoint,
     },
 };
 use async_graphql::{Context, Object};
+use cable::Cable;
 use diesel::{
     AsExpression, FromSqlRow, HasQuery, Identifiable, Insertable, QueryDsl, QueryableByName,
     deserialize,
@@ -75,6 +77,20 @@ impl Duct {
     }
     async fn description(&self) -> Option<&str> {
         self.description.as_deref()
+    }
+    /// Built by ourselves (`eigenleistung`), not rented
+    async fn own_work(&self) -> bool {
+        self.eigenleistung
+    }
+    async fn cables(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Cable>> {
+        Ok(get_loader(ctx)?
+            .load_one(DuctCables(self.id))
+            .await?
+            .unwrap_or_default())
+    }
+    /// Line in WGS84 for the map, from Schacht A to Schacht Z
+    async fn line(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<Vec<GeoPoint>>> {
+        get_loader(ctx)?.load_one(DuctLine(self.id)).await
     }
     async fn schacht_a(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
         load_one(ctx, SchachtId(self.schacht_a)).await
@@ -143,6 +159,14 @@ impl ToSql<schema::sql_types::Xml, Pg> for XmlDocument {
         out.write_all(self.0.as_bytes())?;
         Ok(IsNull::No)
     }
+}
+
+/// SRID of WGS84, what the map (Leaflet) takes.
+pub const WGS84: i32 = 4326;
+
+diesel::define_sql_function! {
+    #[sql_name = "ST_Transform"]
+    fn st_transform(geom: Nullable<Geometry>, srid: Integer) -> Nullable<Geometry>;
 }
 
 diesel::define_sql_function! {

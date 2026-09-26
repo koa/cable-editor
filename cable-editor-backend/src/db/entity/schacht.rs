@@ -16,8 +16,8 @@ use crate::{
     },
     graphql::{
         authenticated::get_connection,
-        loader::{SchachtId, SchachtTypId, get_loader, load_one},
-        model,
+        loader::{SchachtId, SchachtLocation, SchachtTypId, get_loader, load_one},
+        model::{self, GeoPoint},
     },
 };
 use postgis_diesel::types::Point;
@@ -58,6 +58,10 @@ impl Schacht {
     }
     async fn position(&self) -> Option<model::Point> {
         self.geom.map(Point::into)
+    }
+    /// Position in WGS84 for the map (`position` is LV95)
+    async fn location(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<GeoPoint>> {
+        get_loader(ctx)?.load_one(SchachtLocation(self.id)).await
     }
     async fn connecting_duct(
         &self,
