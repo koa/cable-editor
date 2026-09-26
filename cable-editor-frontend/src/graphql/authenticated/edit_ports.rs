@@ -2,7 +2,7 @@ use crate::{
     error::FrontendError,
     graphql::{
         authenticated::{IdOrNewInput, PortType, schema},
-        mutate, query, query_simple,
+        mutate, query,
     },
 };
 use yew_oauth2::context::OAuth2Context;
@@ -93,8 +93,7 @@ impl FetchedPanelWithPorts {
         let variables = FetchPanelPortsVariables { panel_id };
         Ok(query::<FetchPanelPortsQuery, _>(variables, credentials)
             .await?
-            .data
-            .and_then(|d| d.panel)
+            .panel
             .map(|p| FetchedPanelWithPorts {
                 ports: p.ports,
                 panel_name: p.name,
@@ -134,7 +133,7 @@ impl NetboxDevicePort {
         credentials: Option<&OAuth2Context>,
         netbox_device_id: i32,
     ) -> Result<Box<[NetboxDevicePort]>, FrontendError> {
-        Ok(query_simple::<FetchNetboxDevicePorts, _>(
+        Ok(query::<FetchNetboxDevicePorts, _>(
             FetchNetboxDevicePortsVariables { netbox_device_id },
             credentials,
         )

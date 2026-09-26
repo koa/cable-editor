@@ -17,7 +17,6 @@ use crate::{
     pages::router::{AppRoute, RedirectToPlans},
 };
 use brady_web_sdk::BradyProvider;
-use cynic::GraphQlResponse;
 use patternfly_yew::prelude::{BackdropViewer, Bullseye, Spinner, ToastViewer};
 use yew::{
     Context, Html, Properties, function_component, html, html::IntoPropValue,
@@ -82,23 +81,12 @@ impl yew::Component for App {
         if first_render {
             let scope = ctx.link().clone();
             spawn_local(async move {
-                let result = query_anonymous::<AuthenticationQuery, _>(()).await;
-                match result {
-                    Ok(GraphQlResponse {
-                        errors: Some(errors),
-                        ..
-                    }) => {
-                        scope.send_message(AppMessage::Error(FrontendError::Graphql(errors)));
+                scope.send_message(match query_anonymous::<AuthenticationQuery, _>(()).await {
+                    Ok(AuthenticationQuery { authentication }) => {
+                        AppMessage::AuthenticationData(authentication)
                     }
-                    Ok(GraphQlResponse { data, .. }) => {
-                        if let Some(AuthenticationQuery { authentication }) = data {
-                            scope.send_message(AppMessage::AuthenticationData(authentication));
-                        }
-                    }
-                    Err(e) => {
-                        scope.send_message(AppMessage::Error(e));
-                    }
-                }
+                    Err(error) => AppMessage::Error(error),
+                });
             });
         }
     }

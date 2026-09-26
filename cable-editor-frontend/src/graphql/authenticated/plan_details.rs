@@ -108,12 +108,11 @@ impl PlanDetails {
         credentials: Option<&OAuth2Context>,
         id: i32,
     ) -> Result<Option<PlanDetails>, FrontendError> {
-        let response = query::<FetchPlanDetailsQuery, _>(Variables { id }, credentials).await?;
-        if let Some(errors) = response.errors {
-            Err(FrontendError::Graphql(errors))
-        } else {
-            Ok(response.data.and_then(|l| l.plan))
-        }
+        Ok(
+            query::<FetchPlanDetailsQuery, _>(Variables { id }, credentials)
+                .await?
+                .plan,
+        )
     }
 
     pub async fn update_name(
@@ -121,33 +120,21 @@ impl PlanDetails {
         plan_id: i32,
         name: String,
     ) -> Result<PlanDetails, FrontendError> {
-        let response =
+        Ok(
             mutate::<UpdatePlanMutation, _>(UpdatePlanVariables { plan_id, name }, credentials)
-                .await?;
-        if let Some(errors) = response.errors {
-            Err(FrontendError::Graphql(errors))
-        } else {
-            response
-                .data
-                .map(|d| d.update_plan)
-                .ok_or(FrontendError::NotFound)
-        }
+                .await?
+                .update_plan,
+        )
     }
 
     pub async fn implement(
         credentials: Option<&OAuth2Context>,
         plan_id: i32,
     ) -> Result<PlanDetails, FrontendError> {
-        let response =
+        Ok(
             mutate::<ImplementPlanMutation, _>(ImplementPlanVariables { plan_id }, credentials)
-                .await?;
-        if let Some(errors) = response.errors {
-            Err(FrontendError::Graphql(errors))
-        } else {
-            response
-                .data
-                .map(|d| d.implement_plan)
-                .ok_or(FrontendError::NotFound)
-        }
+                .await?
+                .implement_plan,
+        )
     }
 }

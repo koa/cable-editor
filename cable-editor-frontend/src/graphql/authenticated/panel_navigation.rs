@@ -57,8 +57,7 @@ impl PanelHierarchy {
     ) -> Result<PanelHierarchy, FrontendError> {
         query::<FetchPanelQuery, _>(FetchPanelVariables { panel_id }, credentials)
             .await?
-            .data
-            .and_then(|d| d.panel)
+            .panel
             .ok_or(FrontendError::NotFound)
     }
 }

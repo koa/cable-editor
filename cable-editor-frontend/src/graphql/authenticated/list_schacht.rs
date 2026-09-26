@@ -32,10 +32,8 @@ pub struct SchachtListPanelEntry {
 pub async fn fetch_schacht_list(
     credentials: Option<&OAuth2Context>,
 ) -> Result<Box<[SchachtListEntry]>, FrontendError> {
-    let schacht_list = query::<ListSchachtQuery, _>((), credentials).await?;
-    Ok(schacht_list
-        .data
-        .map(|l| l.list_schacht)
-        .unwrap_or_default()
+    Ok(query::<ListSchachtQuery, _>((), credentials)
+        .await?
+        .list_schacht
         .into_boxed_slice())
 }

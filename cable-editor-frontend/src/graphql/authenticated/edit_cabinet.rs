@@ -2,7 +2,7 @@ use crate::{
     error::FrontendError,
     graphql::{
         authenticated::{IdOrNewInput, schema},
-        mutate, query_simple,
+        mutate, query,
     },
 };
 use std::fmt::{Display, Formatter};
@@ -82,7 +82,7 @@ impl OverviewNetboxDevice {
         credentials: Option<OAuth2Context>,
     ) -> Result<Box<[OverviewNetboxDevice]>, FrontendError> {
         Ok(
-            query_simple::<QueryAvailableNetboxPanels, _>((), credentials.as_ref())
+            query::<QueryAvailableNetboxPanels, _>((), credentials.as_ref())
                 .await?
                 .netbox_devices
                 .into_boxed_slice(),

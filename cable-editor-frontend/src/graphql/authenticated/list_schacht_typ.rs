@@ -31,10 +31,8 @@ impl SelectItemRenderer for SchachtTypListEntry {
 pub async fn fetch_schacht_type_list(
     credentials: Option<&OAuth2Context>,
 ) -> Result<Box<[SchachtTypListEntry]>, FrontendError> {
-    let schacht_list = query::<ListSchachtTypQuery, _>((), credentials).await?;
-    Ok(schacht_list
-        .data
-        .map(|l| l.list_schacht_typ)
-        .unwrap_or_default()
+    Ok(query::<ListSchachtTypQuery, _>((), credentials)
+        .await?
+        .list_schacht_typ
         .into_boxed_slice())
 }

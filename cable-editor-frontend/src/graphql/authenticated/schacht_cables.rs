@@ -134,14 +134,9 @@ impl SchachtCables {
         credentials: Option<&OAuth2Context>,
         id: i32,
     ) -> Result<SchachtCables, FrontendError> {
-        let response = query::<FetchSchachtCablesQuery, _>(Variables { id }, credentials).await?;
-        if let Some(errors) = response.errors {
-            Err(FrontendError::Graphql(errors))
-        } else {
-            response
-                .data
-                .and_then(|d| d.schacht)
-                .ok_or(FrontendError::NotFound)
-        }
+        query::<FetchSchachtCablesQuery, _>(Variables { id }, credentials)
+            .await?
+            .schacht
+            .ok_or(FrontendError::NotFound)
     }
 }

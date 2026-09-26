@@ -52,9 +52,7 @@ impl PlannedPanelOverview {
             credentials,
         )
         .await?;
-        if let Some(errors) = response.errors {
-            Err(FrontendError::Graphql(errors))
-        } else if let Some(plan) = response.data.and_then(|d| d.plan) {
+        if let Some(plan) = response.plan {
             let panel_opt = plan.panel.clone();
             Ok(panel_opt.map(|panel| (plan, panel)))
         } else {

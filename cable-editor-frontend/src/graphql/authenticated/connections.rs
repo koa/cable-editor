@@ -41,16 +41,15 @@ impl PlannedPanel {
         plan_id: i32,
         panel_id: i32,
     ) -> Result<Option<PlannedPanel>, FrontendError> {
-        let response = query::<FetchPanelUsage, _>(
-            FetchPanelUsageVariables { plan_id, panel_id },
-            credentials,
+        Ok(
+            query::<FetchPanelUsage, _>(
+                FetchPanelUsageVariables { plan_id, panel_id },
+                credentials,
+            )
+            .await?
+            .plan
+            .and_then(|p| p.panel),
         )
-        .await?;
-        if let Some(errors) = response.errors {
-            Err(FrontendError::Graphql(errors))
-        } else {
-            Ok(response.data.and_then(|p| p.plan).and_then(|p| p.panel))
-        }
     }
 }
 
@@ -258,12 +257,8 @@ pub struct UpdatePortUsage {
 
 impl UpdatePortUsage {
     pub async fn store(self, credentials: Option<&OAuth2Context>) -> Result<(), FrontendError> {
-        let response = mutate::<UpdatePortUsageQuery, _>(self, credentials).await?;
-        if let Some(errors) = response.errors {
-            Err(FrontendError::Graphql(errors))
-        } else {
-            Ok(())
-        }
+        mutate::<UpdatePortUsageQuery, _>(self, credentials).await?;
+        Ok(())
     }
 }
 

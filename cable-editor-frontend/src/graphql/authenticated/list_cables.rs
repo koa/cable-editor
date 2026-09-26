@@ -33,44 +33,28 @@ pub struct CablePathDescription {
 pub async fn fetch_cables_list(
     credentials: Option<&OAuth2Context>,
 ) -> Result<Box<[CableListEntry]>, FrontendError> {
-    let response = query::<ListCablesQuery, _>((), credentials).await?;
-    if let Some(errors) = response.errors {
-        Err(FrontendError::Graphql(errors))
-    } else {
-        Ok(response
-            .data
-            .map(|l| l.list_cable)
-            .unwrap_or_default()
-            .into_boxed_slice())
-    }
+    Ok(query::<ListCablesQuery, _>((), credentials)
+        .await?
+        .list_cable
+        .into_boxed_slice())
 }
 pub async fn create_cable(
     credentials: Option<&OAuth2Context>,
     name: String,
 ) -> Result<CableListEntry, FrontendError> {
-    let response =
-        mutate::<AddCableMutation, _>(AddCableMutationVariables { name }, credentials).await?;
-    if let Some(errors) = response.errors {
-        Err(FrontendError::Graphql(errors))
-    } else {
-        Ok(response
-            .data
-            .map(|l| l.create_cable)
-            .expect("Invalid result"))
-    }
+    Ok(
+        mutate::<AddCableMutation, _>(AddCableMutationVariables { name }, credentials)
+            .await?
+            .create_cable,
+    )
 }
 pub async fn delete_cable(
     credentials: Option<&OAuth2Context>,
     cable_id: i32,
 ) -> Result<(), FrontendError> {
-    let response =
-        mutate::<DeleteCableMutation, _>(DeleteCableMutationVariables { cable_id }, credentials)
-            .await?;
-    if let Some(errors) = response.errors {
-        Err(FrontendError::Graphql(errors))
-    } else {
-        Ok(())
-    }
+    mutate::<DeleteCableMutation, _>(DeleteCableMutationVariables { cable_id }, credentials)
+        .await?;
+    Ok(())
 }
 
 #[derive(cynic::QueryVariables)]

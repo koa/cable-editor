@@ -58,9 +58,7 @@ impl PlanListEntry {
     ) -> Result<Box<[PlanListEntry]>, FrontendError> {
         Ok(query::<ListPlanQuery, _>((), credentials)
             .await?
-            .data
-            .map(|l| l.list_plan)
-            .unwrap_or_default()
+            .list_plan
             .into_boxed_slice())
     }
     pub async fn create(

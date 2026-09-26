@@ -97,12 +97,11 @@ impl CableDetails {
         credentials: Option<&OAuth2Context>,
         id: i32,
     ) -> Result<Option<CableDetails>, FrontendError> {
-        let response = query::<FetchCableDetailsQuery, _>(Variables { id }, credentials).await?;
-        if let Some(errors) = response.errors {
-            Err(FrontendError::Graphql(errors))
-        } else {
-            Ok(response.data.and_then(|l| l.cable))
-        }
+        Ok(
+            query::<FetchCableDetailsQuery, _>(Variables { id }, credentials)
+                .await?
+                .cable,
+        )
     }
 
     pub async fn update_cable(
@@ -112,7 +111,7 @@ impl CableDetails {
         fibers: Option<UpdateCableStructure>,
         path: Option<Vec<i32>>,
     ) -> Result<Option<CableDetails>, FrontendError> {
-        let response = mutate::<UpdateCableMutation, _>(
+        Ok(mutate::<UpdateCableMutation, _>(
             UpdateCableMutationVariables {
                 cable_id,
                 name,
@@ -121,12 +120,8 @@ impl CableDetails {
             },
             credentials,
         )
-        .await?;
-        if let Some(errors) = response.errors {
-            Err(FrontendError::Graphql(errors))
-        } else {
-            Ok(response.data.and_then(|m| m.update_cable))
-        }
+        .await?
+        .update_cable)
     }
 }
 
@@ -141,17 +136,12 @@ impl CableSegmentEndSchacht {
         &self,
         credentials: Option<&OAuth2Context>,
     ) -> Result<Vec<PotentialDuct>, FrontendError> {
-        let response =
+        Ok(
             query::<FetchAvailableDuctFromSchacht, _>(Variables { id: self.id }, credentials)
-                .await?;
-        if let Some(errors) = response.errors {
-            Err(FrontendError::Graphql(errors))
-        } else {
-            Ok(response
-                .data
-                .and_then(|l| l.schacht)
+                .await?
+                .schacht
                 .map(|s| s.connecting_duct)
-                .unwrap_or_default())
-        }
+                .unwrap_or_default(),
+        )
     }
 }

@@ -166,15 +166,10 @@ impl SyncNetbox {
         credentials: Option<&OAuth2Context>,
         plan_id: i32,
     ) -> Result<Vec<SyncIssue>, FrontendError> {
-        let response =
-            mutate::<SyncNetbox, _>(SyncNetboxVariables { plan_id }, credentials).await?;
-        if let Some(errors) = response.errors {
-            Err(FrontendError::Graphql(errors))
-        } else {
-            response
-                .data
-                .map(|d| d.sync_plan_to_netbox)
-                .ok_or(FrontendError::NotFound)
-        }
+        Ok(
+            mutate::<SyncNetbox, _>(SyncNetboxVariables { plan_id }, credentials)
+                .await?
+                .sync_plan_to_netbox,
+        )
     }
 }

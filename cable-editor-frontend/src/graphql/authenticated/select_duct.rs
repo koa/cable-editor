@@ -25,14 +25,8 @@ pub struct DuctListEntry {
 pub async fn list_all_ducts(
     credentials: Option<&OAuth2Context>,
 ) -> Result<Box<[DuctListEntry]>, FrontendError> {
-    let response = query::<QueryDuctList, _>((), credentials).await?;
-    if let Some(errors) = response.errors {
-        Err(FrontendError::Graphql(errors))
-    } else {
-        Ok(response
-            .data
-            .map(|l| l.list_duct)
-            .unwrap_or_default()
-            .into_boxed_slice())
-    }
+    Ok(query::<QueryDuctList, _>((), credentials)
+        .await?
+        .list_duct
+        .into_boxed_slice())
 }

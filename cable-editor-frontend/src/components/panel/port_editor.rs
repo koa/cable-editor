@@ -294,6 +294,8 @@ impl Component for PortEditor {
                 true
             }
             Msg::Error(error) => {
+                // Also after a failed save, which set loading
+                self.loading = false;
                 self.error = Some(error);
                 true
             }

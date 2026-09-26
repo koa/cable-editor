@@ -34,16 +34,11 @@ pub async fn fetch_schacht_name(
     credentials: Option<&OAuth2Context>,
     id: i32,
 ) -> Result<String, FrontendError> {
-    let response = query::<FetchSchachtNameQuery, _>(Variables { id }, credentials).await?;
-    if let Some(errors) = response.errors {
-        Err(FrontendError::Graphql(errors))
-    } else {
-        response
-            .data
-            .and_then(|d| d.schacht)
-            .map(|s| s.name)
-            .ok_or(FrontendError::NotFound)
-    }
+    query::<FetchSchachtNameQuery, _>(Variables { id }, credentials)
+        .await?
+        .schacht
+        .map(|s| s.name)
+        .ok_or(FrontendError::NotFound)
 }
 
 #[derive(cynic::QueryFragment, Debug)]
@@ -105,65 +100,56 @@ impl PanelTreeEntry {
         id: i32,
     ) -> Result<Box<[PanelTreeEntry]>, FrontendError> {
         let response = query::<FetchDuctDetailsQuery, _>(Variables { id }, credentials).await?;
-        if let Some(errors) = response.errors {
-            Err(FrontendError::Graphql(errors))
-        } else {
-            let mut panel_data = HashMap::new();
-            let mut children = HashMap::<i32, BTreeMap<i32, i32>>::new();
-            let mut is_child = HashSet::new();
-            for root_entry in response
-                .data
-                .and_then(|d| d.schacht)
-                .map(|s| s.root_panels)
-                .unwrap_or_default()
-            {
-                for child in root_entry.all_children_recursive {
-                    if let ChildPanelEntry {
-                        id,
-                        parent_id: Some(parent_id),
-                        parent_order: Some(parent_order),
-                        ..
-                    } = child
-                    {
-                        is_child.insert(id);
-                        children
-                            .entry(parent_id)
-                            .or_default()
-                            .insert(parent_order, id);
-                    }
-                    panel_data.insert(
-                        child.id,
-                        PanelEntryData {
-                            name: child.name.map(|v| v.into_boxed_str()),
-                            has_loop: child.count_loop_ports > 0,
-                            port_count: child.count_ports as usize,
-                            netbox_device_id: child.netbox_device.map(|d| d.id),
-                        },
-                    );
+        let mut panel_data = HashMap::new();
+        let mut children = HashMap::<i32, BTreeMap<i32, i32>>::new();
+        let mut is_child = HashSet::new();
+        for root_entry in response.schacht.map(|s| s.root_panels).unwrap_or_default() {
+            for child in root_entry.all_children_recursive {
+                if let ChildPanelEntry {
+                    id,
+                    parent_id: Some(parent_id),
+                    parent_order: Some(parent_order),
+                    ..
+                } = child
+                {
+                    is_child.insert(id);
+                    children
+                        .entry(parent_id)
+                        .or_default()
+                        .insert(parent_order, id);
                 }
                 panel_data.insert(
-                    root_entry.id,
+                    child.id,
                     PanelEntryData {
-                        name: root_entry.name.map(|v| v.into_boxed_str()),
-                        has_loop: root_entry.count_loop_ports > 0,
-                        port_count: root_entry.count_ports as usize,
-                        netbox_device_id: root_entry.netbox_device.map(|d| d.id),
+                        name: child.name.map(|v| v.into_boxed_str()),
+                        has_loop: child.count_loop_ports > 0,
+                        port_count: child.count_ports as usize,
+                        netbox_device_id: child.netbox_device.map(|d| d.id),
                     },
                 );
             }
-            let roots = panel_data
-                .keys()
-                .copied()
-                .filter(|id| !is_child.contains(id))
-                .collect::<Vec<_>>();
-            let data = roots
-                .into_iter()
-                .map(|root_id| collect_children(root_id, &mut children, &mut panel_data))
-                .collect();
-            assert!(children.is_empty());
-            assert!(panel_data.is_empty());
-            Ok(data)
+            panel_data.insert(
+                root_entry.id,
+                PanelEntryData {
+                    name: root_entry.name.map(|v| v.into_boxed_str()),
+                    has_loop: root_entry.count_loop_ports > 0,
+                    port_count: root_entry.count_ports as usize,
+                    netbox_device_id: root_entry.netbox_device.map(|d| d.id),
+                },
+            );
         }
+        let roots = panel_data
+            .keys()
+            .copied()
+            .filter(|id| !is_child.contains(id))
+            .collect::<Vec<_>>();
+        let data = roots
+            .into_iter()
+            .map(|root_id| collect_children(root_id, &mut children, &mut panel_data))
+            .collect();
+        assert!(children.is_empty());
+        assert!(panel_data.is_empty());
+        Ok(data)
     }
 }
 
@@ -222,7 +208,7 @@ pub async fn create_panel(
     panel: CreatePanelInput,
     parent_panel: Option<i32>,
 ) -> Result<(), FrontendError> {
-    let response = mutate::<CreatePanelQuery, _>(
+    mutate::<CreatePanelQuery, _>(
         CreatePanelVariables {
             panel,
             parent_panel,
@@ -230,9 +216,5 @@ pub async fn create_panel(
         credentials,
     )
     .await?;
-    if let Some(errors) = response.errors {
-        Err(FrontendError::Graphql(errors))
-    } else {
-        Ok(())
-    }
+    Ok(())
 }
