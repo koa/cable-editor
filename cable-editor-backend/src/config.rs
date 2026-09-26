@@ -1,7 +1,6 @@
 use config::{Config, ConfigError, Environment, File};
-use lazy_static::lazy_static;
 use serde::Deserialize;
-use std::net::IpAddr;
+use std::{net::IpAddr, sync::LazyLock};
 
 #[derive(Deserialize)]
 pub struct Settings {
@@ -90,8 +89,7 @@ fn read_cfg() -> Result<Config, ConfigError> {
     Ok(cfg)
 }
 
-lazy_static! {
-    pub static ref CONFIG: Settings = create_settings().expect("Cannot load config.yaml");
-    pub static ref NETBOX_CONFIG: NetboxSettings =
-        create_netbox_settings().expect("Cannot load config.yaml");
-}
+pub static CONFIG: LazyLock<Settings> =
+    LazyLock::new(|| create_settings().expect("Cannot load config.yaml"));
+pub static NETBOX_CONFIG: LazyLock<NetboxSettings> =
+    LazyLock::new(|| create_netbox_settings().expect("Cannot load config.yaml"));

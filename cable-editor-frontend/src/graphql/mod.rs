@@ -3,18 +3,17 @@ use cynic::{
     GraphQlResponse, MutationBuilder, Operation, QueryBuilder, QueryFragment, QueryVariables,
     http::{CynicReqwestError, ReqwestExt},
 };
-use lazy_static::lazy_static;
 use reqwest::header::{AUTHORIZATION, HeaderMap};
 use serde::Serialize;
+use std::sync::LazyLock;
 use yew_oauth2::prelude::{Authentication, OAuth2Context};
 
 pub mod anonymous;
 pub mod authenticated;
 
-lazy_static! {
-    static ref GRAPHQL_URL: String = format!("{}/graphql", host());
-    static ref GRAPHQL_ANONYMOUS_URL: String = format!("{}/graphql_anonymous", host());
-}
+static GRAPHQL_URL: LazyLock<String> = LazyLock::new(|| format!("{}/graphql", host()));
+static GRAPHQL_ANONYMOUS_URL: LazyLock<String> =
+    LazyLock::new(|| format!("{}/graphql_anonymous", host()));
 
 pub fn host() -> String {
     let location = web_sys::window().unwrap().location();

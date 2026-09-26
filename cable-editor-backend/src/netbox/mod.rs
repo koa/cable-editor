@@ -10,7 +10,6 @@ use crate::{
     },
 };
 use cynic::{QueryBuilder as CQB, QueryFragment, http::ReqwestExt};
-use lazy_static::lazy_static;
 use log::info;
 use reqwest::header::{AUTHORIZATION, HeaderMap};
 use std::{collections::BTreeMap, sync::OnceLock};
@@ -47,9 +46,7 @@ pub async fn fetch_device_with_ports(
     .device)
 }
 
-lazy_static! {
-    static ref NETBOX_SEMAPHORE: Semaphore = Semaphore::new(2);
-}
+static NETBOX_SEMAPHORE: Semaphore = Semaphore::const_new(2);
 
 static NETBOX_HTTP_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
 

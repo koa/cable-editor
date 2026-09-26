@@ -21,7 +21,6 @@ web-sys = { version = "0.3", features = ["CanvasRenderingContext2d", "Document",
 thiserror = "2.0"
 
 yew-oauth2 = { version = "0.14",features = ["openid"] }
-lazy_static = "1.5"
 console_error_panic_hook = "0.1"
 
 cynic = { version = "3", features = ["http-reqwest"] }
