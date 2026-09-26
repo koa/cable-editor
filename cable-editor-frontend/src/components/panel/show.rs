@@ -46,6 +46,8 @@ pub struct ShowPanel {
     data: Option<PlannedPanelOverview>,
     loading: bool,
     error: Option<FrontendError>,
+    /// When the shown data was loaded, printed in the footer
+    loaded_at: Option<js_sys::Date>,
 }
 
 impl Component for ShowPanel {
@@ -59,6 +61,7 @@ impl Component for ShowPanel {
             data: None,
             loading: true,
             error: None,
+            loaded_at: None,
         }
     }
 
@@ -84,6 +87,7 @@ impl Component for ShowPanel {
             Msg::DataFetched(data) => {
                 self.loading = false;
                 self.data = data;
+                self.loaded_at = Some(js_sys::Date::new_0());
                 self.error = None;
                 true
             }
@@ -434,7 +438,10 @@ impl ShowPanel {
 
                 // --- Print Footer ---
                 <div class="print-only pf-v6-u-mt-xl" style="border-top: 1px solid #ccc; padding-top: 8px; font-size: 9pt; color: #666; text-align: right;">
-                    {format!("Ausgedruckt am {} | Kabel-Editor Dokumentation", chrono_stub_date())}
+                    {format!(
+                        "Datenstand {} | Kabel-Editor Dokumentation",
+                        self.loaded_at.as_ref().map(format_time).unwrap_or_default()
+                    )}
                 </div>
             </div>
         }
@@ -823,6 +830,14 @@ fn cable_end_port(option: Option<&FiberOwnEndOverview>) -> Option<&UsedEndPortOv
         .and_then(|p| p.panel_side_end_port.as_ref())
 }
 
-fn chrono_stub_date() -> String {
-    "2026".to_string()
+/// Local time as "dd.mm.yyyy hh:mm".
+fn format_time(time: &js_sys::Date) -> String {
+    format!(
+        "{:02}.{:02}.{} {:02}:{:02}",
+        time.get_date(),
+        time.get_month() + 1,
+        time.get_full_year(),
+        time.get_hours(),
+        time.get_minutes()
+    )
 }

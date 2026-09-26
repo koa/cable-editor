@@ -879,6 +879,7 @@ dependencies = [
  "futures",
  "gloo-utils 0.2.0",
  "itertools 0.15.0",
+ "js-sys",
  "lazy_static",
  "leaflet",
  "log",
