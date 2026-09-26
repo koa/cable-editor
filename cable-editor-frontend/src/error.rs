@@ -1,8 +1,8 @@
 use cynic::http::CynicReqwestError;
-use patternfly_yew::prelude::{Alert, AlertType, Popover, PopoverBody};
+use patternfly_yew::prelude::{Alert, AlertType};
 use reqwest::header::InvalidHeaderValue;
 use thiserror::Error;
-use yew::{Html, html, html::IntoPropValue, html_nested};
+use yew::{Html, html, html::IntoPropValue};
 
 #[derive(Error, Debug)]
 pub enum FrontendError {
@@ -50,31 +50,21 @@ impl IntoPropValue<Html> for &FrontendError {
             FrontendError::InvalidHeader(e) => {
                 html!(<Alert inline=true title={format!("Ungültiger Header: {e}")} r#type={AlertType::Danger} />)
             }
-            FrontendError::Graphql(e) => e
-                .iter()
-                .map(|e| {
-                    let target = e.message.as_str();
-                    let locations = e.locations.as_ref().map(|l| {
-                        let locations = l.iter().map(|location|{
-                            html!(<dt>{format!("{}:{}",location.line,location.column)}</dt>)
-                        });
-                        html!(<><dd>{"Position"}</dd>{for locations}</>)
-                    });
-
-                    let body = html_nested!(
-                        <PopoverBody
-                            header={html!("Details")}
-                        >
-                            <dl>
-                                <dd>{"Fehler"}</dd>
-                                <dt>{target}</dt>
-                                {locations}
-                            </dl>
-                        </PopoverBody>
-                    );
-                    html!(<Popover {target} {body}/>)
-                })
-                .collect(),
+            FrontendError::Graphql(errors) => {
+                let title = match errors.as_slice() {
+                    [error] => format!("Fehler vom Server: {}", error.message),
+                    _ => "Fehler vom Server".to_string(),
+                };
+                html! {
+                    <Alert inline=true {title} r#type={AlertType::Danger}>
+                        if errors.len() > 1 {
+                            <ul>
+                                {for errors.iter().map(|error| html!(<li>{error.message.as_str()}</li>))}
+                            </ul>
+                        }
+                    </Alert>
+                }
+            }
             FrontendError::PlanNotFound(id) => {
                 html!(<Alert inline=true title={format!("Plan {id} existiert nicht")} r#type={AlertType::Danger} />)
             }
