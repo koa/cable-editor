@@ -61,7 +61,7 @@ Tests: only unit tests of plain logic so far, `cargo test -p cable-editor-backen
 ## Architecture
 
 ### GraphQL: two schemas, typed end-to-end with cynic
-- Backend exposes `/graphql` (authenticated: `graphql/authenticated/` — `Query`, `mutation/`, `planned.rs`) and `/graphql_anonymous` (`graphql/anonymous.rs`).
+- Backend exposes `/graphql` (authenticated: `graphql/authenticated/` — `Query`, `mutation/` with one object per kind of thing changed (`cable.rs`, `schacht.rs`, `duct.rs`, `panel.rs`, `plan.rs`) merged into `Mutation` (`MergedObject`), `planned.rs`) and `/graphql_anonymous` (`graphql/anonymous.rs`).
 - `cable-editor-frontend/build.rs` depends on the backend crate, calls `create_authenticated_schema()` / `create_anonymous_schema()`, writes the SDL to `cable-editor-frontend/graphql/*.graphql` (gitignored), and registers them with `cynic_codegen`. Frontend queries are `cynic::QueryFragment` structs in `frontend/src/graphql/{authenticated,anonymous}/*.rs`, so **any backend schema change is checked at frontend compile time** — change the backend resolver, then fix the frontend fragments.
 - `cable-editor-backend/build.rs` registers `schema/schema.graphql` (the NetBox GraphQL schema) for the cynic-based NetBox client in `src/netbox/`.
 

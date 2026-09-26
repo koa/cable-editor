@@ -158,7 +158,7 @@ impl Query {
 }
 
 pub fn create_authenticated_schema() -> AuthenticatedGraphqlSchema {
-    Schema::build(Query, Mutation, EmptySubscription).finish()
+    Schema::build(Query, Mutation::default(), EmptySubscription).finish()
 }
 
 pub async fn get_connection<'a>(

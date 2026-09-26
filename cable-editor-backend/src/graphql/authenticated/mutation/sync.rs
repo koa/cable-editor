@@ -4,9 +4,7 @@ use crate::{
         entity::panel::{Panel, PanelPort, PanelPortType},
         schema,
     },
-    graphql::{
-        authenticated::mutation::create_asymetric_duplex_error, authenticated::trace_fiber_path,
-    },
+    graphql::authenticated::trace_fiber_path,
     netbox::{
         fetch::{CurrentCircuitData, RearPort},
         get_reqwest_client, query,
@@ -518,4 +516,42 @@ pub async fn sync_plan_to_netbox(
         })
         .await?;
     Ok(issues)
+}
+
+async fn create_asymetric_duplex_error(
+    start_netbox_id: i32,
+    r1: HashMap<i32, Vec<(PanelPort, PanelPort, f64)>>,
+) -> async_graphql::Result<SyncIssue> {
+    let start_netbox_port = RearPort::fetch_by_id((start_netbox_id as u32).into())
+        .await?
+        .ok_or_else(|| {
+            async_graphql::Error::new(format!("Netbox RearPort {} not found", start_netbox_id))
+        })?;
+
+    let mut connections = Vec::new();
+    for (target_netbox_id, port_pairs) in r1 {
+        let target_netbox_port = RearPort::fetch_by_id((target_netbox_id as u32).into())
+            .await?
+            .ok_or_else(|| {
+                async_graphql::Error::new(format!("Netbox RearPort {} not found", target_netbox_id))
+            })?;
+
+        let pairs: Vec<PortPair> = port_pairs
+            .into_iter()
+            .map(|(source_port, target_port, _)| PortPair {
+                source_port,
+                target_port,
+            })
+            .collect();
+
+        connections.push(AsymetricTargetConnectionEntry {
+            target_netbox_port,
+            pairs: pairs.into_boxed_slice(),
+        });
+    }
+
+    Ok(SyncIssue::AsymmetricDuplex(AsymmetricDuplexError {
+        start_netbox_port,
+        connections: connections.into_boxed_slice(),
+    }))
 }
