@@ -264,7 +264,7 @@ fn LabelForm(props: &LabelFormProps) -> Html {
         (Ok(_), None) => Html::default(),
         (Ok(_), Some(Ok((src, length, copies, feed_inch)))) => html! {
             <>
-                <img src={src.clone()} alt={text.clone()} style="display: block; max-width: 100%; max-height: 48px; border: 1px solid #8a8d90;"/>
+                <img src={src.clone()} alt={text.clone()} style="display: block; max-width: 100%; max-height: 48px; border: 1px solid var(--pf-t--global--border--color--default);"/>
                 {format!(
                     "Etikett ca. {length:.0} mm{} (+{:.0} mm Vorschub)",
                     if *copies > 1 { format!(", Text {copies}×") } else { String::new() },

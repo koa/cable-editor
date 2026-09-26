@@ -367,7 +367,7 @@ impl ShowPanel {
 
                     html! {
                         <div id={anchor_id} class={classes!("panel-overview-section", "child-panel-section", format!("hierarchy-level-{}", level), "pf-v6-u-mb-xl")}>
-                            <div class="panel-section-header child-header">
+                            <div class="panel-section-header">
                                 <div class="panel-section-title-wrapper">
                                     <Title level={Level::H2} size={patternfly_yew::prelude::Size::Large}>
                                         {Icon::AngleDoubleRight}

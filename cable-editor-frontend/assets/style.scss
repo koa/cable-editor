@@ -226,8 +226,8 @@ body {
   }
 
   .stat-box {
-    background: #f5f5f5;
-    border: 1px solid #e0e0e0;
+    background: var(--pf-t--global--background--color--secondary--default);
+    border: 1px solid var(--pf-t--global--border--color--default);
     border-radius: 6px;
     padding: 12px;
     text-align: center;
@@ -235,12 +235,12 @@ body {
     .stat-value {
       font-size: 1.6rem;
       font-weight: bold;
-      color: #151515;
+      color: var(--pf-t--global--text--color--regular);
     }
 
     .stat-label {
       font-size: 0.85rem;
-      color: #6a6e73;
+      color: var(--pf-t--global--text--color--subtle);
       margin-top: 2px;
     }
   }
@@ -255,56 +255,52 @@ body {
       align-items: center;
       padding: 6px 12px;
       border-radius: 4px;
-      background: #fafafa;
-      border: 1px solid #e0e0e0;
-      color: #151515;
+      background: var(--pf-t--global--background--color--secondary--default);
+      border: 1px solid var(--pf-t--global--border--color--default);
+      color: var(--pf-t--global--text--color--regular);
       text-decoration: none;
       transition: background 0.15s ease-in-out;
 
       &:hover {
-        background: #e8f0fe;
-        border-color: #7098da;
+        background: var(--pf-t--global--background--color--primary--hover);
+        border-color: var(--pf-t--global--border--color--hover);
       }
 
       .port-count-tag {
         font-size: 0.8rem;
-        color: #6a6e73;
+        color: var(--pf-t--global--text--color--subtle);
       }
     }
   }
 
   .panel-overview-section {
-    background: #ffffff;
-    border: 1px solid #d2d2d2;
+    background: var(--pf-t--global--background--color--primary--default);
+    border: 1px solid var(--pf-t--global--border--color--default);
     border-radius: 6px;
     overflow: hidden;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    box-shadow: var(--pf-t--global--box-shadow--sm);
 
     &.child-panel-section {
-      border-left: 5px solid #0066cc;
+      border-left: 5px solid var(--pf-t--global--border--color--brand--default);
     }
 
     &.hierarchy-level-2 {
-      border-left-color: #009596;
+      border-left-color: var(--pf-t--global--border--color--nonstatus--teal--default);
     }
 
     &.hierarchy-level-3 {
-      border-left-color: #5752d1;
+      border-left-color: var(--pf-t--global--border--color--nonstatus--purple--default);
     }
 
     .panel-section-header {
-      background: #f8f8f8;
-      border-bottom: 1px solid #e0e0e0;
+      background: var(--pf-t--global--background--color--secondary--default);
+      border-bottom: 1px solid var(--pf-t--global--border--color--default);
       padding: 12px 16px;
       display: flex;
       justify-content: space-between;
       align-items: center;
       flex-wrap: wrap;
       gap: 8px;
-
-      &.child-header {
-        background: #f0f7ff;
-      }
 
       .panel-section-title-wrapper {
         display: flex;
@@ -334,17 +330,17 @@ body {
     border-collapse: collapse;
 
     th {
-      background: #fafafa;
+      background: var(--pf-t--global--background--color--secondary--default);
       font-weight: 600;
       padding: 10px 14px;
-      border-bottom: 2px solid #d2d2d2;
+      border-bottom: 2px solid var(--pf-t--global--border--color--default);
       font-size: 0.9rem;
-      color: #4f5255;
+      color: var(--pf-t--global--text--color--subtle);
     }
 
     td {
       padding: 10px 14px;
-      border-bottom: 1px solid #e0e0e0;
+      border-bottom: 1px solid var(--pf-t--global--border--color--default);
       vertical-align: top;
     }
 
@@ -352,14 +348,15 @@ body {
       transition: background 0.1s ease-in-out;
 
       &:hover {
-        background: #fcfcfc;
+        background: var(--pf-t--global--background--color--primary--hover);
       }
 
+      // A tint of the warning colour, readable with the regular text in both themes
       &.modified-row {
-        background: #fff8f0;
+        background: color-mix(in srgb, var(--pf-t--global--color--status--warning--default) 8%, transparent);
 
         &:hover {
-          background: #fff1e0;
+          background: color-mix(in srgb, var(--pf-t--global--color--status--warning--default) 16%, transparent);
         }
       }
     }
@@ -373,8 +370,8 @@ body {
 
       .port-number-badge {
         font-size: 0.75rem;
-        background: #e0e0e0;
-        color: #151515;
+        background: var(--pf-t--global--color--nonstatus--gray--default);
+        color: var(--pf-t--global--text--color--nonstatus--on-gray--default);
         padding: 1px 5px;
         border-radius: 3px;
         font-weight: bold;
@@ -387,7 +384,7 @@ body {
       .modified-dot {
         width: 8px;
         height: 8px;
-        background: #ec7a08;
+        background: var(--pf-t--global--icon--color--status--warning--default);
         border-radius: 50%;
         display: inline-block;
       }
@@ -402,24 +399,25 @@ body {
       border-radius: 50%;
       font-size: 0.85rem;
 
+      // The colours of PF labels
       &.connected-flow {
-        background: #e7f5e8;
-        color: #1e7e34;
+        background: var(--pf-t--global--color--nonstatus--green--default);
+        color: var(--pf-t--global--icon--color--nonstatus--on-green--default);
       }
 
       &.loop-flow {
-        background: #f2e6f9;
-        color: #6f2da8;
+        background: var(--pf-t--global--color--nonstatus--purple--default);
+        color: var(--pf-t--global--icon--color--nonstatus--on-purple--default);
       }
 
       &.partial-flow {
-        background: #fef5e7;
-        color: #ec7a08;
+        background: var(--pf-t--global--color--nonstatus--orange--default);
+        color: var(--pf-t--global--icon--color--nonstatus--on-orange--default);
       }
 
       &.empty-flow {
-        background: #f0f0f0;
-        color: #8a8d90;
+        background: var(--pf-t--global--color--nonstatus--gray--default);
+        color: var(--pf-t--global--icon--color--nonstatus--on-gray--default);
       }
     }
 
@@ -438,7 +436,7 @@ body {
       }
 
       .slot-destination-row {
-        color: #4f5255;
+        color: var(--pf-t--global--text--color--subtle);
         display: flex;
         align-items: center;
         gap: 4px;
@@ -447,7 +445,7 @@ body {
     }
 
     .slot-empty {
-      color: #8a8d90;
+      color: var(--pf-t--global--text--color--subtle);
       font-size: 0.85rem;
       display: flex;
       align-items: center;
@@ -492,15 +490,15 @@ body {
       padding: 12px;
 
       .port-mobile-card {
-        background: #ffffff;
-        border: 1px solid #d2d2d2;
+        background: var(--pf-t--global--background--color--primary--default);
+        border: 1px solid var(--pf-t--global--border--color--default);
         border-radius: 6px;
         padding: 12px;
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+        box-shadow: var(--pf-t--global--box-shadow--sm);
 
         &.modified-card {
-          border-color: #ec7a08;
-          background: #fffcf8;
+          border-color: var(--pf-t--global--border--color--status--warning--default);
+          background: color-mix(in srgb, var(--pf-t--global--color--status--warning--default) 8%, transparent);
         }
 
         .mobile-card-header {
@@ -508,7 +506,7 @@ body {
           justify-content: space-between;
           align-items: center;
           padding-bottom: 8px;
-          border-bottom: 1px solid #f0f0f0;
+          border-bottom: 1px solid var(--pf-t--global--border--color--default);
           margin-bottom: 10px;
 
           .mobile-port-title {
@@ -519,7 +517,8 @@ body {
 
           .port-number-badge {
             font-size: 0.8rem;
-            background: #e0e0e0;
+            background: var(--pf-t--global--color--nonstatus--gray--default);
+            color: var(--pf-t--global--text--color--nonstatus--on-gray--default);
             padding: 2px 6px;
             border-radius: 3px;
             font-weight: bold;
@@ -532,8 +531,8 @@ body {
           gap: 8px;
 
           .mobile-slot {
-            background: #f9f9f9;
-            border: 1px solid #e8e8e8;
+            background: var(--pf-t--global--background--color--secondary--default);
+            border: 1px solid var(--pf-t--global--border--color--default);
             border-radius: 4px;
             padding: 8px 10px;
 
@@ -541,14 +540,14 @@ body {
               font-size: 0.75rem;
               text-transform: uppercase;
               font-weight: bold;
-              color: #6a6e73;
+              color: var(--pf-t--global--text--color--subtle);
               margin-bottom: 4px;
             }
           }
 
           .mobile-slot-divider {
             text-align: center;
-            color: #8a8d90;
+            color: var(--pf-t--global--icon--color--subtle);
             font-size: 0.9rem;
             margin: -2px 0;
           }
