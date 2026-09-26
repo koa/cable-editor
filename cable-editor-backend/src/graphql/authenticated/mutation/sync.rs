@@ -189,10 +189,9 @@ pub async fn sync_plan_to_netbox(
                 {
                     let mut error = false;
                     let trace = trace_fiber_path(conn, port.id, plan_id).await?;
-                    if trace.is_empty() {
+                    let Some(last_node) = trace.last() else {
                         continue;
-                    }
-                    let last_node = trace.last().unwrap();
+                    };
                     let target_port_id = last_node.to_port_id;
 
                     let mut trace_length = 0.0;
@@ -256,44 +255,56 @@ pub async fn sync_plan_to_netbox(
                     }
                 }
             }
-            let mut planned_circuits = Vec::new();
+            // port_pairs is symmetric: a connection between the Netbox rear ports p1 and p2 is
+            // in port_pairs[p1][p2] and port_pairs[p2][p1].
 
-            while !port_pairs.is_empty() {
-                if let Some((start_netbox_id, r1)) = port_pairs
-                    .keys()
-                    .next()
-                    .copied()
-                    .and_then(|k| port_pairs.remove(&k).map(|e| (k, e)))
-                {
-                    if r1.len() > 1 {
-                        issues.push(create_asymetric_duplex_error(start_netbox_id, r1).await?)
-                    } else if let Some((end_netbox_id, connections)) = r1.into_iter().next() {
-                        if let Some(r2) = port_pairs.remove(&end_netbox_id) {
-                            if r2.len() > 1 {
-                                issues.push(
-                                    create_asymetric_duplex_error(end_netbox_id, r2).await?,
-                                )
-                            }
-                            let distance = connections.iter().map(|(_, _, d)| *d).sum::<f64>() / connections.len() as f64;
-                            planned_circuits.push(
-                                PlannedCircuit {
-                                    start_netbox_id,
-                                    end_netbox_id,
-                                    members: connections
-                                        .into_iter()
-                                        .map(|(start_port, end_port, _)| CircuitMember {
-                                            start_port,
-                                            end_port,
-                                        })
-                                        .collect(),
-                                    distance,
-                                }
-                                    .order(),
-                            );
-                        } else {
-                            panic!("Not possible, I swear :-)")
-                        }
+            // A rear port connected to more than one other: an asymmetric duplex. The ports on
+            // the other side see only this one, the issue lists them all.
+            for (&netbox_id, partners) in &port_pairs {
+                if partners.len() > 1 {
+                    issues.push(create_asymetric_duplex_error(netbox_id, partners.clone()).await?);
+                }
+            }
+
+            // A circuit for every pair of rear ports connected only to each other, taken from
+            // the side with the smaller id, so each pair once.
+            let mut planned_circuits = Vec::new();
+            for (&start_netbox_id, partners) in &port_pairs {
+                let mut partners = partners.iter();
+                let (Some((&end_netbox_id, connections)), None) = (partners.next(), partners.next())
+                else {
+                    // more than one partner, reported above
+                    continue;
+                };
+                if start_netbox_id == end_netbox_id {
+                    // The fibers lead back into the same rear port
+                    if let Some((port, _, _)) = connections.iter().next() {
+                        issues.push(SyncIssue::RoutingLoop(RoutingLoopError {
+                            port: port.clone(),
+                        }));
                     }
+                } else if start_netbox_id < end_netbox_id
+                    && port_pairs
+                        .get(&end_netbox_id)
+                        .is_some_and(|partners| partners.len() == 1)
+                {
+                    let distance = connections.iter().map(|(_, _, d)| *d).sum::<f64>()
+                        / connections.len() as f64;
+                    planned_circuits.push(
+                        PlannedCircuit {
+                            start_netbox_id,
+                            end_netbox_id,
+                            members: connections
+                                .iter()
+                                .map(|(start_port, end_port, _)| CircuitMember {
+                                    start_port: start_port.clone(),
+                                    end_port: end_port.clone(),
+                                })
+                                .collect(),
+                            distance,
+                        }
+                        .order(),
+                    );
                 }
             }
             // 4. Abbruch, falls fachliche Fehler gefunden wurden
@@ -400,7 +411,12 @@ pub async fn sync_plan_to_netbox(
 
                 let created_circuit: serde_json::Value = res.json().await
                     .map_err(|e| async_graphql::Error::new(e.to_string()))?;
-                let new_circuit_id = created_circuit["id"].as_i64().unwrap();
+                let new_circuit_id = created_circuit["id"].as_i64().ok_or_else(|| {
+                    async_graphql::Error::new(format!(
+                        "Netbox returned no id for the circuit {}: {created_circuit}",
+                        circuit.cid()
+                    ))
+                })?;
 
                 // --- 5.2 Dynamische Site-IDs für die RearPorts aus Netbox abfragen ---
                 let start_rp = RearPort::fetch_by_id((circuit.start_netbox_id as u32).into())
@@ -437,7 +453,11 @@ pub async fn sync_plan_to_netbox(
 
                     let created_term: serde_json::Value = term_res.json().await
                         .map_err(|e| async_graphql::Error::new(e.to_string()))?;
-                    let term_id = created_term["id"].as_i64().unwrap();
+                    let term_id = created_term["id"].as_i64().ok_or_else(|| {
+                        async_graphql::Error::new(format!(
+                            "Netbox returned no id for the termination {side}: {created_term}"
+                        ))
+                    })?;
 
                     // 5.2.2 Eventuell vorhandenes Kabel entfernen, das den Port blockiert
                     if let Some(cable_id) = existing_cable_id {
