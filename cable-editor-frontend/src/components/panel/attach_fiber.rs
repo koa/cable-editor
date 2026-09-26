@@ -673,20 +673,13 @@ impl AttachFiber {
                 let fiber_num = f.fiber;
                 let onclick = ctx.link().callback(move |()| Msg::SelectFiber(fiber_num));
 
-                let extra_text = if let Some(end_port) = f
+                let extra_text = f
                     .other_end
                     .as_ref()
                     .and_then(|e| e.used_port.as_ref())
                     .and_then(|u| u.panel_side_end_port.as_ref())
-                    .map(|u| &u.port)
-                {
-                    let port = end_port.label.as_deref().unwrap_or_default();
-                    let panel = end_port.panel.name.as_deref().unwrap_or_default();
-                    let schacht = end_port.panel.schacht.name.as_str();
-                    format!(" ({schacht} {panel} {port})")
-                } else {
-                    String::new()
-                };
+                    .map(|end_port| format!(" ({end_port})"))
+                    .unwrap_or_default();
 
                 html! {
                     <MenuActionItem key={fiber_num} {onclick}>

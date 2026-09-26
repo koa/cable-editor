@@ -1,3 +1,4 @@
+use crate::graphql::authenticated::{write_panel_path, write_port_label};
 use crate::{
     error::FrontendError,
     graphql::{authenticated::schema, mutate},
@@ -45,23 +46,23 @@ pub struct PanelPortInfo {
 
 impl PanelPortInfo {
     pub fn port_label(&self) -> String {
-        let mut result = self.panel.schacht.name.clone();
-        for parent in &self.panel.parent_chain {
-            if let Some(name) = &parent.name {
-                result.push_str(", ");
-                result.push_str(name);
-            }
-        }
-        if let Some(name) = &self.panel.name {
-            result.push_str(", ");
-            result.push_str(name);
-        }
-        if let Some(label) = &self.label {
-            result.push_str(": ");
-            result.push_str(label);
-        } else {
-            result.push_str(&format!(": Port {}", self.order_number));
-        }
+        let panel = &self.panel;
+        let label = match &self.label {
+            Some(label) => label.clone(),
+            None => format!("Port {}", self.order_number),
+        };
+        // Writing into a String can't fail
+        let mut result = String::new();
+        let _ = write_panel_path(
+            &mut result,
+            Some(&panel.schacht.name),
+            panel
+                .parent_chain
+                .iter()
+                .filter_map(|p| p.name.as_deref())
+                .chain(panel.name.as_deref()),
+        )
+        .and_then(|()| write_port_label(&mut result, &label));
         result
     }
 }

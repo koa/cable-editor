@@ -1,3 +1,4 @@
+use crate::graphql::authenticated::{write_panel_path, write_port_label};
 use crate::{
     error::FrontendError,
     graphql::{
@@ -82,23 +83,14 @@ pub struct Panel {
 }
 impl Display for Panel {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.schacht.name,)?;
-        let mut device_written = false;
-        for name in self
-            .parent_chain
-            .iter()
-            .filter_map(|p| p.name.as_deref())
-            .chain(self.name.as_deref())
-        {
-            if device_written {
-                f.write_str(" ")?;
-            } else {
-                f.write_str(":")?;
-                device_written = true;
-            }
-            f.write_str(name)?;
-        }
-        Ok(())
+        write_panel_path(
+            f,
+            Some(&self.schacht.name),
+            self.parent_chain
+                .iter()
+                .filter_map(|p| p.name.as_deref())
+                .chain(self.name.as_deref()),
+        )
     }
 }
 
@@ -154,8 +146,8 @@ pub struct UsedEndPort {
 impl Display for UsedEndPort {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.port.panel)?;
-        if let Some(name) = self.port.label.as_deref() {
-            write!(f, ":{name}",)?;
+        if let Some(label) = self.port.label.as_deref() {
+            write_port_label(f, label)?;
         }
         Ok(())
     }
@@ -175,23 +167,14 @@ pub struct EndPortPanel {
 }
 impl Display for EndPortPanel {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.schacht.name,)?;
-        let mut device_written = false;
-        for name in self
-            .parent_chain
-            .iter()
-            .filter_map(|p| p.name.as_deref())
-            .chain(self.name.as_deref())
-        {
-            if device_written {
-                f.write_str(" ")?;
-            } else {
-                f.write_str(":")?;
-                device_written = true;
-            }
-            f.write_str(name)?;
-        }
-        Ok(())
+        write_panel_path(
+            f,
+            Some(&self.schacht.name),
+            self.parent_chain
+                .iter()
+                .filter_map(|p| p.name.as_deref())
+                .chain(self.name.as_deref()),
+        )
     }
 }
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]

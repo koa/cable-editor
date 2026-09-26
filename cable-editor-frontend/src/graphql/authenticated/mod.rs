@@ -1,3 +1,4 @@
+use std::fmt::{self, Write};
 use uuid::Uuid;
 
 pub mod cabinet_details;
@@ -18,6 +19,34 @@ pub mod select_duct;
 
 #[cynic::schema("authenticated")]
 mod schema {}
+
+/// Writes the path of a panel as users see it, "Schacht: Parent > Panel" (`panels` are the names
+/// from the root panel down, unnamed ones left out). Without a Schacht it starts with the first
+/// panel.
+pub fn write_panel_path<'a>(
+    out: &mut impl Write,
+    schacht: Option<&str>,
+    panels: impl IntoIterator<Item = &'a str>,
+) -> fmt::Result {
+    let mut separator = match schacht {
+        Some(schacht) => {
+            out.write_str(schacht)?;
+            ": "
+        }
+        None => "",
+    };
+    for panel in panels {
+        out.write_str(separator)?;
+        out.write_str(panel)?;
+        separator = " > ";
+    }
+    Ok(())
+}
+
+/// Writes a port after the path of its panel: " : label".
+pub fn write_port_label(out: &mut impl Write, label: &str) -> fmt::Result {
+    write!(out, " : {label}")
+}
 
 #[derive(cynic::QueryFragment, Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[cynic(graphql_type = "Point")]
