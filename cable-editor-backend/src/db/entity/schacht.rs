@@ -14,7 +14,11 @@ use crate::{
         },
         schema,
     },
-    graphql::{authenticated::get_connection, model},
+    graphql::{
+        authenticated::get_connection,
+        loader::{SchachtId, SchachtTypId, get_loader, load_one},
+        model,
+    },
 };
 use postgis_diesel::types::Point;
 
@@ -28,7 +32,7 @@ pub struct Schacht {
     pub geom: Option<Point>,
 }
 
-#[derive(HasQuery, Identifiable, Insertable, Associations, Debug, PartialEq)]
+#[derive(HasQuery, Identifiable, Insertable, Associations, Debug, Clone, PartialEq)]
 #[diesel(belongs_to(Schacht, foreign_key = id))]
 #[diesel(table_name = schema::schacht_typ)]
 pub struct SchachtTyp {
@@ -47,16 +51,9 @@ impl Schacht {
         self.id
     }
     async fn typ(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<SchachtTyp>> {
-        if let Some(typ) = self.typ {
-            let mut connection = get_connection(ctx).await?;
-            Ok(Some(
-                SchachtTyp::query()
-                    .filter(schema::schacht_typ::id.eq(typ))
-                    .get_result(&mut connection)
-                    .await?,
-            ))
-        } else {
-            Ok(None)
+        match self.typ {
+            Some(typ) => Ok(Some(load_one(ctx, SchachtTypId(typ)).await?)),
+            None => Ok(None),
         }
     }
     async fn position(&self) -> Option<model::Point> {
@@ -66,36 +63,38 @@ impl Schacht {
         &self,
         ctx: &Context<'_>,
     ) -> async_graphql::Result<Vec<PotentialPathSegment>> {
-        let mut connection = get_connection(ctx).await?;
-
-        let ducts: Vec<Duct> = Duct::query()
-            .filter(
-                schema::trasse::schacht_a
-                    .eq(self.id)
-                    .or(schema::trasse::schacht_z.eq(self.id)),
-            )
-            .load(&mut connection)
-            .await?;
-
-        let mut results = Vec::new();
-        for duct in ducts {
-            let other_schacht_id = if duct.schacht_a == self.id {
+        let ducts: Vec<Duct> = {
+            let mut connection = get_connection(ctx).await?;
+            Duct::query()
+                .filter(
+                    schema::trasse::schacht_a
+                        .eq(self.id)
+                        .or(schema::trasse::schacht_z.eq(self.id)),
+                )
+                .load(&mut connection)
+                .await?
+        };
+        let other_end = |duct: &Duct| {
+            SchachtId(if duct.schacht_a == self.id {
                 duct.schacht_z
             } else {
                 duct.schacht_a
-            };
-
-            let other_schacht = Schacht::query()
-                .filter(schema::schacht::id.eq(other_schacht_id))
-                .get_result(&mut connection)
-                .await?;
-            results.push(PotentialPathSegment {
-                duct,
-                schacht: other_schacht,
-            });
-        }
-
-        Ok(results)
+            })
+        };
+        let others = get_loader(ctx)?
+            .load_many(ducts.iter().map(other_end))
+            .await?;
+        ducts
+            .into_iter()
+            .map(|duct| {
+                let other = other_end(&duct);
+                let schacht = others
+                    .get(&other)
+                    .cloned()
+                    .ok_or_else(|| format!("{other:?} not found"))?;
+                Ok(PotentialPathSegment { duct, schacht })
+            })
+            .collect()
     }
     async fn root_panels(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Panel>> {
         let mut connection = get_connection(ctx).await?;

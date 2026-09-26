@@ -12,7 +12,7 @@ use crate::{
         },
         schema::{kabel, panel, plan, schacht},
     },
-    graphql::context::UserInfo,
+    graphql::{context::UserInfo, loader::SharedConnection},
     netbox::{fetch::DeviceWithRearPorts, fetch_device_with_ports, fetch_devices_and_ports},
 };
 use async_graphql::{Context, EmptySubscription, Object, Schema};
@@ -24,8 +24,7 @@ use diesel_async::{
     AsyncPgConnection, RunQueryDsl, pooled_connection::deadpool::Object as DpObject,
 };
 use mutation::Mutation;
-use std::sync::Arc;
-use tokio::{sync::Mutex, sync::MutexGuard};
+use tokio::sync::MutexGuard;
 
 pub type AuthenticatedGraphqlSchema = Schema<Query, Mutation, EmptySubscription>;
 
@@ -131,7 +130,7 @@ pub fn create_authenticated_schema() -> AuthenticatedGraphqlSchema {
 pub async fn get_connection<'a>(
     ctx: &'a Context<'_>,
 ) -> async_graphql::Result<MutexGuard<'a, DpObject<AsyncPgConnection>>> {
-    let shared_conn = ctx.data::<Arc<Mutex<DpObject<AsyncPgConnection>>>>()?;
+    let shared_conn = ctx.data::<SharedConnection>()?;
     Ok(shared_conn.lock().await)
 }
 

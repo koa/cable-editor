@@ -10,7 +10,10 @@ use crate::{
         entity::path::{DirectedDuct, DuctDirection, UnalignedDuct},
         schema,
     },
-    graphql::authenticated::get_connection,
+    graphql::{
+        authenticated::get_connection,
+        loader::{SchachtId, load_one},
+    },
 };
 use async_graphql::{Context, Object};
 use diesel::{
@@ -46,12 +49,10 @@ pub struct Duct {
 #[Object]
 impl DirectedDuct<Duct, i32> {
     async fn begin_schacht(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
-        let mut conn = get_connection(ctx).await?;
-        schacht::fetch_schacht(&mut conn, self.schacht_a()).await
+        load_one(ctx, SchachtId(self.schacht_a())).await
     }
     async fn end_schacht(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
-        let mut conn = get_connection(ctx).await?;
-        schacht::fetch_schacht(&mut conn, self.schacht_z()).await
+        load_one(ctx, SchachtId(self.schacht_z())).await
     }
     async fn begin_schacht_id(&self) -> i32 {
         self.schacht_a()
@@ -76,14 +77,11 @@ impl Duct {
         self.description.as_deref()
     }
     async fn schacht_a(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
-        let mut conn = get_connection(ctx).await?;
-        schacht::fetch_schacht(&mut conn, self.schacht_a).await
+        load_one(ctx, SchachtId(self.schacht_a)).await
     }
 
     async fn schacht_z(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
-        let mut conn = get_connection(ctx).await?;
-
-        schacht::fetch_schacht(&mut conn, self.schacht_z).await
+        load_one(ctx, SchachtId(self.schacht_z)).await
     }
     async fn length(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<f64>> {
         let mut connection = get_connection(ctx).await?;

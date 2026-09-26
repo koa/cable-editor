@@ -11,7 +11,9 @@ use actix_web::{
     web::{Data, resource},
 };
 use actix_web_prometheus::PrometheusMetricsBuilder;
-use async_graphql::{Response, ServerError, futures_util::future::join_all};
+use async_graphql::{
+    Response, ServerError, dataloader::DataLoader, futures_util::future::join_all,
+};
 use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse};
 use cable_editor_backend::{
     RunQueryDsl,
@@ -21,6 +23,7 @@ use cable_editor_backend::{
         anonymous::{AnonymousGraphqlSchema, create_anonymous_schema},
         authenticated::{AuthenticatedGraphqlSchema, create_authenticated_schema},
         context::UserInfo,
+        loader::DbLoader,
     },
     sql_query,
 };
@@ -142,7 +145,11 @@ async fn graphql(
 
     let shared_conn = Arc::new(Mutex::new(connection));
 
-    let request = request.data(shared_conn.clone()).data(found_user);
+    let loader = DataLoader::new(DbLoader::new(shared_conn.clone()), actix_web::rt::spawn);
+    let request = request
+        .data(shared_conn.clone())
+        .data(loader)
+        .data(found_user);
 
     let response = schema.execute(request).await;
 

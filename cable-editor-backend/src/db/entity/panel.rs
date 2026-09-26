@@ -4,7 +4,10 @@ use crate::{
         entity::{cable::Fiber, plan::Plan, schacht::Schacht},
         schema,
     },
-    graphql::authenticated::get_connection,
+    graphql::{
+        authenticated::get_connection,
+        loader::{SchachtId, load_one},
+    },
     netbox::{
         fetch::{DeviceWithRearPorts, RearPort},
         fetch_device_with_ports,
@@ -335,12 +338,7 @@ impl Panel {
         self.name.as_deref()
     }
     async fn schacht(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
-        let mut connection = get_connection(ctx).await?;
-        let schacht = Schacht::query()
-            .filter(schema::schacht::id.eq(self.schacht_id))
-            .first(&mut connection)
-            .await?;
-        Ok(schacht)
+        load_one(ctx, SchachtId(self.schacht_id)).await
     }
     async fn parent_id(&self) -> Option<i32> {
         self.parent_panel

@@ -10,7 +10,10 @@ use crate::{
         },
         schema,
     },
-    graphql::authenticated::get_connection,
+    graphql::{
+        authenticated::get_connection,
+        loader::{CableId, SchachtId, load_one},
+    },
 };
 use async_graphql::{Context, Object};
 use diesel::{
@@ -349,11 +352,7 @@ impl Fiber {
         self.fiber
     }
     async fn cable(&self, ctx: &Context<'_>) -> async_graphql::Result<Cable> {
-        let mut connection = get_connection(ctx).await?;
-        Ok(Cable::query()
-            .filter(schema::kabel::id.eq(self.cable))
-            .first(&mut connection)
-            .await?)
+        load_one(ctx, CableId(self.cable)).await
     }
 }
 
@@ -396,12 +395,10 @@ impl CablePath {
 #[Object]
 impl CablePath {
     async fn near_schacht(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
-        let mut conn = get_connection(ctx).await?;
-        fetch_schacht(&mut conn, self.near_schacht).await
+        load_one(ctx, SchachtId(self.near_schacht)).await
     }
     async fn near_end(&self, ctx: &Context<'_>) -> async_graphql::Result<CableEnd> {
-        let mut connection = get_connection(ctx).await?;
-        let schacht = fetch_schacht(&mut connection, self.near_schacht).await?;
+        let schacht = load_one(ctx, SchachtId(self.near_schacht)).await?;
         Ok(CableEnd {
             cable: self.cable.clone(),
             schacht,
@@ -411,12 +408,10 @@ impl CablePath {
         self.segments.as_ref()
     }
     async fn far_schacht(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
-        let mut conn = get_connection(ctx).await?;
-        fetch_schacht(&mut conn, self.far_schacht_id()).await
+        load_one(ctx, SchachtId(self.far_schacht_id())).await
     }
     async fn far_end(&self, ctx: &Context<'_>) -> async_graphql::Result<CableEnd> {
-        let mut connection = get_connection(ctx).await?;
-        let schacht = fetch_schacht(&mut connection, self.far_schacht_id()).await?;
+        let schacht = load_one(ctx, SchachtId(self.far_schacht_id())).await?;
         Ok(CableEnd {
             cable: self.cable.clone(),
             schacht,
@@ -435,8 +430,7 @@ impl CablePathSegment {
         &self.segment.duct.0
     }
     async fn far_schacht(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
-        let mut conn = get_connection(ctx).await?;
-        fetch_schacht(&mut conn, self.far_schacht).await
+        load_one(ctx, SchachtId(self.far_schacht)).await
     }
     async fn sequence(&self) -> i32 {
         self.segment.duct.1
