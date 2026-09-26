@@ -4,12 +4,13 @@ use crate::{
     error::FrontendError,
     graphql::authenticated::{current_user::Role, list_plans::PlanListEntry},
     pages::router::{AppRoute, PlanView},
-    util::{get_backdrop, get_credentials, get_role},
+    util::{get_backdrop, get_credentials, get_role, get_toaster},
 };
 use patternfly_yew::prelude::{
-    ActionGroup, Backdrop, Bullseye, Button, ButtonVariant, Cell, CellContext, ExpansionState,
-    Form, FormGroup, LabelIcon, MemoizedTableModel, Modal, PopoverBody, Spinner, Table,
-    TableColumn, TableEntryRenderer, TableGridMode, TableHeader, TableMode, TextInput,
+    ActionGroup, AlertType, Backdrop, Bullseye, Button, ButtonVariant, Cell, CellContext,
+    ExpansionState, Form, FormGroup, LabelIcon, MemoizedTableModel, Modal, PopoverBody, Spinner,
+    Table, TableColumn, TableEntryRenderer, TableGridMode, TableHeader, TableMode, TextInput,
+    Toast,
 };
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use yew::{
@@ -135,13 +136,27 @@ impl ListOfPlannings {
                                 let name = project_name.borrow();
                                 if !name.is_empty() {
                                     let credentials = get_credentials(&scope);
+                                    let toaster = get_toaster(&scope);
                                     let name = name.clone();
                                     let bd=bd.clone();
                                     let scope=scope.clone();
                                     spawn_local(async move{
-                                        if PlanListEntry::create(credentials.as_ref(), name).await.is_ok() {
-                                            bd.close();
-                                            scope.send_message(Msg::Refresh);
+                                        match PlanListEntry::create(credentials.as_ref(), name).await {
+                                            Ok(()) => {
+                                                bd.close();
+                                                scope.send_message(Msg::Refresh);
+                                            }
+                                            // A toast: the dialog stays open with the entered name
+                                            Err(error) => {
+                                                if let Some(toaster) = toaster {
+                                                    toaster.toast(Toast {
+                                                        title: "Planung konnte nicht erstellt werden".into(),
+                                                        r#type: AlertType::Danger,
+                                                        body: html!(error.to_string()),
+                                                        ..Toast::default()
+                                                    });
+                                                }
+                                            }
                                         }
                                     });
                                 }
