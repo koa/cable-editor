@@ -3,7 +3,6 @@ pub mod cable;
 pub mod duct;
 pub mod list_of_cables;
 pub mod map;
-pub mod map_test;
 pub mod panel;
 pub mod planning;
 pub mod router;

@@ -871,7 +871,6 @@ name = "cable-editor-frontend"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "base64 0.22.1",
  "brady-web-sdk",
  "cable-editor-backend",
  "console_error_panic_hook",
@@ -884,7 +883,6 @@ dependencies = [
  "js-sys",
  "leaflet",
  "log",
- "ouroboros",
  "patternfly-yew",
  "reqwest 0.13.4",
  "serde",

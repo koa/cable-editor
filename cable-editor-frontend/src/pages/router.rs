@@ -70,8 +70,6 @@ pub fn redirect_to_plans() -> Html {
 
 #[derive(Debug, Clone, PartialEq, Eq, Target, Default)]
 pub enum AppRoute {
-    //Map,
-    //MapTest,
     #[default]
     ListOfPlans,
     Plan {
