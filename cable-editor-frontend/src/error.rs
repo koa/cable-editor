@@ -22,6 +22,8 @@ pub enum FrontendError {
     PlanNotFound(i32),
     #[error("Expected data not found")]
     NotFound,
+    #[error("Cannot determine the address of the server")]
+    NoServerAddress,
     #[error("The panels of the Schacht don't form a tree")]
     InvalidPanelTree,
     #[error("Printer error: {0}")]
@@ -72,6 +74,9 @@ impl IntoPropValue<Html> for &FrontendError {
             }
             FrontendError::NotFound => {
                 html!(<Alert inline=true title={"Daten nicht gefunden".to_string()} r#type={AlertType::Danger} />)
+            }
+            FrontendError::NoServerAddress => {
+                html!(<Alert inline=true title={"Adresse des Servers konnte nicht bestimmt werden".to_string()} r#type={AlertType::Danger} />)
             }
             FrontendError::InvalidPanelTree => {
                 html!(<Alert inline=true title={"Die Panels des Schachts bilden keinen gültigen Baum".to_string()} r#type={AlertType::Danger} />)

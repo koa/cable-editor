@@ -5,21 +5,17 @@ use cynic::{
 };
 use reqwest::header::{AUTHORIZATION, HeaderMap};
 use serde::Serialize;
-use std::sync::LazyLock;
 use yew_oauth2::prelude::{Authentication, OAuth2Context};
 
 pub mod anonymous;
 pub mod authenticated;
 
-static GRAPHQL_URL: LazyLock<String> = LazyLock::new(|| format!("{}/graphql", host()));
-static GRAPHQL_ANONYMOUS_URL: LazyLock<String> =
-    LazyLock::new(|| format!("{}/graphql_anonymous", host()));
-
-pub fn host() -> String {
-    let location = web_sys::window().unwrap().location();
-    let host = location.host().unwrap();
-    let protocol = location.protocol().unwrap();
-    format!("{protocol}//{host}")
+/// URL of `path` on the server the app was loaded from (`trunk serve` proxies it to the backend).
+fn server_url(path: &str) -> Result<String, FrontendError> {
+    let origin = web_sys::window()
+        .and_then(|window| window.location().origin().ok())
+        .ok_or(FrontendError::NoServerAddress)?;
+    Ok(format!("{origin}{path}"))
 }
 
 pub async fn query_anonymous<Q, V>(request: V) -> Result<Q, FrontendError>
@@ -32,7 +28,7 @@ where
     V: QueryVariables + Serialize,
 {
     run(
-        &GRAPHQL_ANONYMOUS_URL,
+        &server_url("/graphql_anonymous")?,
         None,
         Q::build(request),
         FrontendError::ErrorQueryingAnonymousConnect,
@@ -54,7 +50,7 @@ where
     V: QueryVariables + Serialize,
 {
     run(
-        &GRAPHQL_URL,
+        &server_url("/graphql")?,
         credentials,
         Q::build(request),
         FrontendError::ErrorQueryingAuthenticatedConnect,
@@ -76,7 +72,7 @@ where
     V: QueryVariables + Serialize,
 {
     run(
-        &GRAPHQL_URL,
+        &server_url("/graphql")?,
         credentials,
         Q::build(request),
         FrontendError::ErrorQueryingAuthenticatedConnect,
