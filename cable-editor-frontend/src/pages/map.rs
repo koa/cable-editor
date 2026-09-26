@@ -1,16 +1,23 @@
 use crate::{
-    components::page_layout::PageLayout,
+    components::{
+        links::{CableLink, SchachtLink},
+        page_layout::PageLayout,
+    },
     error::FrontendError,
-    graphql::authenticated::map::{MapSchacht, fetch_map_schaechte},
+    graphql::authenticated::map::{GeoPoint, MapData, MapDuct, fetch_map_data},
     pages::router::{AppRoute, CabinetView, PlanView},
     util::get_credentials,
 };
 use js_sys::{Array, Object, Reflect};
 use leaflet::{
     CircleMarker, CircleOptions, LatLng, LatLngBounds, MapOptions, MouseEvent, MouseEvents,
-    TileLayer, TileLayerOptions, TileLayerWms, TileLayerWmsOptions, Tooltip, TooltipOptions,
+    Polyline, PolylineOptions, TileLayer, TileLayerOptions, TileLayerWms, TileLayerWmsOptions,
+    Tooltip, TooltipOptions,
 };
-use patternfly_yew::prelude::{Alert, AlertType, Spinner};
+use patternfly_yew::prelude::{
+    Alert, AlertType, Button, ButtonVariant, Card, CardBody, CardHeader, CardHeaderActionsObject,
+    CardSize, CardTitle, DescriptionGroup, DescriptionList, Icon, Spinner,
+};
 use wasm_bindgen::JsValue;
 use web_sys::HtmlElement;
 use yew::{
@@ -22,19 +29,25 @@ use yew_nested_router::prelude::RouterContext;
 /// Center of Switzerland, shown while no Schacht has a position.
 const SWITZERLAND: (f64, f64) = (46.8, 8.23);
 
-/// Map of the plan's objects: for now the Schächte with a position, labelled with their name;
-/// a click opens the Schacht's overview.
+/// Map of the plan's objects: the Schächte with a position, labelled with their name (a click
+/// opens the Schacht's overview), and the ducts (a click selects one and shows its Schächte and
+/// cables as links).
 pub struct Map {
     container: NodeRef,
     map: Option<leaflet::Map>,
-    schaechte: Option<Vec<MapSchacht>>,
+    data: Option<MapData>,
     error: Option<FrontendError>,
+    /// Id of the duct whose details are shown
+    selected_duct: Option<i32>,
+    /// The selected duct drawn above the others
+    highlight: Option<Polyline>,
 }
 
 pub enum Msg {
-    Data(Vec<MapSchacht>),
+    Data(MapData),
     Error(FrontendError),
-    Open(i32),
+    OpenSchacht(i32),
+    SelectDuct(Option<i32>),
 }
 
 #[derive(Clone, PartialEq, Properties)]
@@ -50,7 +63,7 @@ impl Component for Map {
         let scope = ctx.link().clone();
         let credentials = get_credentials(&scope);
         spawn_local(async move {
-            scope.send_message(match fetch_map_schaechte(credentials.as_ref()).await {
+            scope.send_message(match fetch_map_data(credentials.as_ref()).await {
                 Ok(data) => Msg::Data(data),
                 Err(error) => Msg::Error(error),
             });
@@ -58,25 +71,43 @@ impl Component for Map {
         Self {
             container: NodeRef::default(),
             map: None,
-            schaechte: None,
+            data: None,
             error: None,
+            selected_duct: None,
+            highlight: None,
         }
     }
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
-            Msg::Data(schaechte) => {
+            Msg::Data(data) => {
                 if let Some(map) = &self.map {
-                    show_schaechte(ctx, map, &schaechte);
+                    show_data(ctx, map, &data);
                 }
-                self.schaechte = Some(schaechte);
+                self.data = Some(data);
                 true
             }
             Msg::Error(error) => {
                 self.error = Some(error);
                 true
             }
-            Msg::Open(id) => {
+            Msg::SelectDuct(id) => {
+                if let Some(highlight) = self.highlight.take() {
+                    highlight.remove();
+                }
+                self.selected_duct = id;
+                if let (Some(map), Some(duct)) = (&self.map, self.selected()) {
+                    self.highlight = duct.line.as_deref().map(|line| {
+                        let options = duct_options("map-view__duct map-view__duct--selected");
+                        options.set_interactive(false);
+                        let highlight = Polyline::new_with_options(&points(line), &options);
+                        highlight.add_to(map);
+                        highlight
+                    });
+                }
+                true
+            }
+            Msg::OpenSchacht(id) => {
                 if let Some((router, _)) = ctx
                     .link()
                     .context::<RouterContext<AppRoute>>(Callback::noop())
@@ -94,23 +125,29 @@ impl Component for Map {
         }
     }
 
-    fn view(&self, _ctx: &Context<Self>) -> Html {
+    fn view(&self, ctx: &Context<Self>) -> Html {
         let status = if let Some(error) = &self.error {
             error.into_prop_value()
         } else {
-            match &self.schaechte {
+            match &self.data {
                 None => html!(<Spinner/>),
-                Some(list) if list.iter().all(|s| s.location.is_none()) => html! {
+                Some(data) if data.schaechte.iter().all(|s| s.location.is_none()) => html! {
                     <Alert inline=true title="Kein Schacht hat eine Position" r#type={AlertType::Info}/>
                 },
                 Some(_) => Html::default(),
             }
         };
-        // Leaflet owns the container's children, so it must not get any from Yew
+        let details = self.selected().map(|duct| view_duct(ctx, duct));
+        // Leaflet owns the map container's children, so it must not get any from Yew. The
+        // details' div is always there: Yew matches unkeyed siblings from the end, so a div
+        // appearing after the map would take over the map's element.
         html! {
             <PageLayout title="Karte">
                 {status}
-                <div class="map-view" ref={self.container.clone()}/>
+                <div class="map-view">
+                    <div class="map-view__map" ref={self.container.clone()}/>
+                    <div class="map-view__details">{details}</div>
+                </div>
             </PageLayout>
         }
     }
@@ -126,8 +163,13 @@ impl Component for Map {
             Ok(map) => {
                 add_background(&map);
                 map.set_view(&LatLng::new(SWITZERLAND.0, SWITZERLAND.1), 8.0);
-                if let Some(schaechte) = &self.schaechte {
-                    show_schaechte(ctx, &map, schaechte);
+                // A click on a duct doesn't reach the map (bubbling_mouse_events)
+                let scope = ctx.link().clone();
+                map.on_mouse_click(Box::new(move |_: MouseEvent| {
+                    scope.send_message(Msg::SelectDuct(None))
+                }));
+                if let Some(data) = &self.data {
+                    show_data(ctx, &map, data);
                 }
                 self.map = Some(map);
             }
@@ -139,9 +181,68 @@ impl Component for Map {
     }
 
     fn destroy(&mut self, _ctx: &Context<Self>) {
+        self.highlight = None;
         if let Some(map) = self.map.take() {
             map.remove();
         }
+    }
+}
+
+impl Map {
+    fn selected(&self) -> Option<&MapDuct> {
+        let id = self.selected_duct?;
+        self.data.as_ref()?.ducts.iter().find(|duct| duct.id == id)
+    }
+}
+
+/// The selected duct's details in a card above the map.
+fn view_duct(ctx: &Context<Map>, duct: &MapDuct) -> Html {
+    let title = duct
+        .description
+        .clone()
+        .unwrap_or_else(|| format!("Trasse {} – {}", duct.schacht_a.name, duct.schacht_z.name));
+    let actions = CardHeaderActionsObject {
+        actions: html! {
+            <Button
+                variant={ButtonVariant::Plain}
+                icon={Icon::Times}
+                aria_label="Schliessen"
+                onclick={ctx.link().callback(|_| Msg::SelectDuct(None))}
+            />
+        },
+        has_no_offset: false,
+        class: Default::default(),
+    };
+    let cables = if duct.cables.is_empty() {
+        html!("keine")
+    } else {
+        html! {
+            <ul class="map-view__cables">
+                {for duct.cables.iter().map(|cable| html! {
+                    <li><CableLink id={cable.id} text={cable.name.clone()}/></li>
+                })}
+            </ul>
+        }
+    };
+    html! {
+        <Card size={CardSize::Compact}>
+            <CardHeader actions={Some(actions)}>
+                <CardTitle>{title}</CardTitle>
+            </CardHeader>
+            <CardBody>
+                <DescriptionList compact=true>
+                    <DescriptionGroup term="Schächte">
+                        <SchachtLink id={duct.schacht_a.id} text={duct.schacht_a.name.clone()}/>
+                        {" – "}
+                        <SchachtLink id={duct.schacht_z.id} text={duct.schacht_z.name.clone()}/>
+                    </DescriptionGroup>
+                    <DescriptionGroup term="Bau">
+                        {if duct.own_work { "Eigenleistung" } else { "Fremd" }}
+                    </DescriptionGroup>
+                    <DescriptionGroup term="Kabel">{cables}</DescriptionGroup>
+                </DescriptionList>
+            </CardBody>
+        </Card>
     }
 }
 
@@ -168,9 +269,37 @@ fn add_background(map: &leaflet::Map) {
     TileLayerWms::new_options("https://wms.geo.admin.ch/", &options).add_to(map);
 }
 
-fn show_schaechte(ctx: &Context<Map>, map: &leaflet::Map, schaechte: &[MapSchacht]) {
+fn show_data(ctx: &Context<Map>, map: &leaflet::Map, data: &MapData) {
     let corners = Array::new();
-    for schacht in schaechte {
+    // Ducts first, so the Schächte lie above them
+    for duct in &data.ducts {
+        let Some(line) = &duct.line else {
+            continue;
+        };
+        for point in line {
+            corners.push(&LatLng::new(point.lat, point.lng));
+        }
+        let class = if duct.own_work {
+            "map-view__duct"
+        } else {
+            "map-view__duct map-view__duct--rented"
+        };
+        let options = duct_options(class);
+        options.set_interactive(false);
+        Polyline::new_with_options(&points(line), &options).add_to(map);
+        // A wide invisible line takes the clicks, the visible one is hard to hit on a phone
+        let options = duct_options("map-view__duct-hit");
+        options.set_weight(20.0);
+        options.set_bubbling_mouse_events(false);
+        let hit = Polyline::new_with_options(&points(line), &options);
+        let id = duct.id;
+        let scope = ctx.link().clone();
+        hit.on_click(Box::new(move |_: MouseEvent| {
+            scope.send_message(Msg::SelectDuct(Some(id)))
+        }));
+        hit.add_to(map);
+    }
+    for schacht in &data.schaechte {
         let Some(location) = schacht.location else {
             continue;
         };
@@ -196,7 +325,7 @@ fn show_schaechte(ctx: &Context<Map>, map: &leaflet::Map, schaechte: &[MapSchach
         let id = schacht.id;
         let scope = ctx.link().clone();
         marker.on_click(Box::new(move |_: MouseEvent| {
-            scope.send_message(Msg::Open(id))
+            scope.send_message(Msg::OpenSchacht(id))
         }));
         marker.add_to(map);
     }
@@ -206,6 +335,19 @@ fn show_schaechte(ctx: &Context<Map>, map: &leaflet::Map, schaechte: &[MapSchach
         set_option(&options, "maxZoom", &JsValue::from_f64(18.0));
         map.fit_bounds_with_options(&LatLngBounds::new_from_list(&corners), &options);
     }
+}
+
+/// The colours come from the CSS class, see `.map-view__schacht`.
+fn duct_options(class: &str) -> PolylineOptions {
+    let options = PolylineOptions::default();
+    options.set_class_name(class.to_string());
+    options
+}
+
+fn points(line: &[GeoPoint]) -> Array {
+    line.iter()
+        .map(|point| JsValue::from(LatLng::new(point.lat, point.lng)))
+        .collect()
 }
 
 /// Sets an option the crate has no setter for.

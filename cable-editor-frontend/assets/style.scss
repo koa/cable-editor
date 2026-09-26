@@ -799,9 +799,16 @@ body {
 
 // pages/map.rs: the page scrolls, so the map needs a height of its own
 .map-view {
+  position: relative;
+  // Keeps Leaflet's z-indexes (up to 1000) inside the map, below e.g. the breadcrumb's menus
+  isolation: isolate;
   height: 70vh;
   min-height: 20rem;
   margin-block-start: var(--pf-t--global--spacer--md);
+}
+
+.map-view__map {
+  height: 100%;
   border-radius: var(--pf-t--global--border--radius--small);
 }
 
@@ -811,4 +818,50 @@ body {
   fill: var(--pf-t--global--background--color--primary--default);
   fill-opacity: 1;
   stroke-width: 3;
+}
+
+.map-view__duct {
+  stroke: var(--pf-t--global--color--brand--default);
+  stroke-width: 4;
+  stroke-opacity: 0.8;
+  fill: none;
+}
+
+.map-view__duct--rented {
+  stroke-dasharray: 8 6;
+}
+
+.map-view__duct--selected {
+  stroke: var(--pf-t--global--color--status--warning--default);
+  stroke-width: 8;
+  stroke-opacity: 1;
+}
+
+.map-view__duct-hit {
+  stroke: transparent;
+  fill: none;
+}
+
+// The selected duct's card, above the map (Leaflet's panes and controls go up to z-index 1000;
+// .map-view keeps them all below the rest of the page)
+.map-view__details {
+  position: absolute;
+  z-index: 1001;
+  inset-block-end: var(--pf-t--global--spacer--md);
+  inset-inline-start: var(--pf-t--global--spacer--md);
+  width: min(24rem, calc(100% - 2 * var(--pf-t--global--spacer--md)));
+  max-height: calc(100% - 2 * var(--pf-t--global--spacer--md));
+  overflow: auto;
+  box-shadow: var(--pf-t--global--box-shadow--md);
+  border-radius: var(--pf-t--global--border--radius--medium);
+
+  &:empty {
+    display: none;
+  }
+}
+
+.map-view__cables {
+  margin: 0;
+  padding-inline-start: 0;
+  list-style: none;
 }

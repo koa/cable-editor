@@ -4,10 +4,14 @@ use crate::{
 };
 use yew_oauth2::context::OAuth2Context;
 
-#[derive(cynic::QueryFragment, Debug)]
+/// Everything the map shows.
+#[derive(cynic::QueryFragment, Debug, PartialEq)]
 #[cynic(graphql_type = "Query")]
-struct MapQuery {
-    list_schacht: Vec<MapSchacht>,
+pub struct MapData {
+    #[cynic(rename = "listSchacht")]
+    pub schaechte: Vec<MapSchacht>,
+    #[cynic(rename = "listDuct")]
+    pub ducts: Vec<MapDuct>,
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
@@ -19,6 +23,33 @@ pub struct MapSchacht {
     pub location: Option<GeoPoint>,
 }
 
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
+#[cynic(graphql_type = "Duct")]
+pub struct MapDuct {
+    pub id: i32,
+    pub description: Option<String>,
+    pub own_work: bool,
+    /// From Schacht A to Schacht Z, missing without geometry
+    pub line: Option<Vec<GeoPoint>>,
+    pub schacht_a: MapDuctEnd,
+    pub schacht_z: MapDuctEnd,
+    pub cables: Vec<MapCable>,
+}
+
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
+#[cynic(graphql_type = "Schacht")]
+pub struct MapDuctEnd {
+    pub id: i32,
+    pub name: String,
+}
+
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
+#[cynic(graphql_type = "Cable")]
+pub struct MapCable {
+    pub id: i32,
+    pub name: String,
+}
+
 /// WGS84
 #[derive(cynic::QueryFragment, Debug, Clone, Copy, PartialEq)]
 pub struct GeoPoint {
@@ -26,8 +57,6 @@ pub struct GeoPoint {
     pub lng: f64,
 }
 
-pub async fn fetch_map_schaechte(
-    credentials: Option<&OAuth2Context>,
-) -> Result<Vec<MapSchacht>, FrontendError> {
-    Ok(query::<MapQuery, _>((), credentials).await?.list_schacht)
+pub async fn fetch_map_data(credentials: Option<&OAuth2Context>) -> Result<MapData, FrontendError> {
+    query::<MapData, _>((), credentials).await
 }
