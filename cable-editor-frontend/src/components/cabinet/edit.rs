@@ -1,3 +1,4 @@
+use crate::graphql::authenticated::list_plans::BASELINE_PLAN_ID;
 use crate::{
     components::table::{TreeModel, TreeState, TreeTable, TreeTableColumn, TreeTableContext},
     create_simple_dialog,
@@ -166,7 +167,7 @@ impl TreeTableColumn<IdOrNew, PanelEntry, PanelEditAction> for PanelColumn {
                         },
                     };
                     buttons.push(html!(<Link<AppRoute>{to} class={class.clone()}>{"Übersicht"}</Link<AppRoute>>));
-                    if *plan_id > 0 {
+                    if *plan_id != BASELINE_PLAN_ID {
                         if context.row.has_loop {
                             let to = AppRoute::Plan {
                                 plan_id: *plan_id,

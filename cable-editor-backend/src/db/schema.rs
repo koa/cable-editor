@@ -5,9 +5,6 @@ pub mod sql_types {
     #[derive(diesel::query_builder::QueryId, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "port_type_enum"))]
     pub struct PortTypeEnum;
-    #[derive(diesel::query_builder::QueryId, diesel::sql_types::SqlType)]
-    #[diesel(postgres_type(name = "plan_status_enum"))]
-    pub struct PlanStatusEnum;
 
     #[derive(diesel::query_builder::QueryId, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "port_side_enum"))]
@@ -59,14 +56,10 @@ diesel::table! {
 }
 
 diesel::table! {
-    use diesel::sql_types::*;
-    use super::sql_types::PlanStatusEnum;
-
     plan (id) {
         id -> Int4,
         #[max_length = 50]
         name -> Varchar,
-        status -> PlanStatusEnum,
     }
 }
 

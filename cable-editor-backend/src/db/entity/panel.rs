@@ -1,3 +1,4 @@
+use crate::db::entity::plan::BASELINE_PLAN_ID;
 use crate::{
     db::{
         entity::{cable::Fiber, plan::Plan, schacht::Schacht},
@@ -196,7 +197,7 @@ impl PortUsage {
             .filter(|pu| pu.cable.is_some() && pu.bundle.is_some() && pu.fiber.is_some()))
     }
     async fn modified_in_plan(&self) -> bool {
-        self.plan_id > 0
+        self.plan_id != BASELINE_PLAN_ID
     }
     async fn cable_side_end_port(
         &self,

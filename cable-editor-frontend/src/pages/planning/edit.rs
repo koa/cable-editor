@@ -8,7 +8,6 @@ use crate::{
     error::FrontendError,
     graphql::authenticated::{
         PortSide,
-        list_plans::PlanStatus,
         plan_details::{PlanDetails, PortUsage},
     },
     icons::{IconLink, IconUnlink},
@@ -294,7 +293,7 @@ impl EditPlan {
             return html!(<Alert title="Nicht gefunden" r#type={AlertType::Danger} inline=true />);
         };
 
-        let is_open = details.status == PlanStatus::OPEN;
+        let is_open = !details.is_baseline;
         let name_changed = self.edit_name != details.name;
 
         // Tabelle aufbereiten: Usages nach Port-ID gruppieren
@@ -352,15 +351,10 @@ impl EditPlan {
             </TableHeader<UsageColumn>>
         };
 
-        let status_label = match details.status {
-            PlanStatus::OPEN => "Offen",
-            PlanStatus::IMPLEMENTED => "Implementiert (Abgeschlossen)",
-            PlanStatus::REJECTED => "Verworfen",
-        };
-        let can_sync_netbox = match details.status {
-            PlanStatus::OPEN => true,
-            PlanStatus::IMPLEMENTED => details.id == 0,
-            PlanStatus::REJECTED => false,
+        let kind = if details.is_baseline {
+            "Ist-Zustand"
+        } else {
+            "Offene Planung"
         };
         let sync_netbox = ctx.link().callback(|_| Msg::SyncNetbox);
 
@@ -373,8 +367,8 @@ impl EditPlan {
                         }
 
                         <Form>
-                            <FormGroup label="Status">
-                                <div><strong>{status_label}</strong></div>
+                            <FormGroup label="Art">
+                                <div><strong>{kind}</strong></div>
                             </FormGroup>
 
                             <FormGroup label="Planungs-Name">
@@ -393,7 +387,7 @@ impl EditPlan {
                                 </div>
                             </FormGroup>
                             <ActionGroup>
-                                <Button variant={ButtonVariant::Secondary} label="Sync Netbox" disabled={!can_sync_netbox} onclick={sync_netbox}/>
+                                <Button variant={ButtonVariant::Secondary} label="Sync Netbox" onclick={sync_netbox}/>
                             </ActionGroup>
                         </Form>
 

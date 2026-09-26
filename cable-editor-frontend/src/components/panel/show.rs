@@ -1,4 +1,5 @@
 use crate::components::page_layout::{PageLayout, object_title};
+use crate::graphql::authenticated::list_plans::BASELINE_PLAN_ID;
 use crate::util::is_wide_screen;
 use crate::{
     components::{
@@ -380,7 +381,7 @@ impl ShowPanel {
                                         name={child.panel.name.clone()}
                                         parents={child.panel.parent_chain.iter().filter_map(|p| p.name.clone()).collect::<Vec<_>>()}
                                     />
-                                    if self.plan_id > 0 {
+                                    if self.plan_id != BASELINE_PLAN_ID {
                                         if has_direct_ports {
                                             <Link<AppRoute>
                                                 to={AppRoute::Plan {

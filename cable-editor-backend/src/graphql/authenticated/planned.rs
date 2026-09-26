@@ -1,3 +1,4 @@
+use crate::db::entity::plan::BASELINE_PLAN_ID;
 use crate::{
     db::{
         entity::{
@@ -174,7 +175,7 @@ impl PlannedPort {
         let usage = port_usage::table
             .filter(port_usage::port_id.eq(self.port.id))
             .filter(port_usage::side.eq(side))
-            .filter(port_usage::plan_id.eq(0))
+            .filter(port_usage::plan_id.eq(BASELINE_PLAN_ID))
             .first::<PortUsage>(&mut connection)
             .await
             .optional()?;

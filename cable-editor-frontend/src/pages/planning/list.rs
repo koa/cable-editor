@@ -37,7 +37,7 @@ pub struct ListOfPlanningProps {}
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 enum Columns {
     Name,
-    Status,
+    Kind,
 }
 
 impl Component for ListOfPlannings {
@@ -102,7 +102,7 @@ impl ListOfPlannings {
             let header = html_nested! {
                 <TableHeader<Columns>>
                     <TableColumn<Columns> label="Name" index={Columns::Name}/>
-                    <TableColumn<Columns> label="Status" index={Columns::Status}/>
+                    <TableColumn<Columns> label="Art" index={Columns::Kind}/>
                 </TableHeader<Columns>>
             };
 
@@ -188,17 +188,14 @@ impl TableEntryRenderer<Columns> for PlanListEntry {
             Columns::Name => Cell::new(
                 html!(<Link<AppRoute> to={AppRoute::Plan {plan_id: self.id,view: PlanView::ListOfCabinets}}>{self.name.as_str()}</Link<AppRoute>>),
             ),
-            Columns::Status => Cell::new(self.status.name().into_prop_value()),
+            Columns::Kind => Cell::new(
+                if self.is_baseline {
+                    "Ist-Zustand"
+                } else {
+                    "Planung"
+                }
+                .into_prop_value(),
+            ),
         }
     }
-    /*fn actions(&self) -> Vec<MenuChildVariant> {
-        match self.status {
-            PlanStatus::IMPLEMENTED => vec![],
-            PlanStatus::OPEN => vec![
-                html_nested!(<MenuAction>{"Akzeptieren"}</MenuAction>).into(),
-                html_nested!(<MenuAction>{"Abbrechen"}</MenuAction>).into(),
-            ],
-            PlanStatus::REJECTED => vec![],
-        }
-    }*/
 }

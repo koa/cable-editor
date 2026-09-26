@@ -1,7 +1,7 @@
 use crate::{
     error::FrontendError,
     graphql::{
-        authenticated::{ParentChainPanel, PortSide, list_plans::PlanStatus, schema},
+        authenticated::{ParentChainPanel, PortSide, schema},
         mutate, query,
     },
 };
@@ -24,8 +24,7 @@ pub struct FetchPlanDetailsQuery {
 pub struct PlanDetails {
     pub id: i32,
     pub name: String,
-    // --- Erweiterungen für EditPlan ---
-    pub status: PlanStatus,
+    pub is_baseline: bool,
     pub usage: Vec<PortUsage>,
 }
 

@@ -14,25 +14,12 @@ struct ListPlanQuery {
 pub struct PlanListEntry {
     pub id: i32,
     pub name: String,
-    pub status: PlanStatus,
-}
-#[derive(cynic::Enum, Debug, Clone, Copy, PartialEq, Hash, Ord, PartialOrd, Eq)]
-#[cynic(graphql_type = "PlanStatusType")]
-pub enum PlanStatus {
-    IMPLEMENTED,
-    OPEN,
-    REJECTED,
+    pub is_baseline: bool,
 }
 
-impl PlanStatus {
-    pub fn name(self) -> &'static str {
-        match self {
-            PlanStatus::IMPLEMENTED => "Implemented",
-            PlanStatus::OPEN => "Open",
-            PlanStatus::REJECTED => "Rejected",
-        }
-    }
-}
+/// The plan holding the current state (`Plan.isBaseline`); the others plan changes to it.
+/// Only for decisions on a plan id from the route, else use `isBaseline`.
+pub const BASELINE_PLAN_ID: i32 = 0;
 
 #[derive(cynic::QueryVariables)]
 struct CreatePlanMutationVariables {

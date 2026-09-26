@@ -1,6 +1,7 @@
 pub mod implement;
 pub mod sync;
 
+use crate::db::entity::plan::BASELINE_PLAN_ID;
 use crate::{
     db::{
         entity::{
@@ -357,8 +358,8 @@ impl Mutation {
         plan_id: i32,
         changes: Vec<PortUsageInput>,
     ) -> async_graphql::Result<bool> {
-        if plan_id <= 0 {
-            return Err(format!("Cannot manipulate plan {plan_id} directly").into());
+        if plan_id == BASELINE_PLAN_ID {
+            return Err("The baseline can only be changed by implementing a plan".into());
         }
         let mut connection = authenticated::get_connection(ctx).await?;
         connection
@@ -443,6 +444,9 @@ impl Mutation {
                     .filter(schema::plan::id.eq(plan_id))
                     .first(conn)
                     .await?;
+                if plan.is_baseline() {
+                    return Err("The baseline can't be renamed".into());
+                }
                 plan.name = name;
                 diesel::update(&plan).set(&plan).execute(conn).await?;
                 Ok(plan)
@@ -450,9 +454,6 @@ impl Mutation {
             .await
     }
     async fn implement_plan(&self, ctx: &Context<'_>, plan_id: i32) -> async_graphql::Result<Plan> {
-        if plan_id <= 0 {
-            return Err(format!("Cannot implement plan {plan_id}").into());
-        }
         implement::implement_plan(plan_id, authenticated::get_connection(ctx).await?).await
     }
 

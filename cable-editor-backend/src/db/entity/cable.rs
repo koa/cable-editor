@@ -1,3 +1,4 @@
+use crate::db::entity::plan::BASELINE_PLAN_ID;
 use crate::{
     db::{
         entity::{
@@ -268,7 +269,7 @@ impl FiberEnd {
             .optional()?;
 
         if let Some(usage) = found_usage {
-            if usage.plan_id == 0 && plan_id != 0 {
+            if usage.plan_id == BASELINE_PLAN_ID && plan_id != BASELINE_PLAN_ID {
                 let override_exists: bool = diesel::select(diesel::dsl::exists(
                     schema::port_usage::table
                         .filter(schema::port_usage::port_id.eq(usage.port_id))

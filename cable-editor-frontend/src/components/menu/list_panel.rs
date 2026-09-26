@@ -1,6 +1,7 @@
 use crate::components::menu::list_cabinet::ListCabinet;
 use crate::components::menu::{BreadcrumbDivider, MenuDropdown, MenuEntry, MenuEntryGroup};
 use crate::error::FrontendError;
+use crate::graphql::authenticated::list_plans::BASELINE_PLAN_ID;
 use crate::graphql::authenticated::panel_navigation::{ChildPanelNav, PanelHierarchy};
 use crate::pages::router::{AppRoute, PanelView, PlanView};
 use crate::util::get_credentials;
@@ -202,7 +203,7 @@ impl ListPanel {
                 },
             },
         ];
-        if plan_id != 0 {
+        if plan_id != BASELINE_PLAN_ID {
             entries.extend([
                 MenuEntry {
                     selected: false,

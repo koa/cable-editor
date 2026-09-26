@@ -1,7 +1,7 @@
 use crate::db::{
     entity::{
         panel::PortUsage,
-        plan::{Plan, PlanStatusType},
+        plan::{BASELINE_PLAN_ID, Plan},
     },
     schema,
 };
@@ -17,16 +17,15 @@ pub async fn implement_plan(
 ) -> Result<Plan, async_graphql::Error> {
     connection
         .transaction::<_, async_graphql::Error, _>(async move |conn| {
-            let mut plan = Plan::query()
+            let plan = Plan::query()
                 .for_update()
                 .filter(schema::plan::id.eq(plan_id))
                 .first(conn)
                 .await?;
-            if plan.status != PlanStatusType::Open {
-                return Err(async_graphql::Error::new(format!(
-                    "Invalid status of plan {:?}",
-                    plan.status
-                )));
+            if plan.is_baseline() {
+                return Err(async_graphql::Error::new(
+                    "The baseline can't be implemented",
+                ));
             }
             let ports_to_apply = PortUsage::query()
                 .filter(schema::port_usage::plan_id.eq(plan_id))
@@ -48,7 +47,7 @@ pub async fn implement_plan(
                 if let (Some(cable), Some(bundle), Some(fiber)) = (cable, bundle, fiber) {
                     let usage = PortUsage {
                         port_id,
-                        plan_id: 0,
+                        plan_id: BASELINE_PLAN_ID,
                         side,
                         cable: Some(cable),
                         fiber: Some(fiber),
@@ -62,7 +61,7 @@ pub async fn implement_plan(
             for (port_id, side) in usages_to_remove {
                 diesel::delete(schema::port_usage::dsl::port_usage::table())
                     .filter(schema::port_usage::port_id.eq(port_id))
-                    .filter(schema::port_usage::plan_id.eq(0))
+                    .filter(schema::port_usage::plan_id.eq(BASELINE_PLAN_ID))
                     .filter(schema::port_usage::side.eq(side))
                     .execute(conn)
                     .await?;
@@ -92,7 +91,6 @@ pub async fn implement_plan(
             diesel::delete(schema::plan::table.filter(schema::plan::id.eq(plan_id)))
                 .execute(conn)
                 .await?;
-            plan.status = PlanStatusType::Implemented;
             Ok(plan)
         })
         .await

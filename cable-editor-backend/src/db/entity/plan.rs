@@ -5,13 +5,12 @@ use crate::{
     },
     graphql::authenticated::{get_connection, planned::PlannedPanel},
 };
-use async_graphql::{Context, Enum, Object};
+use async_graphql::{Context, Object};
 use diesel::{
     AsChangeset, ExpressionMethods, HasQuery, Identifiable, Insertable, OptionalExtension,
     QueryDsl, QueryableByName, sql_query, sql_types::Integer,
 };
 use diesel_async::RunQueryDsl;
-use diesel_derive_enum::DbEnum;
 
 #[derive(
     QueryableByName, Identifiable, Insertable, HasQuery, Debug, Clone, PartialEq, AsChangeset,
@@ -21,20 +20,17 @@ use diesel_derive_enum::DbEnum;
 pub struct Plan {
     pub id: i32,
     pub name: String,
-    pub status: PlanStatusType,
 }
 
-#[derive(Debug, Clone, PartialEq, Copy, Eq, DbEnum, Enum, Hash, PartialOrd, Ord)]
-#[ExistingTypePath = "crate::db::schema::sql_types::PlanStatusEnum"]
-pub enum PlanStatusType {
-    #[db_rename = "Open"]
-    Open,
+/// The plan holding the current state. Every other plan holds the changes it plans on top of
+/// it and is deleted once implemented (merged into the baseline). SQL (the port_usage trigger,
+/// raw queries) uses the literal 0.
+pub const BASELINE_PLAN_ID: i32 = 0;
 
-    #[db_rename = "Implemented"]
-    Implemented,
-
-    #[db_rename = "Rejected"]
-    Rejected,
+impl Plan {
+    pub fn is_baseline(&self) -> bool {
+        self.id == BASELINE_PLAN_ID
+    }
 }
 
 #[derive(Insertable)]
@@ -51,8 +47,10 @@ impl Plan {
     async fn name(&self) -> &str {
         self.name.as_str()
     }
-    async fn status(&self) -> PlanStatusType {
-        self.status
+    /// Whether this is the current state rather than a planned change of it
+    #[graphql(name = "isBaseline")]
+    async fn graphql_is_baseline(&self) -> bool {
+        self.is_baseline()
     }
 
     async fn root_panels(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<PlannedPanel>> {
