@@ -2,6 +2,7 @@
   "realm": "cable",
   "enabled": true,
   "groups": [
+    { "name": "cable-planners" },
     { "name": "cable-admins" }
   ],
   "users": [
@@ -15,6 +16,30 @@
       "groups": ["cable-admins"],
       "credentials": [
         { "type": "password", "value": "admin", "temporary": false }
+      ]
+    },
+    {
+      "username": "planner",
+      "enabled": true,
+      "attributes": {
+        "display_name": ["Planner User"],
+        "picture": [""]
+      },
+      "groups": ["cable-planners"],
+      "credentials": [
+        { "type": "password", "value": "planner", "temporary": false }
+      ]
+    },
+    {
+      "username": "reader",
+      "enabled": true,
+      "attributes": {
+        "display_name": ["Reader User"],
+        "picture": [""]
+      },
+      "groups": [],
+      "credentials": [
+        { "type": "password", "value": "reader", "temporary": false }
       ]
     }
   ],

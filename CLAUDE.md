@@ -54,7 +54,7 @@ There are currently no tests in the repo.
 ## Configuration
 
 - `DATABASE_URL` env var (`.env`, loaded by dotenvy). Migrations in `cable-editor-backend/migrations` are embedded and run automatically at startup (`run_sync_migrations`).
-- `config.yaml` (gitignored) with `oauth:` (`auth_client_id`, `auth_issuer`, optional `user_info_url` (default: `userinfo_endpoint` from the issuer's OIDC discovery), optional `auth_scopes` (space separated scopes the frontend requests, default `openid profile groups`), `server_port`, ...) and `netbox:` (`url`, `token`, `provider_id`, `type_id`) sections; each value can be overridden by env vars with prefix `APP` and `__` separator (see `backend/src/config.rs`).
+- `config.yaml` (gitignored) with `oauth:` (`auth_client_id`, `auth_issuer`, optional `user_info_url` (default: `userinfo_endpoint` from the issuer's OIDC discovery), optional `auth_scopes` (space separated scopes the frontend requests, default `openid profile groups`), `planner_groups` / `admin_groups` (space separated OIDC group names, see Authorization), `server_port`, ...) and `netbox:` (`url`, `token`, `provider_id`, `type_id`) sections; each value can be overridden by env vars with prefix `APP` and `__` separator (see `backend/src/config.rs`).
 - `LOG_LEVEL` env var controls `env_logger`.
 - Helm chart (`cable-editor-chart`): the Netbox token comes from an existing Secret (`config.netboxTokenSecret.name`/`key`) or from `config.netboxToken`, which the chart stores in a Secret of its own; either way the Deployment only references it. Rendering fails without one.
 
@@ -67,6 +67,9 @@ There are currently no tests in the repo.
 
 ### Per-request transaction
 In `binary/src/main.rs`, each authenticated GraphQL request: validates the JWT (`actix-4-jwt-auth`), fetches OIDC userinfo (cached 30s) into `UserInfo`, opens a pooled connection, runs `BEGIN`, and puts it into the request data as `Arc<tokio::Mutex<Object<AsyncPgConnection>>>`. Resolvers obtain it via `graphql::authenticated::get_connection(ctx)`. The whole request is `COMMIT`ed if there are no errors, otherwise `ROLLBACK`ed — so resolvers should return errors rather than manage transactions themselves (nested `connection.transaction(...)` becomes a savepoint, e.g. `mutation/implement.rs`).
+
+### Authorization
+Tokens must carry the client id in `aud` (Pocket ID does so by default, the local Keycloak realm has an audience mapper). Every logged in user may read (restrict logins at the provider, e.g. Pocket ID's allowed user groups). `graphql/authorization.rs` maps the `groups` from the userinfo to a `Role` (`Reader` < `Planner` < `Admin`) via the config's `planner_groups` / `admin_groups` (group names, in Pocket ID not the friendly names). **Every mutation needs a `#[graphql(guard = "RoleGuard(Role::…)")]`**: Planner for plans and the master data (cables, panels, ports), Admin for `implementPlan`, `syncPlanToNetbox` and `deleteCable`. `currentUser.role` tells the frontend what to hide.
 
 ### Plans
 Plan 0 is the baseline (`BASELINE_PLAN_ID` in backend and frontend, `Plan.isBaseline` in GraphQL): its `port_usage` rows are the current state. Every other plan holds planned changes on top of it; implementing merges them into the baseline and deletes the plan, so there is no plan status (SQL uses the literal 0). The baseline can't be changed directly, renamed or implemented. `planned.rs` exposes `PlannedPanel` / `PlannedPort` (entity + plan context); `port_usage` rows are plan-scoped. `mutation/implement.rs` applies a plan; `mutation/sync.rs` diffs a plan against NetBox devices/rear ports and reports `SyncIssue`s before syncing.

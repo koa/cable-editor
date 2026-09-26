@@ -278,6 +278,10 @@ async fn main() -> Result<(), BackendError> {
         connection_pool.status()
     );
 
+    if CONFIG.planner_groups().next().is_none() && CONFIG.admin_groups().next().is_none() {
+        warn!("Neither planner_groups nor admin_groups configured, nobody can change anything");
+    }
+
     let bind_addr = CONFIG.server_bind_address();
     let api_port = CONFIG.server_port();
     let mgmt_port = CONFIG.server_mgmt_port();

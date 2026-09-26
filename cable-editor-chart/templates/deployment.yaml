@@ -59,6 +59,10 @@ spec:
             - name: APP__OAUTH__AUTH_SCOPES
               value: {{ . | quote }}
             {{- end }}
+            - name: APP__OAUTH__PLANNER_GROUPS
+              value: {{ .Values.config.plannerGroups | quote }}
+            - name: APP__OAUTH__ADMIN_GROUPS
+              value: {{ .Values.config.adminGroups | quote }}
             # Struct-Feld: server_port
             - name: APP__OAUTH__SERVER_PORT
               value: {{ .Values.config.serverPort | quote }}

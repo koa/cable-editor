@@ -8,6 +8,8 @@ pub struct Settings {
     auth_issuer: String,
     user_info_url: Option<String>,
     auth_scopes: Option<String>,
+    planner_groups: Option<String>,
+    admin_groups: Option<String>,
 
     server_port: Option<u16>,
     server_mgmt_port: Option<u16>,
@@ -31,6 +33,21 @@ impl Settings {
             .split_whitespace()
             .map(String::from)
             .collect()
+    }
+    /// OIDC groups whose members may plan and change the master data, space separated.
+    pub fn planner_groups(&self) -> impl Iterator<Item = &str> {
+        self.planner_groups
+            .as_deref()
+            .unwrap_or_default()
+            .split_whitespace()
+    }
+    /// OIDC groups whose members may also implement plans, sync them to Netbox and delete
+    /// cables, space separated.
+    pub fn admin_groups(&self) -> impl Iterator<Item = &str> {
+        self.admin_groups
+            .as_deref()
+            .unwrap_or_default()
+            .split_whitespace()
     }
     pub fn server_port(&self) -> u16 {
         self.server_port.unwrap_or(8080)

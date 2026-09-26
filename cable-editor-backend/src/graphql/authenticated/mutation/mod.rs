@@ -18,6 +18,7 @@ use crate::{
             sync_plan_to_netbox,
         },
     },
+    graphql::authorization::{Role, RoleGuard},
     netbox::fetch::RearPort,
 };
 use async_graphql::{Context, InputObject, Object, OneofObject};
@@ -33,6 +34,7 @@ pub struct Mutation;
 
 #[Object]
 impl Mutation {
+    #[graphql(guard = "RoleGuard(Role::Planner)")]
     async fn create_cable(&self, ctx: &Context<'_>, name: String) -> async_graphql::Result<Cable> {
         let mut connection = authenticated::get_connection(ctx).await?;
         Ok(diesel::insert_into(schema::kabel::table)
@@ -44,6 +46,7 @@ impl Mutation {
             .get_result::<Cable>(&mut connection)
             .await?)
     }
+    #[graphql(guard = "RoleGuard(Role::Planner)")]
     async fn update_cable(
         &self,
         ctx: &Context<'_>,
@@ -111,6 +114,7 @@ impl Mutation {
 
         Ok(updated_db_cable)
     }
+    #[graphql(guard = "RoleGuard(Role::Admin)")]
     async fn delete_cable(&self, ctx: &Context<'_>, cable_id: i32) -> async_graphql::Result<bool> {
         authenticated::get_connection(ctx)
             .await?
@@ -127,6 +131,7 @@ impl Mutation {
             })
             .await
     }
+    #[graphql(guard = "RoleGuard(Role::Planner)")]
     async fn create_panel(
         &self,
         ctx: &Context<'_>,
@@ -151,6 +156,7 @@ impl Mutation {
             })
             .await
     }
+    #[graphql(guard = "RoleGuard(Role::Planner)")]
     async fn update_panels(
         &self,
         ctx: &Context<'_>,
@@ -183,6 +189,7 @@ impl Mutation {
             })
             .await
     }
+    #[graphql(guard = "RoleGuard(Role::Planner)")]
     async fn create_plan(
         &self,
         ctx: &Context<'_>,
@@ -196,6 +203,7 @@ impl Mutation {
             .await?;
         Ok(true)
     }
+    #[graphql(guard = "RoleGuard(Role::Planner)")]
     async fn update_cabinet_panels(
         &self,
         ctx: &Context<'_>,
@@ -278,6 +286,7 @@ impl Mutation {
 
         Ok(true)
     }
+    #[graphql(guard = "RoleGuard(Role::Planner)")]
     async fn update_panel_ports(
         &self,
         ctx: &Context<'_>,
@@ -352,6 +361,7 @@ impl Mutation {
 
         Ok(true)
     }
+    #[graphql(guard = "RoleGuard(Role::Planner)")]
     async fn set_port_usage(
         &self,
         ctx: &Context<'_>,
@@ -430,6 +440,7 @@ impl Mutation {
             })
             .await
     }
+    #[graphql(guard = "RoleGuard(Role::Planner)")]
     async fn update_plan(
         &self,
         ctx: &Context<'_>,
@@ -453,10 +464,12 @@ impl Mutation {
             })
             .await
     }
+    #[graphql(guard = "RoleGuard(Role::Admin)")]
     async fn implement_plan(&self, ctx: &Context<'_>, plan_id: i32) -> async_graphql::Result<Plan> {
         implement::implement_plan(plan_id, authenticated::get_connection(ctx).await?).await
     }
 
+    #[graphql(guard = "RoleGuard(Role::Admin)")]
     async fn sync_plan_to_netbox(
         &self,
         ctx: &Context<'_>,

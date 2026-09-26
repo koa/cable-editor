@@ -46,6 +46,11 @@ config:
   userInfoUrl: ""
   # Optional: space separated scopes the frontend requests (default: "openid profile groups")
   authScopes: ""
+  # OIDC groups (space separated, e.g. the group names in Pocket ID, not their friendly names)
+  # whose members may plan and change cables, panels and ports; every logged in user may read
+  plannerGroups: ""
+  # ... and whose members may also implement plans, sync them to Netbox and delete cables
+  adminGroups: ""
   serverBindAddress: "0.0.0.0"
   serverPort: "8080"
   serverMgmtPort: "9090"

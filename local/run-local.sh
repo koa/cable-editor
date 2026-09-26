@@ -16,6 +16,9 @@ oauth:
   user_info_url: "http://localhost:8081/realms/cable/protocol/openid-connect/userinfo"
   # The local realm has no groups scope, a client mapper adds groups
   auth_scopes: "openid profile"
+  # Users admin, planner and reader (password = username), see realm.json
+  planner_groups: "cable-planners"
+  admin_groups: "cable-admins"
 netbox:
   url: https://netbox-dev.berg-turbenthal.ch/
   token: nbt_w8u3B27xffvJ.zOpY9y3wehOIR6HAtout8KiK4f7tlSj0CW5UwoeE
