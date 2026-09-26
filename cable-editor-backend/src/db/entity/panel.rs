@@ -292,6 +292,40 @@ impl PortUsage {
     }
 }
 
+impl Panel {
+    /// All panels below `panel_id`, level by level, each level in `parent_order`.
+    pub async fn load_all_children_recursive(
+        panel_id: i32,
+        connection: &mut deadpool::Object<AsyncPgConnection>,
+    ) -> Result<Vec<Panel>, diesel::result::Error> {
+        let raw_sql = r#"
+        WITH RECURSIVE panel_tree AS (
+            SELECT
+                id, name, schacht_id, parent_panel, parent_order, netbox_device_id,
+                1 as level
+            FROM panel
+            WHERE parent_panel = $1
+
+            UNION ALL
+
+            SELECT
+                p.id, p.name, p.schacht_id, p.parent_panel, p.parent_order, p.netbox_device_id,
+                pt.level + 1 as level
+            FROM panel p
+            INNER JOIN panel_tree pt ON p.parent_panel = pt.id
+        )
+        SELECT
+            id, name, schacht_id, parent_panel, parent_order, netbox_device_id
+        FROM panel_tree
+        ORDER BY level, parent_order;
+        "#;
+        sql_query(raw_sql)
+            .bind::<Integer, _>(panel_id)
+            .load::<Panel>(connection)
+            .await
+    }
+}
+
 #[Object]
 impl Panel {
     async fn id(&self) -> i32 {
@@ -386,32 +420,7 @@ impl Panel {
     }
     async fn all_children_recursive(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Panel>> {
         let mut connection = get_connection(ctx).await?;
-        let raw_sql = r#"
-        WITH RECURSIVE panel_tree AS (
-            SELECT
-                id, name, schacht_id, parent_panel, parent_order, netbox_device_id,
-                1 as level
-            FROM panel
-            WHERE parent_panel = $1
-
-            UNION ALL
-
-            SELECT
-                p.id, p.name, p.schacht_id, p.parent_panel, p.parent_order, p.netbox_device_id,
-                pt.level + 1 as level
-            FROM panel p
-            INNER JOIN panel_tree pt ON p.parent_panel = pt.id
-        )
-        SELECT
-            id, name, schacht_id, parent_panel, parent_order, netbox_device_id
-        FROM panel_tree
-        ORDER BY level, parent_order;
-    "#;
-
-        Ok(sql_query(raw_sql)
-            .bind::<Integer, _>(self.id)
-            .load::<Panel>(&mut connection)
-            .await?)
+        Ok(Panel::load_all_children_recursive(self.id, &mut connection).await?)
     }
     async fn ports(
         &self,
