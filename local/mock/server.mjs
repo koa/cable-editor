@@ -13,7 +13,8 @@ import { generateKeyPair, exportJWK, SignJWT } from 'jose';
 
 const FRONTEND = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../cable-editor-frontend');
 const PORT = Number(process.env.MOCK_PORT ?? 8099);
-// Role of the mock user (READER, PLANNER or ADMIN), to check what the frontend hides
+// Role of the mock user (READER, PLANNER or ADMIN), to check what the frontend hides; DENIED
+// refuses the login like a provider that doesn't allow the user's groups
 const ROLE = process.env.MOCK_ROLE ?? 'ADMIN';
 const ORIGIN = `http://localhost:${PORT}`;
 const ISSUER = `${ORIGIN}/realms/cable`;
@@ -292,6 +293,14 @@ http.createServer(async (req, res) => {
     }
     if (p === '/realms/cable/jwks') return json(res, { keys: [jwk] });
     if (p === '/realms/cable/auth') {
+      if (ROLE === 'DENIED') {
+        // Like a provider refusing a user whose groups aren't allowed for the client
+        const back = new URL(url.searchParams.get('redirect_uri'));
+        back.searchParams.set('error', 'access_denied');
+        back.searchParams.set('state', url.searchParams.get('state'));
+        res.writeHead(302, { location: back.toString() });
+        return res.end();
+      }
       const code = `code-${Math.random().toString(36).slice(2)}`;
       nonces.set(code, url.searchParams.get('nonce'));
       const back = new URL(url.searchParams.get('redirect_uri'));

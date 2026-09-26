@@ -17,17 +17,20 @@ use crate::{
     pages::router::{AppRoute, RedirectToPlans},
 };
 use brady_web_sdk::BradyProvider;
-use patternfly_yew::prelude::{Alert, AlertType, BackdropViewer, Bullseye, Spinner, ToastViewer};
+use patternfly_yew::prelude::{
+    Alert, AlertType, BackdropViewer, Bullseye, Button, ButtonVariant, Spinner, ToastViewer,
+};
 use yew::{
-    Context, Html, Properties, function_component, html, html::IntoPropValue,
-    platform::spawn_local, use_effect_with, use_state,
+    Callback, Component, Context, ContextHandle, Html, Properties, function_component, html,
+    html::IntoPropValue, platform::spawn_local,
 };
 use yew_nested_router::{Router, Switch};
 use yew_oauth2::{
     agent::OAuth2Operations,
-    hook::openid::use_auth_agent,
-    openid::OAuth2,
-    prelude::{Authenticated, NotAuthenticated},
+    components::context::Agent,
+    context::OAuth2Context,
+    openid::{Client, OAuth2},
+    prelude::Authenticated,
 };
 
 #[derive(Debug)]
@@ -113,9 +116,7 @@ pub fn main_oauth2(props: &MainOAuth2Props) -> Html {
                         </UserProvider>
                         <PrinterStatusBar/>
                     </Authenticated>
-                    <NotAuthenticated>
-                        <AutoLogin/>
-                    </NotAuthenticated>
+                    <Login/>
                 </ToastViewer>
             </BackdropViewer>
         </BradyProvider>
@@ -123,27 +124,97 @@ pub fn main_oauth2(props: &MainOAuth2Props) -> Html {
     }
 }
 
-#[function_component(AutoLogin)]
-fn auto_login() -> Html {
-    let agent = use_auth_agent().expect("Requires OAuth2Context component in parent hierarchy");
-    let error = use_state(|| None::<String>);
+/// Starts the login when there is no session. A failed login (e.g. the provider refused the
+/// user, whose groups aren't allowed for this app) is shown with a button to try again instead
+/// of starting the next login right away, which would redirect forever.
+pub struct Login {
+    auth: Option<OAuth2Context>,
+    _auth_handle: Option<ContextHandle<OAuth2Context>>,
+    /// Starting the login failed, e.g. storing its state
+    start_error: Option<String>,
+}
 
-    {
-        let error = error.clone();
-        use_effect_with((), move |_| {
-            if let Err(err) = agent.start_login() {
-                error.set(Some(err.to_string()));
-            }
-            || ()
-        });
+pub enum LoginMsg {
+    Auth(OAuth2Context),
+    Start,
+}
+
+impl Component for Login {
+    type Message = LoginMsg;
+    type Properties = ();
+
+    fn create(ctx: &Context<Self>) -> Self {
+        let (auth, auth_handle) = ctx
+            .link()
+            .context::<OAuth2Context>(ctx.link().callback(LoginMsg::Auth))
+            .unzip();
+        let login = Self {
+            auth,
+            _auth_handle: auth_handle,
+            start_error: None,
+        };
+        login.start_if_needed(ctx);
+        login
     }
 
-    match &*error {
-        Some(error) => html! {
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+        match msg {
+            LoginMsg::Auth(auth) => {
+                self.auth = Some(auth);
+                self.start_if_needed(ctx);
+            }
+            LoginMsg::Start => {
+                self.start_error = ctx
+                    .link()
+                    .context::<Agent<Client>>(Callback::noop())
+                    .and_then(|(agent, _)| agent.start_login().err())
+                    .map(|error| error.to_string());
+            }
+        }
+        true
+    }
+
+    fn view(&self, ctx: &Context<Self>) -> Html {
+        let failure = match (&self.start_error, &self.auth) {
+            (Some(error), _) => error.clone(),
+            (None, Some(OAuth2Context::Failed(error))) => error.clone(),
+            (None, Some(OAuth2Context::NotAuthenticated { .. })) => {
+                return html!(<Bullseye><Spinner/></Bullseye>);
+            }
+            _ => return Html::default(),
+        };
+        // The provider only reports a code, e.g. `login result: access_denied`
+        let title = if failure.contains("access_denied") {
+            "Kein Zugriff auf den Cable Editor".to_string()
+        } else {
+            format!("Anmeldung fehlgeschlagen: {failure}")
+        };
+        let hint = failure.contains("access_denied").then(|| {
+            html! {
+                <p>{"Das Konto ist beim Login-Anbieter nicht für diese Anwendung freigegeben. \
+                    Bitte beim Support die Freigabe beantragen."}</p>
+            }
+        });
+        html! {
             <Bullseye>
-                <Alert inline=true title={format!("Anmeldung fehlgeschlagen: {error}")} r#type={AlertType::Danger}/>
+                <Alert inline=true title={title} r#type={AlertType::Danger}>
+                    {hint}
+                    <Button
+                        variant={ButtonVariant::Secondary}
+                        label="Erneut anmelden"
+                        onclick={ctx.link().callback(|_| LoginMsg::Start)}
+                    />
+                </Alert>
             </Bullseye>
-        },
-        None => html!(<Spinner/>),
+        }
+    }
+}
+
+impl Login {
+    /// Only without a session: after a failure the user decides when to try again.
+    fn start_if_needed(&self, ctx: &Context<Self>) {
+        if matches!(self.auth, Some(OAuth2Context::NotAuthenticated { .. })) {
+            ctx.link().send_message(LoginMsg::Start);
+        }
     }
 }
