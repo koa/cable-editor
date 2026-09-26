@@ -45,7 +45,6 @@ pub struct Duct {
     pub description: Option<String>,
     pub schacht_a: i32,
     pub schacht_z: i32,
-    pub eigenleistung: bool,
 }
 
 #[Object]
@@ -77,10 +76,6 @@ impl Duct {
     }
     async fn description(&self) -> Option<&str> {
         self.description.as_deref()
-    }
-    /// Built by ourselves (`eigenleistung`), not rented
-    async fn own_work(&self) -> bool {
-        self.eigenleistung
     }
     async fn cables(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Cable>> {
         Ok(get_loader(ctx)?

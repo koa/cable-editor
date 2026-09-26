@@ -115,7 +115,7 @@ const ductLine = (c) => {
 };
 const duct = (c) => ({
   id: 700 + c[0], description: `Rohr ${c[1]}`, schachtA: schacht(c[5]), schachtZ: schacht(c[6]), length: c[4],
-  ownWork: c[0] !== 13, cables: () => [cable(c[0])], line: ductLine(c),
+  cables: () => [cable(c[0])], line: ductLine(c),
 });
 const cable = (id) => {
   const c = cableRows.find((r) => r[0] === id);

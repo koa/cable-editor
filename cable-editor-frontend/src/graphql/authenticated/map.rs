@@ -28,7 +28,6 @@ pub struct MapSchacht {
 pub struct MapDuct {
     pub id: i32,
     pub description: Option<String>,
-    pub own_work: bool,
     /// From Schacht A to Schacht Z, missing without geometry
     pub line: Option<Vec<GeoPoint>>,
     pub schacht_a: MapDuctEnd,

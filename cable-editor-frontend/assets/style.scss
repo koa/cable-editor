@@ -827,10 +827,6 @@ body {
   fill: none;
 }
 
-.map-view__duct--rented {
-  stroke-dasharray: 8 6;
-}
-
 .map-view__duct--selected {
   stroke: var(--pf-t--global--color--status--warning--default);
   stroke-width: 8;

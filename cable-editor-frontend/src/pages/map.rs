@@ -236,9 +236,6 @@ fn view_duct(ctx: &Context<Map>, duct: &MapDuct) -> Html {
                         {" – "}
                         <SchachtLink id={duct.schacht_z.id} text={duct.schacht_z.name.clone()}/>
                     </DescriptionGroup>
-                    <DescriptionGroup term="Bau">
-                        {if duct.own_work { "Eigenleistung" } else { "Fremd" }}
-                    </DescriptionGroup>
                     <DescriptionGroup term="Kabel">{cables}</DescriptionGroup>
                 </DescriptionList>
             </CardBody>
@@ -279,12 +276,7 @@ fn show_data(ctx: &Context<Map>, map: &leaflet::Map, data: &MapData) {
         for point in line {
             corners.push(&LatLng::new(point.lat, point.lng));
         }
-        let class = if duct.own_work {
-            "map-view__duct"
-        } else {
-            "map-view__duct map-view__duct--rented"
-        };
-        let options = duct_options(class);
+        let options = duct_options("map-view__duct");
         options.set_interactive(false);
         Polyline::new_with_options(&points(line), &options).add_to(map);
         // A wide invisible line takes the clicks, the visible one is hard to hit on a phone

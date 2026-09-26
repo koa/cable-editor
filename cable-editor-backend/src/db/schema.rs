@@ -115,7 +115,6 @@ diesel::table! {
             description -> Nullable<Varchar>,
             schacht_a -> Int4,
             schacht_z -> Int4,
-            eigenleistung -> Bool,
     }
 }
 
