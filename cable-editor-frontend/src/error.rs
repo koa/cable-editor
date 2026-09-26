@@ -16,7 +16,7 @@ pub enum FrontendError {
     ErrorQueryingAuthenticatedTransfer(CynicReqwestError),
     #[error("Invalid http header: {0}")]
     InvalidHeader(#[from] InvalidHeaderValue),
-    #[error("Errors from server: {0:?}")]
+    #[error("{}", .0.iter().map(|error| error.message.as_str()).collect::<Vec<_>>().join("; "))]
     Graphql(Vec<cynic::GraphQlError>),
     #[error("Plan not found: {0}")]
     PlanNotFound(i32),

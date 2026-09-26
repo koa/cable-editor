@@ -17,10 +17,10 @@ use crate::{
     pages::router::{AppRoute, RedirectToPlans},
 };
 use brady_web_sdk::BradyProvider;
-use patternfly_yew::prelude::{BackdropViewer, Bullseye, Spinner, ToastViewer};
+use patternfly_yew::prelude::{Alert, AlertType, BackdropViewer, Bullseye, Spinner, ToastViewer};
 use yew::{
     Context, Html, Properties, function_component, html, html::IntoPropValue,
-    platform::spawn_local, use_effect_with,
+    platform::spawn_local, use_effect_with, use_state,
 };
 use yew_nested_router::{Router, Switch};
 use yew_oauth2::{
@@ -124,15 +124,24 @@ pub fn main_oauth2(props: &MainOAuth2Props) -> Html {
 #[function_component(AutoLogin)]
 fn auto_login() -> Html {
     let agent = use_auth_agent().expect("Requires OAuth2Context component in parent hierarchy");
+    let error = use_state(|| None::<String>);
 
-    use_effect_with((), move |_| {
-        if let Err(err) = agent.start_login() {
-            log::warn!("Failed to start login: {err}");
-        }
-        || ()
-    });
+    {
+        let error = error.clone();
+        use_effect_with((), move |_| {
+            if let Err(err) = agent.start_login() {
+                error.set(Some(err.to_string()));
+            }
+            || ()
+        });
+    }
 
-    html! {
-        <Spinner />
+    match &*error {
+        Some(error) => html! {
+            <Bullseye>
+                <Alert inline=true title={format!("Anmeldung fehlgeschlagen: {error}")} r#type={AlertType::Danger}/>
+            </Bullseye>
+        },
+        None => html!(<Spinner/>),
     }
 }

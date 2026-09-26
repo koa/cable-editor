@@ -14,14 +14,13 @@ use crate::{
         duct::select_duct::SelectDuct,
         router::{AppRoute, PlanView},
     },
-    util::{get_backdrop, get_credentials},
+    util::{get_backdrop, get_credentials, get_toaster},
 };
-use log::{error, info};
 use patternfly_yew::prelude::{
-    Backdrop, Bullseye, Button, ButtonVariant, Cell, CellContext, ExpansionState, Form, FormGroup,
-    Icon, InputState, LabelIcon, MemoizedTableModel, Modal, ModalVariant, SimpleList,
+    AlertType, Backdrop, Bullseye, Button, ButtonVariant, Cell, CellContext, ExpansionState, Form,
+    FormGroup, Icon, InputState, LabelIcon, MemoizedTableModel, Modal, ModalVariant, SimpleList,
     SimpleListItem, Spinner, Table, TableColumn, TableEntryRenderer, TableGridMode, TableHeader,
-    TableMode, TextInput, Toolbar, ToolbarContent, ToolbarItem,
+    TableMode, TextInput, Toast, Toolbar, ToolbarContent, ToolbarItem,
 };
 use std::{cell::RefCell, collections::HashMap, mem, rc::Rc};
 use yew::{
@@ -397,9 +396,17 @@ impl Component for EditCable {
                         ctx.link().context::<OAuth2Context>(Callback::noop()),
                     ) {
                         let plan_id = ctx.props().plan_id;
+                        let toaster = get_toaster(ctx.link());
                         spawn_local(async move {
-                            if let Err(err) = delete_cable(Some(&credentials), id).await {
-                                error!("Cannot delete cable: {err}")
+                            if let Err(error) = delete_cable(Some(&credentials), id).await {
+                                if let Some(toaster) = toaster {
+                                    toaster.toast(Toast {
+                                        title: "Kabel konnte nicht gelöscht werden".into(),
+                                        r#type: AlertType::Danger,
+                                        body: html!(error.to_string()),
+                                        ..Toast::default()
+                                    });
+                                }
                             } else {
                                 rt.push(AppRoute::Plan {
                                     plan_id,
@@ -589,6 +596,7 @@ impl EditCable {
                         });
                     }
                     let credentials = get_credentials(ctx.link());
+                    let toaster = get_toaster(ctx.link());
                     if let Some(backdrop) = get_backdrop(ctx.link()) {
                         for (idx, end) in [(0, PathEnd::Front), (entries.len() - 1, PathEnd::Tail)] {
                             if let Some(first_schacht) = entries.get_mut(idx) && let DuctPathEntry::Schacht { on_extend, schacht, .. } = first_schacht {
@@ -596,11 +604,13 @@ impl EditCable {
                                 let schacht = schacht.clone();
                                 let scope = scope.clone();
                                 let credentials = credentials.clone();
+                                let toaster = toaster.clone();
                                 *on_extend = Some(Callback::from(move |_| {
                                     let backdrop = backdrop.clone();
                                     let schacht = schacht.clone();
                                     let scope = scope.clone();
                                     let credentials = credentials.clone();
+                                    let toaster = toaster.clone();
                                     spawn_local(async move {
                                         match schacht.fetch_connected_ducts(credentials.as_ref()).await {
                                             Ok(available_ducts) => {
@@ -623,8 +633,16 @@ impl EditCable {
                                                     />
                                                 }));
                                             }
-                                            Err(e) => {
-                                                info!("Error fetching connected ducts: {e:?}");
+                                            Err(error) => {
+                                                // A toast: an error page would drop the unsaved changes of the cable
+                                                if let Some(toaster) = toaster {
+                                                    toaster.toast(Toast {
+                                                        title: "Anschliessende Rohre konnten nicht geladen werden".into(),
+                                                        r#type: AlertType::Danger,
+                                                        body: html!(error.to_string()),
+                                                        ..Toast::default()
+                                                    });
+                                                }
                                             }
                                         }
                                     });
@@ -803,18 +821,15 @@ impl EditCable {
     fn fetch_data(ctx: &Context<EditCable>) {
         let scope = ctx.link().clone();
         let cable_id = ctx.props().cable_id;
+        let credentials = get_credentials(&scope);
         spawn_local(async move {
-            if let Some((credentials, _)) = scope.context::<OAuth2Context>(Callback::noop()) {
-                scope.send_message(
-                    match CableDetails::fetch(Some(&credentials), cable_id).await {
-                        Ok(Some(data)) => Msg::Data(data),
-                        Err(error) => Msg::Error(error),
-                        Ok(None) => Msg::NotFound,
-                    },
-                );
-            } else {
-                error!("Not logged in")
-            }
+            scope.send_message(
+                match CableDetails::fetch(credentials.as_ref(), cable_id).await {
+                    Ok(Some(data)) => Msg::Data(data),
+                    Err(error) => Msg::Error(error),
+                    Ok(None) => Msg::NotFound,
+                },
+            );
         });
     }
 }

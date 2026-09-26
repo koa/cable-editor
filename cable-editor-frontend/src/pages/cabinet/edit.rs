@@ -5,8 +5,9 @@ use crate::{
     },
     error::FrontendError,
     graphql::authenticated::cabinet_details::fetch_schacht_name,
-    util::get_credentials,
+    util::{get_credentials, get_toaster},
 };
+use patternfly_yew::prelude::{AlertType, Toast};
 use yew::{Component, Context, Html, Properties, html, platform::spawn_local};
 
 #[derive(Properties, PartialEq)]
@@ -53,7 +54,15 @@ impl Component for EditCabinetPanels {
                 true
             }
             Msg::Name(Err(error)) => {
-                log::warn!("Failed to fetch the Schacht name: {error}");
+                // Only the title lacks the name, the editor below shows its own errors
+                if let Some(toaster) = get_toaster(ctx.link()) {
+                    toaster.toast(Toast {
+                        title: "Schachtname konnte nicht geladen werden".into(),
+                        r#type: AlertType::Danger,
+                        body: html!(error.to_string()),
+                        ..Toast::default()
+                    });
+                }
                 false
             }
         }
