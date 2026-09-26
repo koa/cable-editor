@@ -1,7 +1,37 @@
-use patternfly_yew::prelude::{Bullseye, Button, ButtonVariant, Modal, ModalVariant};
-use yew::{Callback, Html, Properties, function_component, html};
+use crate::util::get_backdrop;
+use patternfly_yew::prelude::{Backdrop, Bullseye, Button, ButtonVariant, Modal, ModalVariant};
+use web_sys::MouseEvent;
+use yew::{BaseComponent, Callback, Html, Properties, function_component, html, html::Scope};
 
-/// Asks before deleting; the page opens it in its backdrop.
+/// The click handler of a delete button: asks in the page's backdrop and calls `on_confirm`
+/// only when confirmed.
+pub fn confirm_delete(
+    scope: &Scope<impl BaseComponent>,
+    on_confirm: Callback<()>,
+) -> Callback<MouseEvent> {
+    let Some(backdropper) = get_backdrop(scope) else {
+        return Callback::noop();
+    };
+    Callback::from(move |_| {
+        let on_confirm = {
+            let backdropper = backdropper.clone();
+            let on_confirm = on_confirm.clone();
+            Callback::from(move |()| {
+                backdropper.close();
+                on_confirm.emit(());
+            })
+        };
+        let on_cancel = {
+            let backdropper = backdropper.clone();
+            Callback::from(move |()| backdropper.close())
+        };
+        backdropper.open(Backdrop::new(html! {
+            <DeleteConfirmationDialog {on_confirm} {on_cancel}/>
+        }));
+    })
+}
+
+/// Asks before deleting, opened by `confirm_delete`.
 #[derive(Debug, Clone, PartialEq, Properties)]
 pub struct DeleteConfirmationDialogProperties {
     #[prop_or_default]

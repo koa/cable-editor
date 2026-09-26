@@ -9,8 +9,8 @@ use crate::{
         list_ducts::duct_title,
         map::{MapData, MapDuct, fetch_map_data},
     },
-    pages::router::{AppRoute, CabinetView, PlanView},
-    util::get_credentials,
+    pages::router::{CabinetView, PlanView},
+    util::{get_credentials, navigate},
 };
 use leaflet::{MouseEvent, Polyline};
 use patternfly_yew::prelude::{
@@ -19,10 +19,8 @@ use patternfly_yew::prelude::{
 };
 use web_sys::HtmlElement;
 use yew::{
-    Callback, Component, Context, Html, NodeRef, Properties, html, html::IntoPropValue,
-    platform::spawn_local,
+    Component, Context, Html, NodeRef, Properties, html, html::IntoPropValue, platform::spawn_local,
 };
-use yew_nested_router::prelude::RouterContext;
 
 /// Map of the plan's objects: the Schächte with a position, labelled with their name (a click
 /// opens the Schacht's overview), and the ducts (a click selects one and shows its Schächte and
@@ -101,18 +99,14 @@ impl Component for Map {
                 true
             }
             Msg::OpenSchacht(id) => {
-                if let Some((router, _)) = ctx
-                    .link()
-                    .context::<RouterContext<AppRoute>>(Callback::noop())
-                {
-                    router.push(AppRoute::Plan {
-                        plan_id: ctx.props().plan_id,
-                        view: PlanView::Cabinet {
-                            id,
-                            view: CabinetView::Overview,
-                        },
-                    });
-                }
+                navigate(
+                    ctx.link(),
+                    ctx.props().plan_id,
+                    PlanView::Cabinet {
+                        id,
+                        view: CabinetView::Overview,
+                    },
+                );
                 false
             }
         }

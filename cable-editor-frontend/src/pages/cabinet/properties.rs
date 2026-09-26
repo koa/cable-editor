@@ -1,6 +1,6 @@
 use crate::{
     components::{
-        dialog::DeleteConfirmationDialog,
+        dialog::confirm_delete,
         page_layout::{PageLayout, object_title},
     },
     error::FrontendError,
@@ -17,23 +17,22 @@ use crate::{
             fetch_schacht_properties, fetch_schacht_types, update_schacht,
         },
     },
-    pages::router::{AppRoute, CabinetView, PlanView},
-    util::{get_backdrop, get_credentials, get_role, get_toaster},
+    pages::router::{CabinetView, PlanView},
+    util::{get_credentials, get_role, navigate, toast_error, toast_success},
 };
 use gloo_timers::callback::Timeout;
 use leaflet::{DragEvents, Marker, MarkerOptions, MouseEvent};
 use patternfly_yew::prelude::{
-    ActionGroup, Alert, AlertType, Backdrop, Button, ButtonVariant, Form, FormGroup, FormSelect,
-    FormSelectOption, Icon, Spinner, TextInput, Toast, ToggleGroup, ToggleGroupItem,
+    ActionGroup, Alert, AlertType, Button, ButtonVariant, Form, FormGroup, FormSelect,
+    FormSelectOption, Icon, Spinner, TextInput, ToggleGroup, ToggleGroupItem,
 };
 use wasm_bindgen::{JsCast, JsValue, closure::Closure};
 // The stable (older) names of GeolocationPosition and GeolocationPositionError
 use web_sys::{HtmlElement, Position, PositionError, PositionOptions};
 use yew::{
-    Callback, Component, Context, Html, NodeRef, Properties, html, html::IntoPropValue,
-    html_nested, platform::spawn_local,
+    Component, Context, Html, NodeRef, Properties, html, html::IntoPropValue, html_nested,
+    platform::spawn_local,
 };
-use yew_nested_router::prelude::RouterContext;
 
 /// Waiting time after typing before the position is converted and shown on the map.
 const CONVERT_DELAY_MS: u32 = 400;
@@ -228,12 +227,12 @@ impl Component for CabinetProperties {
                 self.locating = true;
                 if let Err(error) = locate(ctx) {
                     self.locating = false;
-                    self.toast(ctx, "Standort nicht verfügbar", error);
+                    toast_error(ctx.link(), "Standort nicht verfügbar", error);
                 }
             }
             Msg::LocateFailed(error) => {
                 self.locating = false;
-                self.toast(ctx, "Standort nicht verfügbar", error);
+                toast_error(ctx.link(), "Standort nicht verfügbar", error);
             }
             Msg::ClearPosition => {
                 self.first.clear();
@@ -250,29 +249,27 @@ impl Component for CabinetProperties {
                         if let Some((stored, _)) = &mut self.loaded {
                             *stored = Some(schacht);
                         }
-                        if let Some(toaster) = get_toaster(ctx.link()) {
-                            toaster.toast(Toast {
-                                title: "Schacht gespeichert".into(),
-                                r#type: AlertType::Success,
-                                timeout: Some(std::time::Duration::from_secs(3)),
-                                ..Toast::default()
-                            });
-                        }
+                        toast_success(ctx.link(), "Schacht gespeichert");
                     }
-                    Err(error) => self.toast(ctx, "Schacht konnte nicht gespeichert werden", error),
+                    Err(error) => {
+                        toast_error(ctx.link(), "Schacht konnte nicht gespeichert werden", error)
+                    }
                 }
             }
             Msg::Created(result) => {
                 self.saving = false;
                 match result {
-                    Ok(id) => self.navigate(
-                        ctx,
+                    Ok(id) => navigate(
+                        ctx.link(),
+                        ctx.props().plan_id,
                         PlanView::Cabinet {
                             id,
                             view: CabinetView::Properties,
                         },
                     ),
-                    Err(error) => self.toast(ctx, "Schacht konnte nicht angelegt werden", error),
+                    Err(error) => {
+                        toast_error(ctx.link(), "Schacht konnte nicht angelegt werden", error)
+                    }
                 }
             }
             Msg::Delete => {
@@ -282,16 +279,7 @@ impl Component for CabinetProperties {
                     let plan_id = ctx.props().plan_id;
                     spawn_local(async move {
                         match delete_schacht(credentials.as_ref(), id).await {
-                            Ok(()) => {
-                                if let Some((router, _)) =
-                                    scope.context::<RouterContext<AppRoute>>(Callback::noop())
-                                {
-                                    router.push(AppRoute::Plan {
-                                        plan_id,
-                                        view: PlanView::ListOfCabinets,
-                                    });
-                                }
-                            }
+                            Ok(()) => navigate(&scope, plan_id, PlanView::ListOfCabinets),
                             Err(error) => scope.send_message(Msg::DeleteFailed(error)),
                         }
                     });
@@ -299,7 +287,7 @@ impl Component for CabinetProperties {
                 return false;
             }
             Msg::DeleteFailed(error) => {
-                self.toast(ctx, "Schacht konnte nicht gelöscht werden", error);
+                toast_error(ctx.link(), "Schacht konnte nicht gelöscht werden", error);
                 return false;
             }
         }
@@ -587,29 +575,6 @@ impl CabinetProperties {
             || position != stored_point
     }
 
-    fn navigate(&self, ctx: &Context<Self>, view: PlanView) {
-        if let Some((router, _)) = ctx
-            .link()
-            .context::<RouterContext<AppRoute>>(Callback::noop())
-        {
-            router.push(AppRoute::Plan {
-                plan_id: ctx.props().plan_id,
-                view,
-            });
-        }
-    }
-
-    fn toast(&self, ctx: &Context<Self>, title: &str, error: impl ToString) {
-        if let Some(toaster) = get_toaster(ctx.link()) {
-            toaster.toast(Toast {
-                title: title.to_string(),
-                r#type: AlertType::Danger,
-                body: html!(error.to_string()),
-                ..Toast::default()
-            });
-        }
-    }
-
     fn view_form(&self, ctx: &Context<Self>, types: &[SchachtTypeEntry]) -> Html {
         let readonly = !self.can_edit(ctx);
         let link = ctx.link();
@@ -767,29 +732,10 @@ impl CabinetProperties {
             PositionState::Empty | PositionState::Valid(_)
         );
         let can_save = position_ok && !self.name.trim().is_empty() && self.has_changes();
-        let delete = get_backdrop(ctx.link())
-            .filter(|_| !is_new && get_role(ctx.link()) >= Role::Admin)
-            .map(|backdropper| {
-                let scope = ctx.link().clone();
-                let onclick = Callback::from(move |_| {
-                    let on_confirm = {
-                        let backdropper = backdropper.clone();
-                        let scope = scope.clone();
-                        Callback::from(move |_| {
-                            backdropper.close();
-                            scope.send_message(Msg::Delete);
-                        })
-                    };
-                    let on_cancel = {
-                        let backdropper = backdropper.clone();
-                        Callback::from(move |_| backdropper.close())
-                    };
-                    backdropper.open(Backdrop::new(html! {
-                        <DeleteConfirmationDialog {on_confirm} {on_cancel}/>
-                    }));
-                });
-                html_nested!(<Button variant={ButtonVariant::DangerSecondary} label="Löschen" {onclick}/>)
-            });
+        let delete = (!is_new && get_role(ctx.link()) >= Role::Admin).then(|| {
+            let onclick = confirm_delete(ctx.link(), ctx.link().callback(|()| Msg::Delete));
+            html_nested!(<Button variant={ButtonVariant::DangerSecondary} label="Löschen" {onclick}/>)
+        });
         html! {
             <ActionGroup>
                 <Button

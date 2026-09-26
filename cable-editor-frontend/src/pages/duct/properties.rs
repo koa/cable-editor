@@ -1,6 +1,6 @@
 use crate::{
     components::{
-        dialog::DeleteConfirmationDialog,
+        dialog::confirm_delete,
         page_layout::{PageLayout, object_title},
     },
     error::FrontendError,
@@ -18,13 +18,12 @@ use crate::{
         },
         list_ducts::duct_title,
     },
-    pages::router::{AppRoute, DuctView, PlanView},
-    util::{get_backdrop, get_credentials, get_role, get_toaster},
+    pages::router::{DuctView, PlanView},
+    util::{get_credentials, get_role, navigate, toast_error, toast_success},
 };
 use patternfly_yew::prelude::{
-    ActionGroup, Alert, AlertType, Backdrop, Button, ButtonVariant, Checkbox, CheckboxState, Form,
-    FormGroup, FormSelect, FormSelectOption, Icon, Spinner, TextInput, Toast, ToggleGroup,
-    ToggleGroupItem,
+    ActionGroup, Alert, AlertType, Button, ButtonVariant, Checkbox, CheckboxState, Form, FormGroup,
+    FormSelect, FormSelectOption, Icon, Spinner, TextInput, ToggleGroup, ToggleGroupItem,
 };
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
@@ -33,7 +32,6 @@ use yew::{
     Callback, Component, Context, Html, NodeRef, Properties, html, html::IntoPropValue,
     html_nested, platform::spawn_local,
 };
-use yew_nested_router::prelude::RouterContext;
 
 /// Schächte, description and course of a duct, or a new one (`IdOrNew::Temporary`). The
 /// course comes from a GeoJSON or GPX file: the backend converts it, turns it to run from
@@ -172,9 +170,11 @@ impl Component for EditDuctProperties {
                     });
                     self.check(ctx);
                 }
-                Err(error) => {
-                    self.toast(ctx, &format!("{name} konnte nicht gelesen werden"), error)
-                }
+                Err(error) => toast_error(
+                    ctx.link(),
+                    format!("{name} konnte nicht gelesen werden"),
+                    error,
+                ),
             },
             Msg::SelectLine(line) => {
                 if let Some(file) = &mut self.file {
@@ -209,8 +209,9 @@ impl Component for EditDuctProperties {
             Msg::Done(result) => {
                 self.saving = false;
                 match result {
-                    Ok(Some(id)) => self.navigate(
-                        ctx,
+                    Ok(Some(id)) => navigate(
+                        ctx.link(),
+                        ctx.props().plan_id,
                         PlanView::Duct {
                             id,
                             view: DuctView::Properties,
@@ -220,16 +221,11 @@ impl Component for EditDuctProperties {
                         self.file = None;
                         self.check = CheckState::None;
                         Self::fetch(ctx);
-                        if let Some(toaster) = get_toaster(ctx.link()) {
-                            toaster.toast(Toast {
-                                title: "Trasse gespeichert".into(),
-                                r#type: AlertType::Success,
-                                timeout: Some(std::time::Duration::from_secs(3)),
-                                ..Toast::default()
-                            });
-                        }
+                        toast_success(ctx.link(), "Trasse gespeichert");
                     }
-                    Err(error) => self.toast(ctx, "Trasse konnte nicht gespeichert werden", error),
+                    Err(error) => {
+                        toast_error(ctx.link(), "Trasse konnte nicht gespeichert werden", error)
+                    }
                 }
             }
             Msg::Delete => {
@@ -237,28 +233,11 @@ impl Component for EditDuctProperties {
                     let scope = ctx.link().clone();
                     let credentials = get_credentials(&scope);
                     let plan_id = ctx.props().plan_id;
-                    let toaster = get_toaster(&scope);
                     spawn_local(async move {
                         match delete_duct(credentials.as_ref(), id).await {
-                            Ok(()) => {
-                                if let Some((router, _)) =
-                                    scope.context::<RouterContext<AppRoute>>(Callback::noop())
-                                {
-                                    router.push(AppRoute::Plan {
-                                        plan_id,
-                                        view: PlanView::ListOfDucts,
-                                    });
-                                }
-                            }
+                            Ok(()) => navigate(&scope, plan_id, PlanView::ListOfDucts),
                             Err(error) => {
-                                if let Some(toaster) = toaster {
-                                    toaster.toast(Toast {
-                                        title: "Trasse konnte nicht gelöscht werden".into(),
-                                        r#type: AlertType::Danger,
-                                        body: html!(error.to_string()),
-                                        ..Toast::default()
-                                    });
-                                }
+                                toast_error(&scope, "Trasse konnte nicht gelöscht werden", error)
                             }
                         }
                     });
@@ -524,29 +503,6 @@ impl EditDuctProperties {
         });
     }
 
-    fn navigate(&self, ctx: &Context<Self>, view: PlanView) {
-        if let Some((router, _)) = ctx
-            .link()
-            .context::<RouterContext<AppRoute>>(Callback::noop())
-        {
-            router.push(AppRoute::Plan {
-                plan_id: ctx.props().plan_id,
-                view,
-            });
-        }
-    }
-
-    fn toast(&self, ctx: &Context<Self>, title: &str, error: impl ToString) {
-        if let Some(toaster) = get_toaster(ctx.link()) {
-            toaster.toast(Toast {
-                title: title.to_string(),
-                r#type: AlertType::Danger,
-                body: html!(error.to_string()),
-                ..Toast::default()
-            });
-        }
-    }
-
     /// The chosen Schächte, the stored course and the checked one from the file.
     fn redraw(&mut self) {
         let Some(map) = &self.map else {
@@ -643,27 +599,9 @@ impl EditDuctProperties {
         }
         let is_new = self.is_new(ctx);
         let can_save = self.input().is_some() && self.has_changes(ctx);
-        let delete = get_backdrop(ctx.link())
-            .filter(|_| !is_new && !self.has_cables() && get_role(ctx.link()) >= Role::Admin)
-            .map(|backdropper| {
-                let scope = ctx.link().clone();
-                let onclick = Callback::from(move |_| {
-                    let on_confirm = {
-                        let backdropper = backdropper.clone();
-                        let scope = scope.clone();
-                        Callback::from(move |_| {
-                            backdropper.close();
-                            scope.send_message(Msg::Delete);
-                        })
-                    };
-                    let on_cancel = {
-                        let backdropper = backdropper.clone();
-                        Callback::from(move |_| backdropper.close())
-                    };
-                    backdropper.open(Backdrop::new(html! {
-                        <DeleteConfirmationDialog {on_confirm} {on_cancel}/>
-                    }));
-                });
+        let delete =
+            (!is_new && !self.has_cables() && get_role(ctx.link()) >= Role::Admin).then(|| {
+                let onclick = confirm_delete(ctx.link(), ctx.link().callback(|()| Msg::Delete));
                 html_nested!(<Button variant={ButtonVariant::DangerSecondary} label="Löschen" {onclick}/>)
             });
         html! {

@@ -1,6 +1,6 @@
 use crate::components::{
     cable_map::{CableMap, PathEdit, PathEnd},
-    dialog::DeleteConfirmationDialog,
+    dialog::confirm_delete,
     page_layout::{PageLayout, object_title},
 };
 use crate::{
@@ -15,24 +15,20 @@ use crate::{
         list_cables::delete_cable,
         select_duct::DuctListEntry,
     },
-    pages::{
-        duct::select_duct::SelectDuct,
-        router::{AppRoute, PlanView},
-    },
-    util::{get_backdrop, get_credentials, get_role, get_toaster},
+    pages::{duct::select_duct::SelectDuct, router::PlanView},
+    util::{get_backdrop, get_credentials, get_role, navigate, toast_error},
 };
 use patternfly_yew::prelude::{
-    AlertType, Backdrop, Bullseye, Button, ButtonVariant, Cell, CellContext, ExpansionState, Form,
-    FormGroup, Icon, InputState, LabelIcon, MemoizedTableModel, Modal, ModalVariant, SimpleList,
+    Backdrop, Bullseye, Button, ButtonVariant, Cell, CellContext, ExpansionState, Form, FormGroup,
+    Icon, InputState, LabelIcon, MemoizedTableModel, Modal, ModalVariant, SimpleList,
     SimpleListItem, Spinner, Table, TableColumn, TableEntryRenderer, TableGridMode, TableHeader,
-    TableMode, TextInput, Toast, Toolbar, ToolbarContent, ToolbarItem,
+    TableMode, TextInput, Toolbar, ToolbarContent, ToolbarItem,
 };
 use std::{cell::RefCell, collections::HashMap, mem, rc::Rc};
 use yew::{
     Callback, Component, Context, Html, Properties, function_component, html, html::IntoPropValue,
     html::Scope, html_nested, platform::spawn_local,
 };
-use yew_nested_router::prelude::RouterContext;
 use yew_oauth2::prelude::OAuth2Context;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -288,14 +284,7 @@ impl Component for EditCable {
             }
             Msg::SaveFailed(error) => {
                 self.saving = false;
-                if let Some(toaster) = get_toaster(ctx.link()) {
-                    toaster.toast(Toast {
-                        title: "Kabel konnte nicht gespeichert werden".into(),
-                        r#type: AlertType::Danger,
-                        body: html!(error.to_string()),
-                        ..Toast::default()
-                    });
-                }
+                toast_error(ctx.link(), "Kabel konnte nicht gespeichert werden", error);
                 true
             }
             Msg::AppendSegment {
@@ -366,31 +355,17 @@ impl Component for EditCable {
             Msg::RemoveEntry => {
                 if let DataState::Data(data) = &self.state {
                     let id = data.id;
-                    if let (Some((rt, _)), Some((credentials, _))) = (
-                        ctx.link()
-                            .context::<RouterContext<AppRoute>>(Callback::noop()),
-                        ctx.link().context::<OAuth2Context>(Callback::noop()),
-                    ) {
-                        let plan_id = ctx.props().plan_id;
-                        let toaster = get_toaster(ctx.link());
-                        spawn_local(async move {
-                            if let Err(error) = delete_cable(Some(&credentials), id).await {
-                                if let Some(toaster) = toaster {
-                                    toaster.toast(Toast {
-                                        title: "Kabel konnte nicht gelöscht werden".into(),
-                                        r#type: AlertType::Danger,
-                                        body: html!(error.to_string()),
-                                        ..Toast::default()
-                                    });
-                                }
-                            } else {
-                                rt.push(AppRoute::Plan {
-                                    plan_id,
-                                    view: PlanView::ListOfCables,
-                                });
+                    let scope = ctx.link().clone();
+                    let credentials = get_credentials(&scope);
+                    let plan_id = ctx.props().plan_id;
+                    spawn_local(async move {
+                        match delete_cable(credentials.as_ref(), id).await {
+                            Ok(()) => navigate(&scope, plan_id, PlanView::ListOfCables),
+                            Err(error) => {
+                                toast_error(&scope, "Kabel konnte nicht gelöscht werden", error)
                             }
-                        });
-                    }
+                        }
+                    });
                 }
                 false
             }
@@ -507,43 +482,19 @@ impl EditCable {
                     } else if self.saving {
                         html!(<Spinner/>)
                     } else {
-                        let scope = ctx.link().clone();
-                        let delete_button = get_backdrop(ctx.link())
-                            .filter(|_| role >= Role::Admin)
-                            .map(|backdropper| {
-                                let onclick = {
-                                    let backdropper = backdropper.clone();
-                                    let scope = scope.clone();
-                                    Callback::from(move |_| {
-                                        let backdropper = backdropper.clone();
-                                        let scope = scope.clone();
-                                        let on_confirm = {
-                                            let backdropper = backdropper.clone();
-                                            let scope = scope.clone();
-                                            Callback::from(move |_| {
-                                                backdropper.close();
-                                                scope.send_message(Msg::RemoveEntry);
-                                            })
-                                        };
-                                        let on_cancel = {
-                                            let backdropper = backdropper.clone();
-                                            Callback::from(move |_| {
-                                                backdropper.close();
-                                            })
-                                        };
-                                        backdropper.open(Backdrop::new(html! {
-                                            <DeleteConfirmationDialog {on_confirm} {on_cancel} />
-                                        }));
-                                    })
-                                };
-                                html! {
+                        let delete_button = (role >= Role::Admin).then(|| {
+                            let onclick = confirm_delete(
+                                ctx.link(),
+                                ctx.link().callback(|()| Msg::RemoveEntry),
+                            );
+                            html! {
                                 <Button variant={ButtonVariant::DangerSecondary}
                                     label="Löschen"
                                     {onclick}
                                     disabled={has_changes}
                                 />
-                                }
-                            });
+                            }
+                        });
                         html! {
                             <>
                             <Button variant={ButtonVariant::Primary}
@@ -587,7 +538,6 @@ impl EditCable {
                         });
                     }
                     let credentials = get_credentials(ctx.link());
-                    let toaster = get_toaster(ctx.link());
                     if let Some(backdrop) = get_backdrop(ctx.link()).filter(|_| !readonly) {
                         for (idx, end) in [(0, PathEnd::Front), (entries.len() - 1, PathEnd::Tail)] {
                             if let Some(first_schacht) = entries.get_mut(idx) && let DuctPathEntry::Schacht { on_extend, schacht, .. } = first_schacht {
@@ -595,13 +545,11 @@ impl EditCable {
                                 let schacht = schacht.clone();
                                 let scope = scope.clone();
                                 let credentials = credentials.clone();
-                                let toaster = toaster.clone();
                                 *on_extend = Some(Callback::from(move |_| {
                                     let backdrop = backdrop.clone();
                                     let schacht = schacht.clone();
                                     let scope = scope.clone();
                                     let credentials = credentials.clone();
-                                    let toaster = toaster.clone();
                                     spawn_local(async move {
                                         match schacht.fetch_connected_ducts(credentials.as_ref()).await {
                                             Ok(available_ducts) => {
@@ -626,14 +574,7 @@ impl EditCable {
                                             }
                                             Err(error) => {
                                                 // A toast: an error page would drop the unsaved changes of the cable
-                                                if let Some(toaster) = toaster {
-                                                    toaster.toast(Toast {
-                                                        title: "Anschliessende Rohre konnten nicht geladen werden".into(),
-                                                        r#type: AlertType::Danger,
-                                                        body: html!(error.to_string()),
-                                                        ..Toast::default()
-                                                    });
-                                                }
+                                                toast_error(&scope, "Anschliessende Rohre konnten nicht geladen werden", error);
                                             }
                                         }
                                     });

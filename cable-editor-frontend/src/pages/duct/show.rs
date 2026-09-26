@@ -6,17 +6,15 @@ use crate::{
     error::FrontendError,
     geo::map::{create_map, duct_line, fit_points, schacht_marker},
     graphql::authenticated::duct_details::{DuctDetails, fetch_duct_details},
-    pages::router::{AppRoute, CabinetView, PlanView},
-    util::get_credentials,
+    pages::router::{CabinetView, PlanView},
+    util::{get_credentials, navigate},
 };
 use patternfly_yew::prelude::{DescriptionGroup, DescriptionList, Spinner};
 use wasm_bindgen::JsCast;
 use web_sys::HtmlElement;
 use yew::{
-    Callback, Component, Context, Html, NodeRef, Properties, html, html::IntoPropValue,
-    platform::spawn_local,
+    Component, Context, Html, NodeRef, Properties, html, html::IntoPropValue, platform::spawn_local,
 };
-use yew_nested_router::prelude::RouterContext;
 
 /// A duct: its Schächte, length and cables, and a map with its line.
 pub struct ShowDuct {
@@ -69,18 +67,14 @@ impl Component for ShowDuct {
                 true
             }
             Msg::OpenSchacht(id) => {
-                if let Some((router, _)) = ctx
-                    .link()
-                    .context::<RouterContext<AppRoute>>(Callback::noop())
-                {
-                    router.push(AppRoute::Plan {
-                        plan_id: ctx.props().plan_id,
-                        view: PlanView::Cabinet {
-                            id,
-                            view: CabinetView::Overview,
-                        },
-                    });
-                }
+                navigate(
+                    ctx.link(),
+                    ctx.props().plan_id,
+                    PlanView::Cabinet {
+                        id,
+                        view: CabinetView::Overview,
+                    },
+                );
                 false
             }
         }
