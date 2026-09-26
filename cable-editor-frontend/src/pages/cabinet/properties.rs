@@ -307,13 +307,8 @@ impl Component for CabinetProperties {
     }
 
     fn changed(&mut self, ctx: &Context<Self>, old_props: &Self::Properties) -> bool {
-        // Every IdOrNew::default() is a new temporary id, that's still the same new Schacht
-        let other = match (&ctx.props().cabinet, &old_props.cabinet) {
-            (IdOrNew::Id(new), IdOrNew::Id(old)) => new != old,
-            (IdOrNew::Temporary(_), IdOrNew::Temporary(_)) => false,
-            _ => true,
-        };
-        if other {
+        // A new Schacht's temporary id comes from the route, so it's stable
+        if ctx.props().cabinet != old_props.cabinet {
             self.loaded = None;
             Self::fetch(ctx);
             true

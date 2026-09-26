@@ -25,6 +25,7 @@ use crate::{
 };
 use patternfly_yew::prelude::{Breadcrumb, BreadcrumbItem, PageSection, PageSectionType};
 use std::borrow::Cow;
+use uuid::Uuid;
 use yew::virtual_dom::VNode;
 use yew::{Callback, Html, Properties, function_component, html, html_nested, use_effect_with};
 use yew_nested_router::prelude::{Target, use_router};
@@ -127,7 +128,10 @@ impl PanelView {
 pub enum PlanView {
     Edit,
     ListOfCabinets,
-    NewCabinet,
+    /// `id` tells new Schächte apart (see `IdOrNew`), kept in the path so it stays the same
+    NewCabinet {
+        id: Uuid,
+    },
     Cabinet {
         id: i32,
         #[target(nested)]
@@ -141,7 +145,10 @@ pub enum PlanView {
     },
     Map,
     ListOfDucts,
-    NewDuct,
+    /// Like `NewCabinet`
+    NewDuct {
+        id: Uuid,
+    },
     Duct {
         id: i32,
         #[target(nested)]
@@ -161,12 +168,12 @@ impl PlanView {
             PlanView::Edit => ("Ändern".into(), PlanView::Edit),
             PlanView::Cabinet { .. }
             | PlanView::ListOfCabinets
-            | PlanView::NewCabinet
+            | PlanView::NewCabinet { .. }
             | PlanView::Panel { .. } => ("Schacht".into(), PlanView::ListOfCabinets),
             PlanView::Cable { .. } | PlanView::ListOfCables => {
                 ("Kabel".into(), PlanView::ListOfCables)
             }
-            PlanView::Duct { .. } | PlanView::ListOfDucts | PlanView::NewDuct => {
+            PlanView::Duct { .. } | PlanView::ListOfDucts | PlanView::NewDuct { .. } => {
                 ("Trasse".into(), PlanView::ListOfDucts)
             }
             PlanView::Map => ("Karte".into(), PlanView::Map),
@@ -236,8 +243,8 @@ impl PlanView {
                 item_contents
                     .push(html!(<ListPanel {plan_id} panel_id={*id} view={view.clone()}/>));
             }
-            PlanView::NewCabinet => item_contents.push(html!("Neuer Schacht")),
-            PlanView::NewDuct => item_contents.push(html!("Neue Trasse")),
+            PlanView::NewCabinet { .. } => item_contents.push(html!("Neuer Schacht")),
+            PlanView::NewDuct { .. } => item_contents.push(html!("Neue Trasse")),
             PlanView::Duct { id, view } => {
                 item_contents.push(html!(<ListDuct {plan_id} duct_id={*id} view={view.clone()}/>))
             }
@@ -312,8 +319,8 @@ impl PlanView {
                 view: CabinetView::Edit,
                 ..
             }
-            | PlanView::NewCabinet
-            | PlanView::NewDuct
+            | PlanView::NewCabinet { .. }
+            | PlanView::NewDuct { .. }
             | PlanView::Panel {
                 view: PanelView::Edit | PanelView::Loop | PanelView::Attach,
                 ..
@@ -325,8 +332,8 @@ impl PlanView {
         match self {
             PlanView::Edit => html!(<EditPlan {plan_id}/>),
             PlanView::ListOfCabinets => html! {<ListOfCabinets {plan_id}/>},
-            PlanView::NewCabinet => {
-                html!(<CabinetProperties {plan_id} cabinet={IdOrNew::default()}/>)
+            PlanView::NewCabinet { id } => {
+                html!(<CabinetProperties {plan_id} cabinet={IdOrNew::Temporary(id)}/>)
             }
             PlanView::Cabinet { id, view } => view.content(plan_id, id),
             PlanView::ListOfCables => html! {<ListOfCables/>},
@@ -334,7 +341,9 @@ impl PlanView {
             PlanView::Panel { id, view } => view.content(plan_id, id),
             PlanView::Map => html!(<Map {plan_id}/>),
             PlanView::ListOfDucts => html!(<ListOfDucts/>),
-            PlanView::NewDuct => html!(<EditDuctProperties {plan_id} duct={IdOrNew::default()}/>),
+            PlanView::NewDuct { id } => {
+                html!(<EditDuctProperties {plan_id} duct={IdOrNew::Temporary(id)}/>)
+            }
             PlanView::Duct { id, view } => view.content(plan_id, id),
         }
     }

@@ -271,12 +271,8 @@ impl Component for EditDuctProperties {
     }
 
     fn changed(&mut self, ctx: &Context<Self>, old_props: &Self::Properties) -> bool {
-        // Every IdOrNew::default() is a new temporary id, that's still the same new duct
-        let other = match (&ctx.props().duct, &old_props.duct) {
-            (IdOrNew::Id(new), IdOrNew::Id(old)) => new != old,
-            (IdOrNew::Temporary(_), IdOrNew::Temporary(_)) => false,
-            _ => true,
-        };
+        // A new duct's temporary id comes from the route, so it's stable
+        let other = ctx.props().duct != old_props.duct;
         if other {
             self.loaded = None;
             self.file = None;

@@ -14,6 +14,7 @@ use patternfly_yew::prelude::{
     TableEntryRenderer, TableGridMode, TableHeader, TableHeaderSortBy, TableMode,
 };
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use uuid::Uuid;
 use yew::{
     Component, Context, Html, Properties, html,
     html::{IntoPropValue, Scope},
@@ -104,7 +105,7 @@ impl ListOfCabinets {
             };
             let new_schacht = (get_role(ctx.link()) >= Role::Planner).then(|| {
                 html! {
-                    <PlanLink to={PlanView::NewCabinet} class="pf-v6-c-button pf-m-primary">
+                    <PlanLink to={PlanView::NewCabinet { id: Uuid::new_v4() }} class="pf-v6-c-button pf-m-primary">
                         {"Neuer Schacht"}
                     </PlanLink>
                 }

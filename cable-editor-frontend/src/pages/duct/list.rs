@@ -18,6 +18,7 @@ use patternfly_yew::prelude::{
     TableEntryRenderer, TableGridMode, TableHeader, TableHeaderSortBy, TableMode,
 };
 use std::{cell::RefCell, cmp::Ordering, collections::HashMap, rc::Rc};
+use uuid::Uuid;
 use yew::{
     Component, Context, Html, html, html::IntoPropValue, html_nested, platform::spawn_local,
 };
@@ -150,7 +151,7 @@ impl ListOfDucts {
                     {entries}
                 />
                 if get_role(ctx.link()) >= Role::Planner {
-                    <PlanLink to={PlanView::NewDuct} class="pf-v6-c-button pf-m-primary">
+                    <PlanLink to={PlanView::NewDuct { id: Uuid::new_v4() }} class="pf-v6-c-button pf-m-primary">
                         {"Neue Trasse"}
                     </PlanLink>
                 }
