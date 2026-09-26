@@ -16,7 +16,7 @@ use crate::{
             properties::CabinetProperties,
         },
         cable::edit::EditCable,
-        duct::{list::ListOfDucts, show::ShowDuct},
+        duct::{list::ListOfDucts, properties::EditDuctProperties, show::ShowDuct},
         list_of_cables::ListOfCables,
         map::Map,
         panel::EditPanel,
@@ -89,6 +89,7 @@ pub enum CableView {
 #[derive(Debug, Clone, PartialEq, Eq, Target)]
 pub enum DuctView {
     Show,
+    Properties,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Target)]
@@ -142,6 +143,7 @@ pub enum PlanView {
     },
     Map,
     ListOfDucts,
+    NewDuct,
     Duct {
         id: i32,
         #[target(nested)]
@@ -166,7 +168,7 @@ impl PlanView {
             PlanView::Cable { .. } | PlanView::ListOfCables => {
                 ("Kabel".into(), PlanView::ListOfCables)
             }
-            PlanView::Duct { .. } | PlanView::ListOfDucts => {
+            PlanView::Duct { .. } | PlanView::ListOfDucts | PlanView::NewDuct => {
                 ("Trasse".into(), PlanView::ListOfDucts)
             }
             PlanView::Map => ("Karte".into(), PlanView::Map),
@@ -237,6 +239,7 @@ impl PlanView {
                     .push(html!(<ListPanel {plan_id} panel_id={*id} view={view.clone()}/>));
             }
             PlanView::NewCabinet => item_contents.push(html!("Neuer Schacht")),
+            PlanView::NewDuct => item_contents.push(html!("Neue Trasse")),
             PlanView::Duct { id, view } => {
                 item_contents.push(html!(<ListDuct {plan_id} duct_id={*id} view={view.clone()}/>))
             }
@@ -312,6 +315,7 @@ impl PlanView {
                 ..
             }
             | PlanView::NewCabinet
+            | PlanView::NewDuct
             | PlanView::Panel {
                 view: PanelView::Edit | PanelView::Loop | PanelView::Attach,
                 ..
@@ -332,6 +336,7 @@ impl PlanView {
             PlanView::Panel { id, view } => view.content(plan_id, id),
             PlanView::Map => html!(<Map {plan_id}/>),
             PlanView::ListOfDucts => html!(<ListOfDucts/>),
+            PlanView::NewDuct => html!(<EditDuctProperties {plan_id} duct={IdOrNew::default()}/>),
             PlanView::Duct { id, view } => view.content(plan_id, id),
         }
     }
@@ -341,6 +346,18 @@ impl DuctView {
     fn content(self, plan_id: i32, duct_id: i32) -> Html {
         match self {
             DuctView::Show => html!(<ShowDuct {plan_id} {duct_id}/>),
+            DuctView::Properties => {
+                html!(<EditDuctProperties {plan_id} duct={IdOrNew::Id(duct_id)}/>)
+            }
+        }
+    }
+
+    pub const ALL: [DuctView; 2] = [DuctView::Show, DuctView::Properties];
+
+    pub fn title(&self) -> &'static str {
+        match self {
+            DuctView::Show => "Übersicht",
+            DuctView::Properties => "Eigenschaften",
         }
     }
 }

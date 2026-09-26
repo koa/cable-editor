@@ -912,3 +912,34 @@ body {
   padding-inline-start: 0;
   list-style: none;
 }
+
+// pages/duct/properties.rs
+.map-view__duct--preview {
+  stroke: var(--pf-t--global--color--status--warning--default);
+  stroke-dasharray: 10 6;
+  stroke-width: 5;
+  stroke-opacity: 1;
+}
+
+// Chosen through its button
+.duct-properties__file {
+  display: none;
+}
+
+.duct-properties__hint {
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+.duct-properties__file-choice {
+  display: grid;
+  gap: var(--pf-t--global--spacer--md);
+  margin-block-start: var(--pf-t--global--spacer--md);
+  padding: var(--pf-t--global--spacer--md);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+}
+
+.duct-properties__notes {
+  margin: 0;
+  padding-inline-start: var(--pf-t--global--spacer--lg);
+}

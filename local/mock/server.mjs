@@ -142,23 +142,66 @@ const schacht = (id) => {
 };
 const cablesAt = (schachtId) =>
   cableRows.filter((c) => c[5] === schachtId || c[6] === schachtId).map((c) => cableEnd(c[0], schachtId));
-// Each cable runs through a duct of its own, bent a little between its Schächte
-const ductLine = (c) => {
-  const a = schacht(c[5]).location, z = schacht(c[6]).location;
-  if (!a || !z) return null;
-  const bend = { lat: (a.lat + z.lat) / 2 + 0.00005 * (c[0] % 3 - 1), lng: (a.lng + z.lng) / 2 + 0.00005 };
-  return [a, bend, z];
-};
-const duct = (c) => ({
-  id: 700 + c[0], description: `Rohr ${c[1]}`, schachtA: schacht(c[5]), schachtZ: schacht(c[6]), length: c[4],
-  cables: () => [cable(c[0])], line: ductLine(c),
+// Each cable runs through a duct of its own (id 700 + cable id), bent a little between its
+// Schächte; ducts created in the UI have no cables.
+// ductRows: { id, description, a, z, points: [{ lat, lng }] between the Schächte }
+const ductRows = cableRows.map((c) => {
+  const [a, z] = [c[5], c[6]].map((id) => schachtRows.find((r) => r[0] === id)[2]);
+  const bend = { lat: (a[0] + z[0]) / 2 + 0.00005 * (c[0] % 3 - 1), lng: (a[1] + z[1]) / 2 + 0.00005 };
+  return { id: 700 + c[0], description: `Rohr ${c[1]}`, a: c[5], z: c[6], points: [bend] };
 });
+const lv95Distance = (p, q) => { const a = toLv95(p), b = toLv95(q); return Math.hypot(a.e - b.e, a.n - b.n); };
+const ductLine = (row) => {
+  const a = schacht(row.a)?.location, z = schacht(row.z)?.location;
+  if (!a || !z) return null;
+  return [a, ...row.points, z];
+};
+const lineLength = (line) => line.slice(1).reduce((sum, p, i) => sum + lv95Distance(line[i], p), 0);
+const duct = (row) => ({
+  id: row.id, description: row.description, schachtA: schacht(row.a), schachtZ: schacht(row.z),
+  length: ductLine(row) && lineLength(ductLine(row)),
+  cables: () => cableRows.filter((c) => 700 + c[0] === row.id).map((c) => cable(c[0])),
+  line: ductLine(row),
+});
+const ductOfCable = (c) => duct(ductRows.find((r) => r.id === 700 + c[0]));
+// checkDuctLine's fitting, like graphql/duct_line.rs (distances in LV95)
+const fitLine = (aId, zId, { system, points }) => {
+  const a = schacht(aId)?.location, z = schacht(zId)?.location;
+  if (!a || !z) throw new Error('Schacht hat keine Position, der Verlauf kann nicht geprüft werden');
+  if (lv95Distance(a, z) < 0.5) throw new Error('Anfangs- und Endschacht liegen am selben Ort, die Richtung ist unbestimmt');
+  let line = points.map(({ x, y }) => (system === 'WGS84' ? { lat: y, lng: x }
+    : toWgs84(system === 'LV95' ? { e: x, n: y } : { e: x + 2000000, n: y + 1000000 })));
+  const reversed = lv95Distance(line[0], z) + lv95Distance(line.at(-1), a) < lv95Distance(line[0], a) + lv95Distance(line.at(-1), z);
+  if (reversed) line = line.reverse();
+  const startDistance = lv95Distance(line[0], a), endDistance = lv95Distance(line.at(-1), z);
+  let trimmed = [...line];
+  if (trimmed.length > 1 && endDistance < 0.5) trimmed.pop();
+  if (startDistance < 0.5) trimmed.shift();
+  if (trimmed.length === 1) trimmed = line;
+  const full = [a, ...trimmed, z];
+  return {
+    points: trimmed, line: full, reversed, removedEnds: line.length - trimmed.length, startDistance, endDistance,
+    length: lineLength(full), needsConfirmation: Math.max(startDistance, endDistance) > 10,
+  };
+};
+const checkedPoints = (aId, zId, line, confirmed) => {
+  if (!line) return [];
+  const fitted = fitLine(aId, zId, line);
+  if (fitted.needsConfirmation && !confirmed) {
+    throw new Error(`Der Verlauf endet ${fitted.startDistance.toFixed(1)} m bzw. ${fitted.endDistance.toFixed(1)} m von den Schächten entfernt, bitte bestätigen`);
+  }
+  return fitted.points;
+};
+const ductFromInput = ({ schachtA, schachtZ, description }) => {
+  if (schachtA === schachtZ) throw new Error('Anfangs- und Endschacht müssen verschieden sein');
+  return { a: schachtA, z: schachtZ, description: description?.trim() || null };
+};
 const cable = (id) => {
   const c = cableRows.find((r) => r[0] === id);
   return {
     id, name: c[1], bundleCount: c[2], fiberCount: c[3], length: c[4],
     path: () => cablePath(id, c[5]),
-    line: ductLine(c),
+    line: ductOfCable(c).line,
     end: ({ schachtId }) => cableEnd(id, schachtId),
   };
 };
@@ -171,7 +214,7 @@ const cablePath = (cableId, fromSchacht) => {
   const far = farOf(cableId, fromSchacht);
   return {
     nearSchacht: () => schacht(fromSchacht), nearEnd: () => cableEnd(cableId, fromSchacht),
-    segments: () => [{ duct: duct(c), farSchacht: schacht(far), sequence: 0 }],
+    segments: () => [{ duct: ductOfCable(c), farSchacht: schacht(far), sequence: 0 }],
     farSchacht: () => schacht(far), farEnd: () => cableEnd(cableId, far),
   };
 };
@@ -300,8 +343,9 @@ const root = {
   },
   listCable: () => cableRows.map((c) => cable(c[0])),
   cable: ({ cableId }) => (cableRows.some((c) => c[0] === cableId) ? cable(cableId) : null),
-  listDuct: () => cableRows.map(duct),
-  duct: ({ ductId }) => { const c = cableRows.find((r) => 700 + r[0] === ductId); return c ? duct(c) : null; },
+  listDuct: () => ductRows.map(duct),
+  duct: ({ ductId }) => { const row = ductRows.find((r) => r.id === ductId); return row ? duct(row) : null; },
+  checkDuctLine: ({ schachtA, schachtZ, line }) => fitLine(schachtA, schachtZ, line),
   listPlan: () => plans.map((p) => plan(p.id)),
   plan: ({ planId }) => plan(planId),
   panel: ({ panelId }) => panel(panelId),
@@ -324,9 +368,36 @@ const root = {
     row.splice(1, 3, ...schachtFromInput(input));
     return schacht(schachtId);
   },
+  createDuct: ({ duct: input, line, confirmed }) => {
+    const row = { id: Math.max(...ductRows.map((r) => r.id)) + 1, ...ductFromInput(input) };
+    row.points = checkedPoints(row.a, row.z, line, confirmed);
+    ductRows.push(row);
+    return duct(row);
+  },
+  updateDuct: ({ ductId, duct: input }) => {
+    const row = ductRows.find((r) => r.id === ductId);
+    const changes = ductFromInput(input);
+    if ((changes.a !== row.a || changes.z !== row.z) && duct(row).cables().length) {
+      throw new Error('Die Trasse enthält Kabel, ihre Schächte können nicht geändert werden');
+    }
+    Object.assign(row, changes);
+    return duct(row);
+  },
+  setDuctLine: ({ ductId, line, confirmed }) => {
+    const row = ductRows.find((r) => r.id === ductId);
+    row.points = checkedPoints(row.a, row.z, line, confirmed);
+    return duct(row);
+  },
+  deleteDuct: ({ ductId }) => {
+    const row = ductRows.find((r) => r.id === ductId);
+    const cables = duct(row).cables().length;
+    if (cables) throw new Error(`Durch die Trasse führen noch ${cables} Kabel`);
+    ductRows.splice(ductRows.indexOf(row), 1);
+    return true;
+  },
   deleteSchacht: ({ schachtId }) => {
     const panels = panelRows.filter((p) => p[2] === schachtId).length;
-    const ducts = cableRows.filter((c) => c[5] === schachtId || c[6] === schachtId).length;
+    const ducts = ductRows.filter((r) => r.a === schachtId || r.z === schachtId).length;
     if (panels || ducts) throw new Error(`Der Schacht hat noch ${panels} Panels und ${ducts} Trassen`);
     schachtRows.splice(schachtRows.findIndex((r) => r[0] === schachtId), 1);
     return true;

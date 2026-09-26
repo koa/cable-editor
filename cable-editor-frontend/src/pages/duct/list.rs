@@ -2,11 +2,16 @@ use crate::{
     components::{
         links::{DuctLink, SchachtLink},
         page_layout::PageLayout,
+        plan_link::PlanLink,
         table::ListModel,
     },
     error::FrontendError,
-    graphql::authenticated::list_ducts::{DuctListEntry, fetch_duct_list},
-    util::get_credentials,
+    graphql::authenticated::{
+        current_user::Role,
+        list_ducts::{DuctListEntry, fetch_duct_list},
+    },
+    pages::router::PlanView,
+    util::{get_credentials, get_role},
 };
 use patternfly_yew::prelude::{
     Cell, CellContext, ExpansionState, MemoizedTableModel, Order, Spinner, Table, TableColumn,
@@ -137,12 +142,19 @@ impl ListOfDucts {
             self.table_state.clone(),
         );
         html! {
-            <Table<Columns, ListModel<Columns, MemoizedTableModel<DuctListEntry>>>
-                mode={TableMode::Compact}
-                grid={TableGridMode::Medium}
-                {header}
-                {entries}
-            />
+            <>
+                <Table<Columns, ListModel<Columns, MemoizedTableModel<DuctListEntry>>>
+                    mode={TableMode::Compact}
+                    grid={TableGridMode::Medium}
+                    {header}
+                    {entries}
+                />
+                if get_role(ctx.link()) >= Role::Planner {
+                    <PlanLink to={PlanView::NewDuct} class="pf-v6-c-button pf-m-primary">
+                        {"Neue Trasse"}
+                    </PlanLink>
+                }
+            </>
         }
     }
 }
