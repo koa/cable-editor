@@ -26,6 +26,7 @@ local/run-local.sh
 local/import-data.sh              # load local/data.sql into the cable-db container
 local/mock/run-mock.sh            # frontend on :8099 against a mock backend (no DB/Keycloak): fake OIDC login, in-memory GraphQL data
 local/realdb/run-realdb.sh        # real backend on :8080 against a throwaway PostGIS from nix, login via the mock; checks: node local/realdb/check.mjs
+local/lkmap/validate.sh <file.xtf>   # ilivalidator (downloaded once, Java from PATH or nix) against the SIA/canton model repositories
 node local/mock/screenshot.mjs [--desktop] [--full] /plan/0/cabinet/1/overview   # Playwright screenshots (phone by default), reports layout overflow and console errors
 
 # Frontend (from cable-editor-frontend/; pre_build hook runs `npm install` in node/)
@@ -42,7 +43,7 @@ cargo clippy --workspace          # (frontend needs the wasm target to compile c
 docker build .
 ```
 
-Tests: only unit tests of plain logic so far, `cargo test -p cable-editor-backend` (e.g. fitting a duct's course, `graphql/duct_line.rs`). Against a real database without podman or Keycloak: `local/realdb/run-realdb.sh` (PostgreSQL 16 with PostGIS from nix, fresh on every start, the login of the mock backend, the backend applying the migrations, then `local/data.sql`; app on :8080, `REALDB_ROLE` for the role), then `node local/realdb/check.mjs` builds cables, panels, port usages and plans through GraphQL and checks the loaders (with `PG_LOG` also the number of SQL statements per query), the PostGIS conversions, fitting a duct's course and the refusals of mutations.
+Tests: only unit tests of plain logic so far, `cargo test -p cable-editor-backend` (e.g. fitting a duct's course, `graphql/duct_line.rs`). Against a real database without podman or Keycloak: `local/realdb/run-realdb.sh` (PostgreSQL 16 with PostGIS from nix, fresh on every start, the login of the mock backend, the backend applying the migrations, then `local/data.sql`; app on :8080, `REALDB_ROLE` for the role), then `node local/realdb/check.mjs` builds cables, panels, port usages and plans through GraphQL and checks the loaders (with `PG_LOG` also the number of SQL statements per query), the PostGIS conversions, fitting a duct's course, the refusals of mutations and the LKMap export, validated with `local/lkmap/validate.sh` (`SKIP_ILIVALIDATOR=1` leaves that out).
 
 **Build order matters:** the binary embeds `cable-editor-frontend/dist` at compile time, so run `trunk build` before building the binary (the Dockerfile does frontend first, then the musl backend build).
 

@@ -5,6 +5,9 @@
 // SQL statements per query, which shows whether the loaders batch. Changes the data, so run it
 // once per start.
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 
 const API = process.env.API ?? 'http://127.0.0.1:8080/graphql';
 const PG_LOG = process.env.PG_LOG;
@@ -292,6 +295,43 @@ const deleteTyp = 'mutation($id:Int!){ deleteSchachtTyp(typId:$id) }';
 await refused('deleteSchachtTyp with Schächte', deleteTyp, { id: usedTyp.id }, { code: 'SchachtTypReferenced', schaechte: usedTyp.schachtCount });
 check('deleteSchachtTyp without Schächte', (await gql(deleteTyp, { id: newTyp.id })).deleteSchachtTyp === true);
 check('schachtTyp of a deleted type', (await gql('query($id:Int!){ schachtTyp(typId:$id) { id } }', { id: newTyp.id })).schachtTyp === null);
+
+// ---------------------------------------------------------------- Leitungskataster
+// run-realdb.sh configures lkmap (Datenlieferant CHE-123.456.789, prefix ch4711ab); the default
+// owner has the UID CHE-123.456.789 since the owner checks
+const lkmapExport = 'query($o:Int!){ lkmapExport(ownerId:$o) { fileName xtf schachtCount ductCount schaechteWithoutPosition { id } ductsWithoutLine { id } } }';
+const withoutUid = (await gql(createOwner, { o: { name: 'Ohne UID' } })).createOwner;
+await refused('lkmapExport of an owner without UID', lkmapExport, { o: withoutUid.id }, { code: 'OwnerWithoutUid', owner: 'Ohne UID' });
+await refused('lkmapExport with nothing delivered', lkmapExport, { o: standard.id }, { code: 'NothingToDeliver' });
+const deliveredDuct = (a, z) => ({ schachtA: a, schachtZ: z, ownerId: standard.id, leitungskataster: true, lagebestimmung: 'GENAU' });
+// Duct 5 (Berghof 1061–Grosswies) with its course, a straight one Berg 1654–Berg, one from a Schacht without position
+await gql('mutation($d:DuctInput!){ updateDuct(ductId:5, duct:$d) { id } }', { d: deliveredDuct(5, 6) });
+const straight = (await gql('mutation($d:DuctInput!){ createDuct(duct:$d) { id } }', { d: deliveredDuct(1, 4) })).createDuct.id;
+const unlocated = (await gql('mutation{ createSchacht(schacht:{name:"Ohne Position", ownerId:1, lagebestimmung:UNGENAU}) { id } }')).createSchacht.id;
+const unlocatedDuct = (await gql('mutation($d:DuctInput!){ createDuct(duct:$d) { id } }', { d: deliveredDuct(unlocated, 6) })).createDuct.id;
+const exported = await gql(lkmapExport, { o: standard.id });
+const lk = exported.lkmapExport;
+console.log(`lkmapExport${statements(exported)}`);
+check('lkmapExport file name', lk.fileName === 'che-123-456-789-kommunikation-lkmap.xtf', lk.fileName);
+check('lkmapExport delivers the located ducts and their Schächte', lk.ductCount === 2 && lk.schachtCount === 4, `${lk.ductCount} ducts, ${lk.schachtCount} Schächte`);
+check('lkmapExport reports what lacks a position', JSON.stringify(lk.schaechteWithoutPosition) === JSON.stringify([{ id: unlocated }])
+  && JSON.stringify(lk.ductsWithoutLine) === JSON.stringify([{ id: unlocatedDuct }]), JSON.stringify([lk.schaechteWithoutPosition, lk.ductsWithoutLine]));
+const lagebestimmung = (oid) => lk.xtf.slice(lk.xtf.indexOf(`TID="${oid}"`)).match(/<Lagebestimmung>(\w+)</)?.[1];
+check('a duct with course keeps its Lagebestimmung', lagebestimmung('ch4711abt0000005') === 'genau');
+check('a straight duct is unbekannt', lagebestimmung(`ch4711abt${String(straight).padStart(7, '0')}`) === 'unbekannt');
+// ilivalidator against the models of the SIA, like the canton's Checkservice (needs Java or nix
+// and the network; SKIP_ILIVALIDATOR=1 leaves it out)
+if (process.env.SKIP_ILIVALIDATOR) {
+  console.log('skip ilivalidator');
+} else {
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'lkmap-')), lk.fileName);
+  fs.writeFileSync(file, lk.xtf);
+  const validator = path.join(path.dirname(new URL(import.meta.url).pathname), '../lkmap/validate.sh');
+  const run = spawnSync(validator, [file], { encoding: 'utf8' });
+  const output = `${run.stdout}${run.stderr}`;
+  check('ilivalidator accepts the export', run.status === 0 && output.includes('...validation done'),
+    output.split('\n').filter((line) => /^Error|failed/.test(line)).join('; ') || `exit ${run.status}`);
+}
 
 console.log(failures ? `\n${failures} Prüfung(en) fehlgeschlagen` : '\nAlle Prüfungen bestanden');
 process.exit(failures ? 1 : 0);

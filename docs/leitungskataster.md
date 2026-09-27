@@ -334,9 +334,12 @@ Im Export konstant, ohne Spalte:
   Bögen als Geraden (`ST_Buffer` mit wenigen Segmenten pro Viertelkreis, z. B. `quad_segs=4`);
   `Letzte_Aenderung` = spätestes `geaendert_am` der gelieferten Trassen des Eigentümers.
 - Paketierung: Dateinamen nach Konvention, je ein ZIP.
-- Prüfung: `ilivalidator` gegen die Modelle als Test mit Beispieldaten (lokal/CI). Die
-  SIA-Modelle lädt der Test von 405.sia.ch in ein Cache-Verzeichnis (nicht ins Repo, siehe 1.),
-  das Perimeter-Modell kommt aus `docs/perimeter_lk_zh_v2_lv95.zip`.
+- Prüfung: Unit-Tests für die Datei (`cargo test -p cable-editor-backend lkmap`) und
+  `ilivalidator` gegen die Modelle mit `local/lkmap/validate.sh <datei.xtf>` (lädt ilivalidator
+  1.15.0 ins Cache-Verzeichnis, Java aus dem PATH oder von nix; die Modelle holt ilivalidator
+  selbst aus den Repositories `https://405.sia.ch/models` und `https://models.geo.zh.ch`, nichts
+  davon kommt ins Repo, siehe 1.). `local/realdb/check.mjs` exportiert echte Daten und prüft
+  sie damit. Vorerst nur lokal, in CI später (braucht Java und Netzwerk).
 
 ## 6. UI
 
@@ -375,7 +378,7 @@ Was die Lieferung in der UI braucht; die Seiten für Eigentümer und Schachttype
    3. ~~Trassen: Felder in `DuctInput`, Eigenschaften, Trassen-Seite, Spalte „LK“ der Liste~~
       (erledigt).
    4. ~~Schächte: Felder in `SchachtInput`, Eigenschaften~~ (erledigt).
-3. LKMap-Export mit Validierungstest.
+3. ~~LKMap-Export mit Validierungstest~~ (erledigt).
 4. Perimeter-Export.
 5. Admin-Seite mit Download und Protokoll.
 6. Später: automatischer Upload zum Checkservice (infoGrips dokumentiert nur das Webformular;
