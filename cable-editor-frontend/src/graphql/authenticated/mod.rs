@@ -109,6 +109,51 @@ impl From<IdOrNew> for IdOrNewInput {
     }
 }
 
+/// `Lagebestimmung` of a Schacht or duct in the Leitungskataster (SIA405 `Genauigkeit`);
+/// `Display` and `FromStr` are the value of its `FormSelect` option.
+#[derive(
+    Clone, Copy, PartialEq, Eq, Debug, Hash, cynic::Enum, strum::Display, strum::EnumString,
+)]
+pub enum Genauigkeit {
+    Genau,
+    Ungenau,
+    Unbekannt,
+}
+
+impl Genauigkeit {
+    pub const ALL: [Genauigkeit; 3] = [
+        Genauigkeit::Genau,
+        Genauigkeit::Ungenau,
+        Genauigkeit::Unbekannt,
+    ];
+
+    pub fn title(self) -> &'static str {
+        match self {
+            Genauigkeit::Genau => "genau (±10 cm)",
+            Genauigkeit::Ungenau => "ungenau",
+            Genauigkeit::Unbekannt => "unbekannt",
+        }
+    }
+}
+
+/// A point in time as the backend sends it (RFC 3339).
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(transparent)]
+pub struct DateTime(pub String);
+cynic::impl_scalar!(DateTime, schema::DateTime);
+
+impl DateTime {
+    /// Date and time in the browser's time zone, e.g. "27.9.2026, 15:28:24".
+    pub fn local(&self) -> String {
+        let date = js_sys::Date::new(&self.0.as_str().into());
+        if date.get_time().is_nan() {
+            return self.0.clone();
+        }
+        date.to_locale_string("de-CH", &wasm_bindgen::JsValue::UNDEFINED)
+            .into()
+    }
+}
+
 // Das Enum für den Typ
 #[derive(Clone, Copy, PartialEq, Eq, Debug, strum::Display, cynic::Enum, Hash, Ord, PartialOrd)]
 #[cynic(graphql_type = "PanelPortType")]

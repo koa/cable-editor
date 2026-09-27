@@ -9,12 +9,12 @@ use crate::{
         map::{MapHolder, duct_line, fit_points, schacht_marker},
     },
     graphql::authenticated::{
-        GeoPoint, IdOrNew,
+        Genauigkeit, GeoPoint, IdOrNew,
         current_user::Role,
         duct_properties::{
-            CoordinateSystem, DuctInput, DuctLineCheck, DuctProperties, LineInput, SchachtChoice,
-            check_duct_line, create_duct, delete_duct, fetch_duct_properties, set_duct_line,
-            update_duct,
+            CoordinateSystem, DuctChoices, DuctInput, DuctLineCheck, DuctProperties, LineInput,
+            SchachtChoice, check_duct_line, create_duct, delete_duct, fetch_duct_properties,
+            set_duct_line, update_duct,
         },
         list_ducts::duct_title,
     },
@@ -23,7 +23,8 @@ use crate::{
 };
 use patternfly_yew::prelude::{
     ActionGroup, Alert, AlertType, Button, ButtonVariant, Checkbox, CheckboxState, Form, FormGroup,
-    FormSelect, FormSelectOption, Icon, Spinner, TextInput, ToggleGroup, ToggleGroupItem,
+    FormSelect, FormSelectOption, Icon, Spinner, TextInput, TextInputType, ToggleGroup,
+    ToggleGroupItem,
 };
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
@@ -38,12 +39,17 @@ use yew::{
 /// Schacht A to Z and leaves out ends repeating the Schächte (`checkDuctLine`), shown as
 /// preview before it is stored. Readers see the page read-only.
 pub struct EditDuctProperties {
-    /// The duct as stored (missing for a new one) and the Schächte to choose from
-    loaded: Option<(Option<DuctProperties>, Vec<SchachtChoice>)>,
+    /// The duct as stored (missing for a new one) and the Schächte and owners to choose from
+    loaded: Option<(Option<DuctProperties>, DuctChoices)>,
     error: Option<FrontendError>,
     schacht_a: Option<i32>,
     schacht_z: Option<i32>,
     description: String,
+    owner: Option<i32>,
+    leitungskataster: bool,
+    lagebestimmung: Genauigkeit,
+    /// Millimetres as typed, empty: none
+    width: String,
     file: Option<ChosenFile>,
     check: CheckState,
     /// An end far from its Schacht is accepted
@@ -74,11 +80,15 @@ enum CheckState {
 }
 
 pub enum Msg {
-    Loaded(Option<DuctProperties>, Vec<SchachtChoice>),
+    Loaded(Option<DuctProperties>, DuctChoices),
     LoadError(FrontendError),
     SetSchachtA(Option<i32>),
     SetSchachtZ(Option<i32>),
     SetDescription(String),
+    SetOwner(Option<i32>),
+    SetLeitungskataster(bool),
+    SetLagebestimmung(Option<Genauigkeit>),
+    SetWidth(String),
     ChooseFile,
     FileChosen,
     FileRead(String, Result<GeoFile, String>),
@@ -113,6 +123,10 @@ impl Component for EditDuctProperties {
             schacht_a: None,
             schacht_z: None,
             description: String::new(),
+            owner: None,
+            leitungskataster: false,
+            lagebestimmung: Genauigkeit::Ungenau,
+            width: String::new(),
             file: None,
             check: CheckState::None,
             confirmed: false,
@@ -125,7 +139,7 @@ impl Component for EditDuctProperties {
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
-            Msg::Loaded(duct, schaechte) => {
+            Msg::Loaded(duct, choices) => {
                 self.error = None;
                 self.schacht_a = duct.as_ref().map(|d| d.schacht_a.id);
                 self.schacht_z = duct.as_ref().map(|d| d.schacht_z.id);
@@ -133,7 +147,21 @@ impl Component for EditDuctProperties {
                     .as_ref()
                     .and_then(|d| d.description.clone())
                     .unwrap_or_default();
-                self.loaded = Some((duct, schaechte));
+                // A new duct: the default owner, not delivered, ungenau
+                self.owner = match &duct {
+                    Some(duct) => Some(duct.owner.id),
+                    None => choices.owners.iter().find(|o| o.is_default).map(|o| o.id),
+                };
+                self.leitungskataster = duct.as_ref().is_some_and(|d| d.leitungskataster);
+                self.lagebestimmung = duct
+                    .as_ref()
+                    .map_or(Genauigkeit::Ungenau, |d| d.lagebestimmung);
+                self.width = duct
+                    .as_ref()
+                    .and_then(|d| d.width_mm)
+                    .map(|w| w.to_string())
+                    .unwrap_or_default();
+                self.loaded = Some((duct, choices));
                 self.check(ctx);
             }
             Msg::LoadError(error) => self.error = Some(error),
@@ -146,6 +174,14 @@ impl Component for EditDuctProperties {
                 self.check(ctx);
             }
             Msg::SetDescription(description) => self.description = description,
+            Msg::SetOwner(owner) => self.owner = owner,
+            Msg::SetLeitungskataster(leitungskataster) => self.leitungskataster = leitungskataster,
+            Msg::SetLagebestimmung(lagebestimmung) => {
+                if let Some(lagebestimmung) = lagebestimmung {
+                    self.lagebestimmung = lagebestimmung;
+                }
+            }
+            Msg::SetWidth(width) => self.width = width,
             Msg::ChooseFile => {
                 if let Some(input) = self.file_input.cast::<HtmlInputElement>() {
                     input.click();
@@ -273,11 +309,11 @@ impl Component for EditDuctProperties {
         };
         let content = if let Some(error) = &self.error {
             error.into_prop_value()
-        } else if let Some((stored, schaechte)) = &self.loaded {
+        } else if let Some((stored, choices)) = &self.loaded {
             if stored.is_none() && !is_new {
                 (&FrontendError::NotFound).into_prop_value()
             } else {
-                self.view_form(ctx, schaechte)
+                self.view_form(ctx, choices)
             }
         } else {
             html!(<Spinner/>)
@@ -315,7 +351,7 @@ impl EditDuctProperties {
         spawn_local(async move {
             scope.send_message(
                 match fetch_duct_properties(credentials.as_ref(), id).await {
-                    Ok((duct, schaechte)) => Msg::Loaded(duct, schaechte),
+                    Ok((duct, choices)) => Msg::Loaded(duct, choices),
                     Err(error) => Msg::LoadError(error),
                 },
             );
@@ -337,7 +373,7 @@ impl EditDuctProperties {
     fn schaechte(&self) -> &[SchachtChoice] {
         self.loaded
             .as_ref()
-            .map(|(_, schaechte)| schaechte.as_slice())
+            .map(|(_, choices)| choices.schaechte.as_slice())
             .unwrap_or_default()
     }
 
@@ -426,12 +462,24 @@ impl EditDuctProperties {
         }
     }
 
+    /// The values to store; missing while a Schacht or the owner isn't chosen or the width
+    /// isn't a whole number.
     fn input(&self) -> Option<DuctInput> {
         let description = self.description.trim();
+        let width = self.width.trim();
+        let width_mm = if width.is_empty() {
+            None
+        } else {
+            Some(width.parse().ok()?)
+        };
         Some(DuctInput {
             schacht_a: self.schacht_a?,
             schacht_z: self.schacht_z?,
             description: (!description.is_empty()).then(|| description.to_string()),
+            owner_id: self.owner?,
+            leitungskataster: self.leitungskataster,
+            lagebestimmung: self.lagebestimmung,
+            width_mm,
         })
     }
 
@@ -442,6 +490,12 @@ impl EditDuctProperties {
                 self.schacht_a != Some(duct.schacht_a.id)
                     || self.schacht_z != Some(duct.schacht_z.id)
                     || self.description.trim() != duct.description.as_deref().unwrap_or_default()
+                    || self.owner != Some(duct.owner.id)
+                    || self.leitungskataster != duct.leitungskataster
+                    || self.lagebestimmung != duct.lagebestimmung
+                    || self
+                        .input()
+                        .is_none_or(|input| input.width_mm != duct.width_mm)
             }
         }
     }
@@ -516,7 +570,8 @@ impl EditDuctProperties {
         self.map.replace_layers(layers);
     }
 
-    fn view_form(&self, ctx: &Context<Self>, schaechte: &[SchachtChoice]) -> Html {
+    fn view_form(&self, ctx: &Context<Self>, choices: &DuctChoices) -> Html {
+        let schaechte = &choices.schaechte;
         let readonly = !self.can_edit(ctx);
         let link = ctx.link();
         let fixed_ends = readonly || self.has_cables();
@@ -559,6 +614,7 @@ impl EditDuctProperties {
                         {readonly}
                     />
                 </FormGroup>
+                {self.view_delivery(ctx, choices)}
                 if !readonly && !self.is_new(ctx) {
                     {self.view_actions(ctx)}
                 }
@@ -567,6 +623,75 @@ impl EditDuctProperties {
                     {self.view_actions(ctx)}
                 }
             </Form>
+        }
+    }
+
+    /// Owner and what the Leitungskataster takes from the duct.
+    fn view_delivery(&self, ctx: &Context<Self>, choices: &DuctChoices) -> Html {
+        let readonly = !self.can_edit(ctx);
+        let link = ctx.link();
+        let owner = if readonly {
+            let value = choices
+                .owners
+                .iter()
+                .find(|o| Some(o.id) == self.owner)
+                .map(|o| o.name.clone())
+                .unwrap_or_default();
+            html!(<TextInput {value} readonly=true/>)
+        } else {
+            let options = choices.owners.iter().map(|o| {
+                html_nested!(<FormSelectOption<i32> value={o.id} description={o.name.clone()}/>)
+            });
+            html! {
+                <FormSelect<i32> value={self.owner} onchange={link.callback(Msg::SetOwner)} placeholder=" - ">
+                    {for options}
+                </FormSelect<i32>>
+            }
+        };
+        let lagebestimmung = if readonly {
+            html!(<TextInput value={self.lagebestimmung.title()} readonly=true/>)
+        } else {
+            let options = Genauigkeit::ALL.iter().map(|g| {
+                html_nested!(<FormSelectOption<Genauigkeit> value={*g} description={g.title()}/>)
+            });
+            html! {
+                <FormSelect<Genauigkeit>
+                    value={Some(self.lagebestimmung)}
+                    onchange={link.callback(Msg::SetLagebestimmung)}
+                >
+                    {for options}
+                </FormSelect<Genauigkeit>>
+            }
+        };
+        let checked = if self.leitungskataster {
+            CheckboxState::Checked
+        } else {
+            CheckboxState::Unchecked
+        };
+        html! {
+            <>
+                <FormGroup label="Eigentümer" required={!readonly}>{owner}</FormGroup>
+                <FormGroup label="Leitungskataster">
+                    <Checkbox
+                        label="An den Leitungskataster liefern (grundstücksübergreifend)"
+                        {checked}
+                        disabled={readonly}
+                        onchange={link.callback(|state: CheckboxState| Msg::SetLeitungskataster(state == CheckboxState::Checked))}
+                    />
+                </FormGroup>
+                <div class="duct-properties__delivery">
+                    <FormGroup label="Lagebestimmung">{lagebestimmung}</FormGroup>
+                    <FormGroup label="Breite (mm)">
+                        <TextInput
+                            r#type={TextInputType::Number}
+                            value={self.width.clone()}
+                            onchange={link.callback(Msg::SetWidth)}
+                            placeholder="optional"
+                            {readonly}
+                        />
+                    </FormGroup>
+                </div>
+            </>
         }
     }
 

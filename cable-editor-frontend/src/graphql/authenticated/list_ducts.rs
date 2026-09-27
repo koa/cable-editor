@@ -20,6 +20,15 @@ pub struct DuctListEntry {
     /// Metres, missing without geometry
     pub length: Option<f64>,
     pub cables: Vec<DuctListCable>,
+    pub owner: DuctListOwner,
+    /// Delivered to the Leitungskataster
+    pub leitungskataster: bool,
+}
+
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
+#[cynic(graphql_type = "Owner")]
+pub struct DuctListOwner {
+    pub name: String,
 }
 
 impl DuctListEntry {

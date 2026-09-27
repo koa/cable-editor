@@ -1,7 +1,10 @@
 //! Ducts (their course: graphql/duct_line.rs).
 
 use crate::{
-    db::{entity::Duct, schema},
+    db::{
+        entity::{Duct, lkmap::Genauigkeit},
+        schema,
+    },
     graphql::authenticated,
     graphql::authorization::{Role, RoleGuard},
     graphql::duct_line::{self, LineInput},
@@ -27,6 +30,7 @@ impl DuctMutation {
     ) -> async_graphql::Result<Duct> {
         let mut connection = authenticated::get_connection(ctx).await?;
         let description = duct.checked_description()?;
+        duct.check_delivery(&mut connection).await?;
         let geom = match &line {
             Some(line) => {
                 checked_line(
@@ -46,6 +50,10 @@ impl DuctMutation {
                 schema::trasse::schacht_z.eq(duct.schacht_z),
                 schema::trasse::description.eq(description),
                 schema::trasse::geom.eq(geom),
+                schema::trasse::eigentuemer_id.eq(duct.owner_id),
+                schema::trasse::leitungskataster.eq(duct.leitungskataster),
+                schema::trasse::lagebestimmung.eq(duct.lagebestimmung),
+                schema::trasse::breite_mm.eq(duct.width_mm),
             ))
             .returning(Duct::as_returning())
             .get_result(&mut connection)
@@ -62,6 +70,7 @@ impl DuctMutation {
     ) -> async_graphql::Result<Duct> {
         let mut connection = authenticated::get_connection(ctx).await?;
         let description = duct.checked_description()?;
+        duct.check_delivery(&mut connection).await?;
         let stored: Duct = Duct::query()
             .filter(schema::trasse::id.eq(duct_id))
             .first(&mut connection)
@@ -85,6 +94,10 @@ impl DuctMutation {
                 schema::trasse::schacht_z.eq(duct.schacht_z),
                 schema::trasse::description.eq(description),
                 schema::trasse::geom.eq(geom),
+                schema::trasse::eigentuemer_id.eq(duct.owner_id),
+                schema::trasse::leitungskataster.eq(duct.leitungskataster),
+                schema::trasse::lagebestimmung.eq(duct.lagebestimmung),
+                schema::trasse::breite_mm.eq(duct.width_mm),
             ))
             .returning(Duct::as_returning())
             .get_result(&mut connection)
@@ -139,13 +152,23 @@ impl DuctMutation {
     }
 }
 
-/// The Schächte and description of a duct.
+/// The Schächte and description of a duct, and what the delivery to the Leitungskataster
+/// takes from it.
 #[derive(Debug, Clone, PartialEq, InputObject)]
 struct DuctInput {
     schacht_a: i32,
     schacht_z: i32,
     description: Option<String>,
+    owner_id: i32,
+    /// Delivered to the Leitungskataster (crosses property boundaries)
+    leitungskataster: bool,
+    lagebestimmung: Genauigkeit,
+    /// Millimetres, optional
+    width_mm: Option<i32>,
 }
+
+/// `Breite` of SIA405 `LKLinie`
+const MAX_WIDTH: i32 = 4000;
 
 impl DuctInput {
     /// Trimmed, `None` if empty; the Schächte must differ.
@@ -163,6 +186,27 @@ impl DuctInput {
             return Err("Die Beschreibung darf höchstens 50 Zeichen lang sein".into());
         }
         Ok(description.map(str::to_string))
+    }
+
+    /// The owner exists, the width fits the Leitungskataster.
+    async fn check_delivery(
+        &self,
+        connection: &mut AsyncPgConnection,
+    ) -> async_graphql::Result<()> {
+        if let Some(width) = self.width_mm
+            && !(0..=MAX_WIDTH).contains(&width)
+        {
+            return Err(format!("Die Breite muss zwischen 0 und {MAX_WIDTH} mm liegen").into());
+        }
+        let owners: i64 = schema::eigentuemer::table
+            .find(self.owner_id)
+            .count()
+            .get_result(connection)
+            .await?;
+        if owners == 0 {
+            return Err(format!("Eigentümer {} nicht gefunden", self.owner_id).into());
+        }
+        Ok(())
     }
 }
 

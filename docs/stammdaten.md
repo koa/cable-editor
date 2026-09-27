@@ -1,6 +1,6 @@
 # Konzept: Seiten für Eigentümer und Schachttypen
 
-Stand: 27.09.2026 – umgesetzt bis auf die Spalte „Eigentümer“ in der Trassenliste. Was davon der Leitungskataster braucht
+Stand: 27.09.2026 – umgesetzt. Was davon der Leitungskataster braucht
 (UID, Name in der Lieferung, Objektart, Masse), steht in `docs/leitungskataster.md`; wo die
 Seiten liegen, in `docs/navigation.md`.
 

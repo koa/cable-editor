@@ -1,7 +1,7 @@
 use crate::{
     error::FrontendError,
     graphql::{
-        authenticated::{GeoPoint, schema},
+        authenticated::{Genauigkeit, GeoPoint, schema},
         mutate, query,
     },
 };
@@ -18,12 +18,14 @@ struct DuctPropertiesQuery {
     #[arguments(ductId: $duct_id)]
     duct: Option<DuctProperties>,
     list_schacht: Vec<SchachtChoice>,
+    list_owner: Vec<OwnerChoice>,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
 #[cynic(graphql_type = "Query")]
-struct SchachtChoicesQuery {
+struct ChoicesQuery {
     list_schacht: Vec<SchachtChoice>,
+    list_owner: Vec<OwnerChoice>,
 }
 
 /// Schächte, description and course of a duct, as its properties page edits them.
@@ -39,6 +41,33 @@ pub struct DuctProperties {
     /// Metres, missing without geometry
     pub length: Option<f64>,
     pub cables: Vec<DuctPropertiesCable>,
+    pub owner: OwnerId,
+    /// Delivered to the Leitungskataster
+    pub leitungskataster: bool,
+    pub lagebestimmung: Genauigkeit,
+    pub width_mm: Option<i32>,
+}
+
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
+#[cynic(graphql_type = "Owner")]
+pub struct OwnerId {
+    pub id: i32,
+}
+
+/// An owner to choose for a duct; the default one is preselected for a new duct.
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
+#[cynic(graphql_type = "Owner")]
+pub struct OwnerChoice {
+    pub id: i32,
+    pub name: String,
+    pub is_default: bool,
+}
+
+/// The choices of a duct's properties: the Schächte and the owners.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DuctChoices {
+    pub schaechte: Vec<SchachtChoice>,
+    pub owners: Vec<OwnerChoice>,
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
@@ -62,24 +91,31 @@ pub struct SchachtChoice {
     pub location: Option<GeoPoint>,
 }
 
-/// The duct (missing if it doesn't exist; not asked for a new one) and the Schächte to choose.
+/// The duct (missing if it doesn't exist; not asked for a new one) and the Schächte and owners
+/// to choose.
 pub async fn fetch_duct_properties(
     credentials: Option<&OAuth2Context>,
     duct_id: Option<i32>,
-) -> Result<(Option<DuctProperties>, Vec<SchachtChoice>), FrontendError> {
+) -> Result<(Option<DuctProperties>, DuctChoices), FrontendError> {
     match duct_id {
         Some(duct_id) => {
             let result =
                 query::<DuctPropertiesQuery, _>(DuctPropertiesVariables { duct_id }, credentials)
                     .await?;
-            Ok((result.duct, result.list_schacht))
+            let choices = DuctChoices {
+                schaechte: result.list_schacht,
+                owners: result.list_owner,
+            };
+            Ok((result.duct, choices))
         }
-        None => Ok((
-            None,
-            query::<SchachtChoicesQuery, _>((), credentials)
-                .await?
-                .list_schacht,
-        )),
+        None => {
+            let result = query::<ChoicesQuery, _>((), credentials).await?;
+            let choices = DuctChoices {
+                schaechte: result.list_schacht,
+                owners: result.list_owner,
+            };
+            Ok((None, choices))
+        }
     }
 }
 
@@ -107,6 +143,10 @@ pub struct DuctInput {
     pub schacht_a: i32,
     pub schacht_z: i32,
     pub description: Option<String>,
+    pub owner_id: i32,
+    pub leitungskataster: bool,
+    pub lagebestimmung: Genauigkeit,
+    pub width_mm: Option<i32>,
 }
 
 /// A course as it would be stored.

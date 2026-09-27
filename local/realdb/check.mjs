@@ -180,11 +180,23 @@ await gql('mutation($l:LineInput){ setDuctLine(ductId:5, line:$l) { id } }', { l
 const created = await gql('mutation{ createSchacht(schacht:{name:"Neu", typeId:0, position:{wgs84:{lat:47.4185,lng:8.885}}}) { id location { lat lng } } }');
 const schachtId = created.createSchacht.id;
 check('createSchacht at its position', near(created.createSchacht.location.lat, 47.4185, 1e-6));
-const duct = await gql('mutation($z:Int!){ createDuct(duct:{schachtA:6, schachtZ:$z}) { id length line { lat } } }', { z: schachtId });
+const duct = await gql('mutation($z:Int!){ createDuct(duct:{schachtA:6, schachtZ:$z, ownerId:1, leitungskataster:false, lagebestimmung:UNGENAU}) { id length line { lat } } }', { z: schachtId });
 check('createDuct without course: straight', duct.createDuct.line.length === 2 && duct.createDuct.length > 0);
 await gql('mutation($id:Int!){ updateSchacht(schachtId:$id, schacht:{name:"Neu", typeId:0, position:{lv95:{e:2709150,n:1253000}}}) { id } }', { id: schachtId });
 const moved = await gql('query($d:Int!){ duct(ductId:$d) { length } }', { d: duct.createDuct.id });
 check('the duct follows its Schacht', !near(moved.duct.length, duct.createDuct.length, 1), `${duct.createDuct.length.toFixed(1)} → ${moved.duct.length.toFixed(1)}`);
+// What the Leitungskataster takes from a duct
+const updateDuct = 'mutation($id:Int!,$d:DuctInput!){ updateDuct(ductId:$id, duct:$d) { owner { id } leitungskataster lagebestimmung widthMm changedAt } }';
+const ductInput = (changes) => ({ id: duct.createDuct.id, d: { schachtA: 6, schachtZ: schachtId, ownerId: 1, leitungskataster: false, lagebestimmung: 'UNGENAU', ...changes } });
+const ductBefore = (await gql('query($d:Int!){ duct(ductId:$d) { changedAt } }', { d: duct.createDuct.id })).duct.changedAt;
+const delivered = (await gql(updateDuct, ductInput({ leitungskataster: true, lagebestimmung: 'GENAU', widthMm: 300 }))).updateDuct;
+check('updateDuct stores the delivery', delivered.leitungskataster && delivered.lagebestimmung === 'GENAU' && delivered.widthMm === 300, JSON.stringify(delivered));
+check('updateDuct with a change moves changedAt', delivered.changedAt !== ductBefore);
+const unchanged = (await gql(updateDuct, ductInput({ leitungskataster: true, lagebestimmung: 'GENAU', widthMm: 300 }))).updateDuct;
+check('updateDuct without change keeps changedAt', unchanged.changedAt === delivered.changedAt);
+check('the owner counts the delivered duct', (await gql('{ listOwner { id deliveredDuctCount } }')).listOwner.find((o) => o.id === 1).deliveredDuctCount === 1);
+await refused('updateDuct with a width over 4 m', updateDuct, ductInput({ widthMm: 4001 }), /zwischen 0 und 4000/);
+await refused('updateDuct with an unknown owner', updateDuct, ductInput({ ownerId: 999 }), /Eigentümer 999 nicht gefunden/);
 await refused('deleteDuct with cables', 'mutation{ deleteDuct(ductId:4) }', {}, /Kabel/);
 await refused('deleteSchacht with ducts', 'mutation($id:Int!){ deleteSchacht(schachtId:$id) }', { id: schachtId }, /Trassen/);
 await refused('updateCable to an empty path', 'mutation($c:Int!){ updateCable(cableId:$c, path:[]) { id } }', { c: cables.K4 }, /Segment/);

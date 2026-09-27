@@ -192,6 +192,15 @@ fn view_details(duct: &DuctDetails) -> Html {
             </DescriptionGroup>
             <DescriptionGroup term="Länge">{length}</DescriptionGroup>
             <DescriptionGroup term="Kabel">{cables}</DescriptionGroup>
+            <DescriptionGroup term="Eigentümer">{duct.owner.name.clone()}</DescriptionGroup>
+            <DescriptionGroup term="Leitungskataster">
+                {if duct.leitungskataster { "wird geliefert" } else { "wird nicht geliefert" }}
+            </DescriptionGroup>
+            <DescriptionGroup term="Lagebestimmung">{duct.lagebestimmung.title()}</DescriptionGroup>
+            if let Some(width) = duct.width_mm {
+                <DescriptionGroup term="Breite">{format!("{width} mm")}</DescriptionGroup>
+            }
+            <DescriptionGroup term="Geändert">{duct.changed_at.local()}</DescriptionGroup>
         </DescriptionList>
     }
 }

@@ -1,7 +1,7 @@
 use crate::{
     error::FrontendError,
     graphql::{
-        authenticated::{GeoPoint, list_ducts::duct_title, schema},
+        authenticated::{DateTime, Genauigkeit, GeoPoint, list_ducts::duct_title, schema},
         query,
     },
 };
@@ -31,6 +31,19 @@ pub struct DuctDetails {
     pub schacht_a: DuctEnd,
     pub schacht_z: DuctEnd,
     pub cables: Vec<DuctCable>,
+    pub owner: DuctOwner,
+    /// Delivered to the Leitungskataster
+    pub leitungskataster: bool,
+    pub lagebestimmung: Genauigkeit,
+    pub width_mm: Option<i32>,
+    pub changed_at: DateTime,
+}
+
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
+#[cynic(graphql_type = "Owner")]
+pub struct DuctOwner {
+    pub id: i32,
+    pub name: String,
 }
 
 impl DuctDetails {

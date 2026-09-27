@@ -30,6 +30,9 @@ pub enum Columns {
     SchachtZ,
     Length,
     Cables,
+    Owner,
+    /// Delivered to the Leitungskataster
+    Lk,
 }
 
 impl TableEntryRenderer<Columns> for DuctListEntry {
@@ -46,6 +49,12 @@ impl TableEntryRenderer<Columns> for DuctListEntry {
                 Cell::new(self.length.map(|l| format!("{l:.1} m")).into_prop_value())
             }
             Columns::Cables => Cell::new(self.cables.len().into_prop_value()),
+            Columns::Owner => Cell::new(self.owner.name.clone().into_prop_value()),
+            Columns::Lk => Cell::new(if self.leitungskataster {
+                html!("ja")
+            } else {
+                html!("–")
+            }),
         }
     }
 }
@@ -117,6 +126,8 @@ impl ListOfDucts {
                 Columns::SchachtZ => a.schacht_z.name.cmp(&b.schacht_z.name),
                 Columns::Length => a.length.partial_cmp(&b.length).unwrap_or(Ordering::Equal),
                 Columns::Cables => a.cables.len().cmp(&b.cables.len()),
+                Columns::Owner => a.owner.name.cmp(&b.owner.name),
+                Columns::Lk => a.leitungskataster.cmp(&b.leitungskataster),
             };
             if sort.order == Order::Descending {
                 ordering.reverse()
@@ -135,7 +146,9 @@ impl ListOfDucts {
                 <TableColumn<Columns> label="Von" index={Columns::SchachtA} onsort={onsort.clone()} {sortby}/>
                 <TableColumn<Columns> label="Bis" index={Columns::SchachtZ} onsort={onsort.clone()} {sortby}/>
                 <TableColumn<Columns> label="Länge" index={Columns::Length} onsort={onsort.clone()} {sortby}/>
-                <TableColumn<Columns> label="Kabel" index={Columns::Cables} {onsort} {sortby}/>
+                <TableColumn<Columns> label="Kabel" index={Columns::Cables} onsort={onsort.clone()} {sortby}/>
+                <TableColumn<Columns> label="Eigentümer" index={Columns::Owner} onsort={onsort.clone()} {sortby}/>
+                <TableColumn<Columns> label="LK" index={Columns::Lk} {onsort} {sortby}/>
             </TableHeader<Columns>>
         };
         let entries = ListModel::new(
@@ -151,9 +164,12 @@ impl ListOfDucts {
                     {entries}
                 />
                 if get_role(ctx.link()) >= Role::Planner {
-                    <PlanLink to={PlanView::NewDuct { id: Uuid::new_v4() }} class="pf-v6-c-button pf-m-primary">
-                        {"Neue Trasse"}
-                    </PlanLink>
+                    // Not stretched to the width of the page's content
+                    <div>
+                        <PlanLink to={PlanView::NewDuct { id: Uuid::new_v4() }} class="pf-v6-c-button pf-m-primary">
+                            {"Neue Trasse"}
+                        </PlanLink>
+                    </div>
                 }
             </>
         }

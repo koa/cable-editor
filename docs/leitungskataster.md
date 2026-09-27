@@ -357,8 +357,9 @@ Was die Lieferung in der UI braucht; die Seiten für Eigentümer und Schachttype
 2. UI (Abschnitt 6):
    1. ~~Migration: Lagebestimmung standardmässig `ungenau` (bestehende `unbekannt` stammen alle
       vom Standardwert und werden `ungenau`, ohne `geaendert_am` zu verschieben)~~ (erledigt).
-   2. Eigentümer- und Schachttyp-Seiten (`docs/stammdaten.md`).
-   3. Trassen: Felder in `DuctInput`, Eigenschaften, Trassen-Seite, Spalte „LK“ der Liste.
+   2. ~~Eigentümer- und Schachttyp-Seiten (`docs/stammdaten.md`)~~ (erledigt).
+   3. ~~Trassen: Felder in `DuctInput`, Eigenschaften, Trassen-Seite, Spalte „LK“ der Liste~~
+      (erledigt).
    4. Schächte: Felder in `SchachtInput`, Eigenschaften.
 3. LKMap-Export mit Validierungstest.
 4. Perimeter-Export.

@@ -194,6 +194,8 @@ const ductRows = cableRows.map((c) => {
   const bend = { lat: (a[0] + z[0]) / 2 + 0.00005 * (c[0] % 3 - 1), lng: (a[1] + z[1]) / 2 + 0.00005 };
   return { id: 700 + c[0], description: `Rohr ${c[1]}`, a: c[5], z: c[6], points: [bend] };
 });
+// A measured duct with its width
+Object.assign(ductRows[0], { lagebestimmung: 'GENAU', widthMm: 110 });
 const lv95Distance = (p, q) => { const a = toLv95(p), b = toLv95(q); return Math.hypot(a.e - b.e, a.n - b.n); };
 const ductLine = (row) => {
   const a = schacht(row.a)?.location, z = schacht(row.z)?.location;
@@ -206,6 +208,11 @@ const duct = (row) => ({
   length: ductLine(row) && lineLength(ductLine(row)),
   cables: () => cableRows.filter((c) => 700 + c[0] === row.id).map((c) => cable(c[0])),
   line: ductLine(row),
+  owner: owner(ownerOfDuct(row.id)),
+  leitungskataster: deliveredDucts.has(row.id),
+  lagebestimmung: row.lagebestimmung ?? 'UNGENAU',
+  widthMm: row.widthMm ?? null,
+  changedAt: row.changedAt ?? '2026-09-27T08:15:00+00:00',
 });
 const ductOfCable = (c) => duct(ductRows.find((r) => r.id === 700 + c[0]));
 // checkDuctLine's fitting, like graphql/duct_line.rs (distances in LV95)
@@ -236,9 +243,17 @@ const checkedPoints = (aId, zId, line, confirmed) => {
   }
   return fitted.points;
 };
-const ductFromInput = ({ schachtA, schachtZ, description }) => {
+const ductFromInput = ({ schachtA, schachtZ, description, ownerId, leitungskataster, lagebestimmung, widthMm }) => {
   if (schachtA === schachtZ) throw new Error('Anfangs- und Endschacht müssen verschieden sein');
-  return { a: schachtA, z: schachtZ, description: description?.trim() || null };
+  if (widthMm != null && (widthMm < 0 || widthMm > 4000)) throw new Error('Die Breite muss zwischen 0 und 4000 mm liegen');
+  if (!ownerRows.some((o) => o.id === ownerId)) throw new Error(`Eigentümer ${ownerId} nicht gefunden`);
+  return { a: schachtA, z: schachtZ, description: description?.trim() || null, ownerId, leitungskataster, lagebestimmung, widthMm: widthMm ?? null };
+};
+// Stores what ductFromInput checked in the owner and delivery tables of the mock
+const storeDelivery = (row) => {
+  ductOwner[row.id] = row.ownerId;
+  if (row.leitungskataster) deliveredDucts.add(row.id); else deliveredDucts.delete(row.id);
+  row.changedAt = new Date().toISOString();
 };
 const cable = (id) => {
   const c = cableRows.find((r) => r[0] === id);
@@ -418,6 +433,7 @@ const root = {
     const row = { id: Math.max(...ductRows.map((r) => r.id)) + 1, ...ductFromInput(input) };
     row.points = checkedPoints(row.a, row.z, line, confirmed);
     ductRows.push(row);
+    storeDelivery(row);
     return duct(row);
   },
   updateDuct: ({ ductId, duct: input }) => {
@@ -427,6 +443,7 @@ const root = {
       throw new Error('Die Trasse enthält Kabel, ihre Schächte können nicht geändert werden');
     }
     Object.assign(row, changes);
+    storeDelivery(row);
     return duct(row);
   },
   setDuctLine: ({ ductId, line, confirmed }) => {
