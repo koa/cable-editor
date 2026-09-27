@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Fiber-optic cable / duct / patch-panel planning tool. Single deployable binary: a Rust (actix-web) backend serving a GraphQL API plus an embedded Yew (WASM) SPA. Data lives in PostgreSQL + PostGIS; planned panel/port changes can be synced to NetBox. Domain names are partly German (`kabel` = cable, `schacht` = manhole/cabinet, `trasse` = duct route, `sequenz`); code comments and log messages are mixed German/English.
 
+Concepts for work not yet done live in `docs/`: `docs/leitungskataster.md` (the quarterly INTERLIS delivery to the Leitungskataster Kanton Zürich, SIA405 LKMap; `backend/src/export.rs` is only a placeholder until then).
+
 ## Workspace layout
 
 Cargo workspace (`default-members = cable-editor-binary`):
