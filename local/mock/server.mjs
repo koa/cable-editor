@@ -42,11 +42,22 @@ const schachtRows = [
   [3, 'SCH 103 Schulhaus', [47.42074, 8.88590], 2], [4, 'SCH 104 Industrie Nord', [47.41778, 8.88441], 0],
   [5, 'SCH 105 Werkhof', [47.41803, 8.88398], null],
 ];
+const svg = (shape) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">${shape}</svg>`;
 const schachtTypes = [
-  { id: 0, name: 'Normschacht', icon: '<svg xmlns="http://www.w3.org/2000/svg"/>' },
-  { id: 1, name: 'Kabelschacht', icon: '<svg xmlns="http://www.w3.org/2000/svg"/>' },
-  { id: 2, name: 'Verteilkasten', icon: '<svg xmlns="http://www.w3.org/2000/svg"/>' },
+  { id: 0, name: 'Normschacht', icon: svg('<circle cx="50" cy="50" r="42" stroke="#01579b" stroke-width="8" fill="#e1f5fe"/>'), lkmapObjektart: 'SCHACHT_RUND', dimension1Mm: 1000, dimension2Mm: null },
+  { id: 1, name: 'Kabelschacht', icon: svg('<rect x="10" y="20" width="80" height="60" rx="6" stroke="#2e7d32" stroke-width="8" fill="#e8f5e9"/>'), lkmapObjektart: 'SCHACHT_RECHTECKIG', dimension1Mm: 1200, dimension2Mm: 800 },
+  { id: 2, name: 'Verteilkasten', icon: svg('<rect x="25" y="10" width="50" height="80" stroke="#c62828" stroke-width="8" fill="#ffebee"/>'), lkmapObjektart: 'BAUWERK', dimension1Mm: null, dimension2Mm: null },
 ];
+const schachtTyp = (t) => t && { ...t, schachtCount: schachtRows.filter((r) => r[3] === t.id).length };
+const schachtTypFromInput = ({ name, icon, lkmapObjektart, dimension1Mm, dimension2Mm }, typId) => {
+  if (!name.trim()) throw new Error('Der Schachttyp braucht einen Namen');
+  if (name.trim().length > 20) throw new Error('Der Name hat mehr als 20 Zeichen');
+  if (schachtTypes.some((t) => t.id !== typId && t.name === name.trim())) throw new Error(`Es gibt schon einen Schachttyp ${name.trim()}`);
+  if (dimension2Mm != null && dimension1Mm == null) throw new Error('Dimension 2 (das kleinere Mass) nur zusammen mit Dimension 1');
+  if (dimension2Mm != null && dimension2Mm > dimension1Mm) throw new Error('Dimension 1 ist das grössere, Dimension 2 das kleinere Mass');
+  if (icon && !/^\s*(<\?[^>]*\?>\s*)?<svg/.test(icon)) throw new Error('Das Icon ist keine SVG-Datei');
+  return { name: name.trim(), lkmapObjektart, dimension1Mm: dimension1Mm ?? null, dimension2Mm: dimension2Mm ?? null, ...(icon ? { icon } : {}) };
+};
 
 // swisstopo's approximate formulas (about 1 m); the backend lets PostGIS convert exactly
 const toLv95 = ({ lat, lng }) => {
@@ -164,7 +175,7 @@ const schacht = (id) => {
   const r = schachtRows.find((s) => s[0] === id);
   if (!r) return null;
   return {
-    id, name: r[1], typ: schachtTypes.find((t) => t.id === r[3]) ?? null,
+    id, name: r[1], typ: schachtTyp(schachtTypes.find((t) => t.id === r[3])) ?? null,
     position: r[2] && toLv95({ lat: r[2][0], lng: r[2][1] }),
     location: r[2] && { lat: r[2][0], lng: r[2][1] },
     connectingDuct: () => [],
@@ -369,7 +380,8 @@ const root = {
   },
   listSchacht: () => schachtRows.map((s) => schacht(s[0])),
   schacht: ({ schachtId }) => schacht(schachtId),
-  listSchachtTyp: () => schachtTypes,
+  listSchachtTyp: () => schachtTypes.map(schachtTyp),
+  schachtTyp: ({ typId }) => schachtTyp(schachtTypes.find((t) => t.id === typId)) ?? null,
   convertPoint: ({ position }) => {
     const wgs84 = positionToWgs84(position);
     return { lv95: toLv95(wgs84), wgs84 };
@@ -427,6 +439,22 @@ const root = {
     const cables = duct(row).cables().length;
     if (cables) throw new Error(`Durch die Trasse führen noch ${cables} Kabel`);
     ductRows.splice(ductRows.indexOf(row), 1);
+    return true;
+  },
+  createSchachtTyp: ({ typ: input }) => {
+    const row = { id: Math.max(...schachtTypes.map((t) => t.id)) + 1, icon: svg('<circle cx="50" cy="50" r="42" stroke="#4d5258" stroke-width="8" fill="#f0f0f0"/>'), ...schachtTypFromInput(input) };
+    schachtTypes.push(row);
+    return schachtTyp(row);
+  },
+  updateSchachtTyp: ({ typId, typ: input }) => {
+    const row = schachtTypes.find((t) => t.id === typId);
+    Object.assign(row, schachtTypFromInput(input, typId));
+    return schachtTyp(row);
+  },
+  deleteSchachtTyp: ({ typId }) => {
+    const { schachtCount } = schachtTyp(schachtTypes.find((t) => t.id === typId));
+    if (schachtCount) throw new Error(`Der Schachttyp hat noch ${schachtCount} Schächte`);
+    schachtTypes.splice(schachtTypes.findIndex((t) => t.id === typId), 1);
     return true;
   },
   createOwner: ({ owner: input }) => {

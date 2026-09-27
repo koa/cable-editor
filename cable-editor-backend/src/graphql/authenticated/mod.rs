@@ -11,7 +11,7 @@ use crate::{
             plan::Plan,
             schacht::{Schacht, SchachtTyp},
         },
-        schema::{eigentuemer, kabel, panel, plan, schacht, trasse},
+        schema::{eigentuemer, kabel, panel, plan, schacht, schacht_typ, trasse},
     },
     graphql::{
         context::UserInfo,
@@ -78,6 +78,18 @@ impl Query {
             .order_by(eigentuemer::name)
             .load(&mut connection)
             .await?)
+    }
+    async fn schacht_typ(
+        &self,
+        ctx: &Context<'_>,
+        typ_id: i32,
+    ) -> async_graphql::Result<Option<SchachtTyp>> {
+        let mut connection = get_connection(ctx).await?;
+        Ok(SchachtTyp::query()
+            .filter(schacht_typ::id.eq(typ_id))
+            .first(&mut connection)
+            .await
+            .optional()?)
     }
     async fn list_cable(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Cable>> {
         let mut connection = get_connection(ctx).await?;

@@ -19,8 +19,8 @@ use crate::{
     graphql::{
         authenticated::get_connection,
         loader::{
-            EigentuemerId, SchachtId, SchachtLocation, SchachtRootPanels, SchachtTypId, get_loader,
-            load_one,
+            EigentuemerId, SchachtId, SchachtLocation, SchachtRootPanels, SchachtTypCount,
+            SchachtTypId, get_loader, load_one,
         },
         model::{GeoPoint, Lv95Point},
     },
@@ -200,6 +200,13 @@ impl SchachtTyp {
     /// Smaller inner dimension in millimetres, optional
     async fn dimension2_mm(&self) -> Option<i32> {
         self.dimension2_mm
+    }
+    /// How many Schächte have this type
+    async fn schacht_count(&self, ctx: &Context<'_>) -> async_graphql::Result<i32> {
+        Ok(get_loader(ctx)?
+            .load_one(SchachtTypCount(self.id))
+            .await?
+            .unwrap_or_default())
     }
     async fn list_schacht(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Schacht>> {
         let mut connection = get_connection(ctx).await?;

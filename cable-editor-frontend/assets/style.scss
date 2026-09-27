@@ -953,3 +953,39 @@ body {
 .owner-dialog__hint {
   color: var(--pf-t--global--text--color--subtle);
 }
+
+// Types of Schächte (pages/cabinet_type/)
+.cabinet-type__icon {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.cabinet-type__preview {
+  width: 4rem;
+  height: 4rem;
+}
+
+.cabinet-type__form {
+  max-width: 40rem;
+}
+
+.cabinet-type__icon-choice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pf-t--global--spacer--md);
+  align-items: center;
+}
+
+.cabinet-type__file {
+  display: none;
+}
+
+.cabinet-type__dimensions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: var(--pf-t--global--spacer--md);
+}
+
+.cabinet-type__hint {
+  color: var(--pf-t--global--text--color--subtle);
+}

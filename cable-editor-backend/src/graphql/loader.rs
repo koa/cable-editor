@@ -68,6 +68,10 @@ pub struct SchachtTypId(pub i32);
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct CableId(pub i32);
 
+/// How many Schächte have a type; missing: none.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct SchachtTypCount(pub i32);
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct EigentuemerId(pub i32);
 
@@ -177,6 +181,29 @@ impl Loader<EigentuemerId> for DbLoader {
             .load(&mut connection)
             .await?;
         Ok(list.into_iter().map(|e| (EigentuemerId(e.id), e)).collect())
+    }
+}
+
+impl Loader<SchachtTypCount> for DbLoader {
+    type Value = i32;
+    type Error = async_graphql::Error;
+
+    async fn load(
+        &self,
+        keys: &[SchachtTypCount],
+    ) -> Result<HashMap<SchachtTypCount, i32>, Self::Error> {
+        let mut connection = self.connection.lock().await;
+        let counts: Vec<(Option<i32>, i64)> = schema::schacht::table
+            .filter(schema::schacht::typ.eq_any(ids(keys, |k| k.0)))
+            .group_by(schema::schacht::typ)
+            .select((schema::schacht::typ, count_star()))
+            .load(&mut connection)
+            .await?;
+        counts
+            .into_iter()
+            .filter_map(|(typ, count)| Some((SchachtTypCount(typ?), count)))
+            .map(|(typ, count)| Ok((typ, i32::try_from(count)?)))
+            .collect()
     }
 }
 

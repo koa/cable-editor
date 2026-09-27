@@ -8,6 +8,7 @@ mod owner;
 mod panel;
 mod plan;
 mod schacht;
+mod schacht_typ;
 pub mod sync;
 
 use async_graphql::MergedObject;
@@ -20,4 +21,5 @@ pub struct Mutation(
     panel::PanelMutation,
     plan::PlanMutation,
     owner::OwnerMutation,
+    schacht_typ::SchachtTypMutation,
 );

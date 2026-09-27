@@ -1,8 +1,9 @@
 // Checks of the real backend against the database of run-realdb.sh (fresh, with local/data.sql):
 // builds cables, panels, port usages and plans through GraphQL, then checks what the pages
-// query (the DataLoaders), the PostGIS conversions, fitting a duct's course, the owners and the
-// refusals of the mutations. With PG_LOG (printed by run-realdb.sh) it counts the SQL statements
-// per query, which shows whether the loaders batch. Changes the data, so run it once per start.
+// query (the DataLoaders), the PostGIS conversions, fitting a duct's course, owners, Schacht
+// types and the refusals of the mutations. With PG_LOG (printed by run-realdb.sh) it counts the
+// SQL statements per query, which shows whether the loaders batch. Changes the data, so run it
+// once per start.
 import fs from 'node:fs';
 
 const API = process.env.API ?? 'http://127.0.0.1:8080/graphql';
@@ -233,6 +234,40 @@ await refused('deleteOwner with Schächte and ducts', deleteOwner, { id: standar
 await gql(setDefault, { id: standard.id });
 check('deleteOwner without objects', (await gql(deleteOwner, { id: other.id })).deleteOwner === true);
 await refused('updateOwner of a deleted owner', updateOwner, { id: other.id, o: { name: 'Weg' } }, /nicht gefunden/);
+
+// ---------------------------------------------------------------- Schacht types
+const TYP = 'id name icon lkmapObjektart dimension1Mm dimension2Mm schachtCount';
+const types = await gql(`{ listSchachtTyp { ${TYP} } }`);
+console.log(`listSchachtTyp${statements(types)}`);
+const usedTyp = types.listSchachtTyp.find((typ) => typ.schachtCount > 0);
+check('a type with Schächte', usedTyp !== undefined, JSON.stringify(types.listSchachtTyp.map(({ icon, ...typ }) => typ)));
+const createTyp = 'mutation($t:SchachtTypInput!){ createSchachtTyp(typ:$t) { id name icon lkmapObjektart dimension1Mm dimension2Mm } }';
+const newTyp = (await gql(createTyp, { t: { name: ' Rechteckschacht ', lkmapObjektart: 'SCHACHT_RECHTECKIG', dimension1Mm: 1200, dimension2Mm: 800 } })).createSchachtTyp;
+check('createSchachtTyp trims and gets an icon', newTyp.name === 'Rechteckschacht' && newTyp.icon.startsWith('<svg') && newTyp.dimension2Mm === 800, JSON.stringify(newTyp));
+const typInput = (changes) => ({ t: { name: 'X', lkmapObjektart: 'SCHACHT_RUND', ...changes } });
+await refused('createSchachtTyp without name', createTyp, typInput({ name: ' ' }), /Namen/);
+await refused('createSchachtTyp with a long name', createTyp, typInput({ name: 'x'.repeat(21) }), /20 Zeichen/);
+await refused('createSchachtTyp with a taken name', createTyp, typInput({ name: 'Rechteckschacht' }), /schon einen Schachttyp/);
+await refused('createSchachtTyp with dimension 2 alone', createTyp, typInput({ dimension2Mm: 500 }), /nur zusammen/);
+await refused('createSchachtTyp with dimension 2 larger', createTyp, typInput({ dimension1Mm: 500, dimension2Mm: 600 }), /grössere/);
+await refused('createSchachtTyp with a dimension over 4 m', createTyp, typInput({ dimension1Mm: 4001 }), /zwischen 0 und 4000/);
+await refused('createSchachtTyp with an icon that is no SVG', createTyp, typInput({ icon: '<html><svg/></html>' }), /keine SVG/);
+await refused('createSchachtTyp with a malformed icon', createTyp, typInput({ icon: '<svg><g></svg>' }), /keine SVG/);
+check('createSchachtTyp with an icon behind an XML declaration', (await gql(createTyp, typInput({ name: 'Mit Icon', icon: '<?xml version="1.0"?>\n<svg xmlns="http://www.w3.org/2000/svg"/>' }))).createSchachtTyp.icon.includes('<svg'));
+const updateTyp = 'mutation($id:Int!,$t:SchachtTypInput!){ updateSchachtTyp(typId:$id, typ:$t) { name icon lkmapObjektart dimension1Mm } }';
+check('updateSchachtTyp keeps its own name', (await gql(updateTyp, { id: newTyp.id, t: { name: 'Rechteckschacht', lkmapObjektart: 'SCHACHT_RECHTECKIG' } })).updateSchachtTyp.dimension1Mm === null);
+// The Objektart and dimensions of the type are those of its Schächte
+const usedSchacht = (await gql('{ listSchacht { id changedAt typ { id } } }')).listSchacht.find((schacht) => schacht.typ?.id === usedTyp.id);
+const schachtChangedAt = async () => (await gql('query($s:Int!){ schacht(schachtId:$s) { changedAt } }', { s: usedSchacht.id })).schacht.changedAt;
+const renamed = (await gql(updateTyp, { id: usedTyp.id, t: { name: `${usedTyp.name} neu`, lkmapObjektart: usedTyp.lkmapObjektart } })).updateSchachtTyp;
+check('updateSchachtTyp without icon keeps it', renamed.icon === usedTyp.icon);
+check('renaming a type keeps changedAt of its Schächte', (await schachtChangedAt()) === usedSchacht.changedAt);
+await gql(updateTyp, { id: usedTyp.id, t: { name: usedTyp.name, lkmapObjektart: 'BAUWERK' } });
+check('a new Objektart changes its Schächte', (await schachtChangedAt()) !== usedSchacht.changedAt);
+const deleteTyp = 'mutation($id:Int!){ deleteSchachtTyp(typId:$id) }';
+await refused('deleteSchachtTyp with Schächte', deleteTyp, { id: usedTyp.id }, new RegExp(`noch ${usedTyp.schachtCount} Schächte`));
+check('deleteSchachtTyp without Schächte', (await gql(deleteTyp, { id: newTyp.id })).deleteSchachtTyp === true);
+check('schachtTyp of a deleted type', (await gql('query($id:Int!){ schachtTyp(typId:$id) { id } }', { id: newTyp.id })).schachtTyp === null);
 
 console.log(failures ? `\n${failures} Prüfung(en) fehlgeschlagen` : '\nAlle Prüfungen bestanden');
 process.exit(failures ? 1 : 0);

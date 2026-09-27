@@ -1,4 +1,5 @@
 pub mod cabinet;
+pub mod cabinet_type;
 pub mod cable;
 pub mod duct;
 pub mod list_of_cables;

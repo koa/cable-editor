@@ -21,6 +21,7 @@ pub mod panel_overview;
 pub mod plan_details;
 pub mod schacht_cables;
 pub mod schacht_properties;
+pub mod schacht_types;
 
 #[cynic::schema("authenticated")]
 mod schema {}

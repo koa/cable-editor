@@ -1,6 +1,6 @@
 # Konzept: Seiten für Eigentümer und Schachttypen
 
-Stand: 27.09.2026 – Konzept; umgesetzt sind die Eigentümer (bis auf die Spalte in der Trassenliste). Was davon der Leitungskataster braucht
+Stand: 27.09.2026 – umgesetzt bis auf die Spalte „Eigentümer“ in der Trassenliste. Was davon der Leitungskataster braucht
 (UID, Name in der Lieferung, Objektart, Masse), steht in `docs/leitungskataster.md`; wo die
 Seiten liegen, in `docs/navigation.md`.
 
@@ -24,7 +24,7 @@ getrimmt und nicht leer, UID mit `config::is_uid`, doppelte UID mit klarer Meldu
 `setDefaultOwner` (setzt `standard` in einer Transaktion um), `deleteOwner`; an `Owner` die
 Zählfelder `schachtCount`, `ductCount`, `deliveredDuctCount` über den Loader.
 
-## Schachttypen
+## Schachttypen (umgesetzt)
 
 Typen von Schächten (Tabelle `schacht_typ`, GraphQL `SchachtTyp`).
 
@@ -32,8 +32,9 @@ Typen von Schächten (Tabelle `schacht_typ`, GraphQL `SchachtTyp`).
   `PlanView::NewCabinetType { id }` (wie ein neuer Schacht, `IdOrNew`), Bereich „Schachttyp“;
   für alle lesbar, ändern nur Admin.
 - Felder: Name (max. 20 Zeichen), Icon und die Felder für den Leitungskataster.
-- Icon: aus einer SVG-Datei; die Vorschau als `<img>` mit `data:`-URL, damit ein Skript im SVG
-  nicht läuft.
+- Icon: aus einer SVG-Datei (höchstens 64 KiB, wohlgeformt, Wurzel `<svg>`), ohne Datei ein
+  einfacher Kreis; angezeigt als `<img>` mit `data:`-URL, damit ein Skript im SVG nicht läuft.
+- Namen sind eindeutig (die Schacht-Seite wählt den Typ nach Namen).
 - Die Liste zeigt die Anzahl Schächte; Löschen nur ohne Schächte.
 
 GraphQL (Admin): `createSchachtTyp`, `updateSchachtTyp`, `deleteSchachtTyp`.

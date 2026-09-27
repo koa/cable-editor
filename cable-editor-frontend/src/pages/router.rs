@@ -1,4 +1,5 @@
 use crate::components::menu::list_cabinet::ListCabinet;
+use crate::components::menu::list_cabinet_type::ListCabinetType;
 use crate::components::menu::list_cable::ListCable;
 use crate::components::menu::list_duct::ListDuct;
 use crate::components::menu::list_panel::ListPanel;
@@ -15,6 +16,7 @@ use crate::{
             edit::EditCabinetPanels, list::ListOfCabinets, overview::CabinetOverview,
             properties::CabinetProperties,
         },
+        cabinet_type::{list::ListOfCabinetTypes, properties::CabinetTypeProperties},
         cable::edit::EditCable,
         duct::{list::ListOfDucts, properties::EditDuctProperties, show::ShowDuct},
         list_of_cables::ListOfCables,
@@ -156,6 +158,14 @@ pub enum PlanView {
         view: DuctView,
     },
     ListOfOwners,
+    ListOfCabinetTypes,
+    /// Like `NewCabinet`
+    NewCabinetType {
+        id: Uuid,
+    },
+    CabinetType {
+        id: i32,
+    },
     Panel {
         id: i32,
         #[target(nested)]
@@ -180,16 +190,20 @@ impl PlanView {
             }
             PlanView::Map => ("Karte".into(), PlanView::Map),
             PlanView::ListOfOwners => ("Eigentümer".into(), PlanView::ListOfOwners),
+            PlanView::ListOfCabinetTypes
+            | PlanView::NewCabinetType { .. }
+            | PlanView::CabinetType { .. } => ("Schachttyp".into(), PlanView::ListOfCabinetTypes),
         };
 
         // The areas of the plan, each leading to its start page
-        let areas: [(&str, PlanView); 6] = [
+        let areas: [(&str, PlanView); 7] = [
             ("Ändern", PlanView::Edit),
             ("Schacht", PlanView::ListOfCabinets),
             ("Kabel", PlanView::ListOfCables),
             ("Trasse", PlanView::ListOfDucts),
             ("Karte", PlanView::Map),
             ("Eigentümer", PlanView::ListOfOwners),
+            ("Schachttyp", PlanView::ListOfCabinetTypes),
         ];
         let entries = areas
             .into_iter()
@@ -216,6 +230,10 @@ impl PlanView {
             }
             PlanView::NewCabinet { .. } => item_contents.push(html!("Neuer Schacht")),
             PlanView::NewDuct { .. } => item_contents.push(html!("Neue Trasse")),
+            PlanView::NewCabinetType { .. } => item_contents.push(html!("Neuer Schachttyp")),
+            PlanView::CabinetType { id } => {
+                item_contents.push(html!(<ListCabinetType {plan_id} typ_id={*id}/>))
+            }
             PlanView::Duct { id, view } => {
                 item_contents.push(html!(<ListDuct {plan_id} duct_id={*id} view={view.clone()}/>))
             }
@@ -296,6 +314,7 @@ impl PlanView {
                 view: PanelView::Edit | PanelView::Loop | PanelView::Attach,
                 ..
             } => Role::Planner,
+            PlanView::NewCabinetType { .. } => Role::Admin,
             _ => Role::Reader,
         }
     }
@@ -313,6 +332,13 @@ impl PlanView {
             PlanView::Map => html!(<Map {plan_id}/>),
             PlanView::ListOfDucts => html!(<ListOfDucts/>),
             PlanView::ListOfOwners => html!(<ListOfOwners/>),
+            PlanView::ListOfCabinetTypes => html!(<ListOfCabinetTypes/>),
+            PlanView::NewCabinetType { id } => {
+                html!(<CabinetTypeProperties {plan_id} typ={IdOrNew::Temporary(id)}/>)
+            }
+            PlanView::CabinetType { id } => {
+                html!(<CabinetTypeProperties {plan_id} typ={IdOrNew::Id(id)}/>)
+            }
             PlanView::NewDuct { id } => {
                 html!(<EditDuctProperties {plan_id} duct={IdOrNew::Temporary(id)}/>)
             }
