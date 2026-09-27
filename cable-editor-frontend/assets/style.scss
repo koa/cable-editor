@@ -947,3 +947,9 @@ body {
   stroke: var(--pf-t--global--color--status--danger--default);
   stroke-opacity: 0.35;
 }
+
+// Owners (pages/owner/list.rs): a value that just repeats another one, and the dialog's note
+.owner-list__default,
+.owner-dialog__hint {
+  color: var(--pf-t--global--text--color--subtle);
+}

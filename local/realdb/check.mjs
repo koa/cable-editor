@@ -1,8 +1,8 @@
 // Checks of the real backend against the database of run-realdb.sh (fresh, with local/data.sql):
 // builds cables, panels, port usages and plans through GraphQL, then checks what the pages
-// query (the DataLoaders), the PostGIS conversions, fitting a duct's course and the refusals of
-// the mutations. With PG_LOG (printed by run-realdb.sh) it counts the SQL statements per query,
-// which shows whether the loaders batch. Changes the data, so run it once per start.
+// query (the DataLoaders), the PostGIS conversions, fitting a duct's course, the owners and the
+// refusals of the mutations. With PG_LOG (printed by run-realdb.sh) it counts the SQL statements
+// per query, which shows whether the loaders batch. Changes the data, so run it once per start.
 import fs from 'node:fs';
 
 const API = process.env.API ?? 'http://127.0.0.1:8080/graphql';
@@ -195,6 +195,44 @@ await gql('mutation($c:Int!){ updateCable(cableId:$c, path:[5]){ id } }', { c: s
 check('deleteCable without ports', (await gql('mutation($c:Int!){ deleteCable(cableId:$c) }', { c: spare })).deleteCable === true);
 await gql('mutation($d:Int!){ deleteDuct(ductId:$d) }', { d: duct.createDuct.id });
 await gql('mutation($id:Int!){ deleteSchacht(schachtId:$id) }', { id: schachtId });
+
+// ---------------------------------------------------------------- owners
+const OWNER = 'id name lkName uid isDefault schachtCount ductCount deliveredDuctCount';
+const owners = await gql(`{ listOwner { ${OWNER} } }`);
+console.log(`listOwner${statements(owners)}`);
+const standard = owners.listOwner.find((owner) => owner.isDefault);
+check('the default owner has all Schächte and ducts', standard?.schachtCount === 7 && standard?.ductCount === 6 && standard?.deliveredDuctCount === 0, JSON.stringify(standard));
+const createOwner = 'mutation($o:OwnerInput!){ createOwner(owner:$o) { id name lkName uid isDefault } }';
+const other = (await gql(createOwner, { o: { name: '  Private Leitung ', lkName: 'Keine_Angabe', uid: ' ZHE-100.100.101 ' } })).createOwner;
+check('createOwner trims', other.name === 'Private Leitung' && other.uid === 'ZHE-100.100.101' && other.lkName === 'Keine_Angabe' && !other.isDefault, JSON.stringify(other));
+await refused('createOwner without name', createOwner, { o: { name: ' ' } }, /Namen/);
+await refused('createOwner with a taken name', createOwner, { o: { name: 'Private Leitung' } }, /schon einen Eigentümer/);
+await refused('createOwner with a malformed UID', createOwner, { o: { name: 'X', uid: 'CHE-123456789' } }, /Form CHE-/);
+await refused('createOwner with a taken UID', createOwner, { o: { name: 'X', uid: 'ZHE-100.100.101' } }, /schon der Eigentümer Private Leitung/);
+await refused('createOwner with a long name in the delivery', createOwner, { o: { name: 'X', lkName: 'x'.repeat(81) } }, /80 Zeichen/);
+const updateOwner = 'mutation($id:Int!,$o:OwnerInput!){ updateOwner(ownerId:$id, owner:$o) { name lkName uid } }';
+const cleared = (await gql(updateOwner, { id: other.id, o: { name: 'Private Leitung', lkName: '', uid: null } })).updateOwner;
+check('updateOwner clears empty values', cleared.lkName === null && cleared.uid === null, JSON.stringify(cleared));
+check('updateOwner keeps its own name', (await gql(updateOwner, { id: other.id, o: { name: 'Private Leitung' } })).updateOwner.name === 'Private Leitung');
+// Name and UID of the owner are Eigentuemer and Datenherr of its objects
+const changedAt = async () => (await gql('{ duct(ductId:1) { changedAt } }')).duct.changedAt;
+const before = await changedAt();
+await gql(updateOwner, { id: standard.id, o: { name: standard.name, lkName: standard.lkName, uid: standard.uid } });
+check('updateOwner without change keeps changedAt of its ducts', (await changedAt()) === before);
+await gql(updateOwner, { id: standard.id, o: { name: standard.name, uid: 'CHE-123.456.789' } });
+const afterUid = await changedAt();
+check('updateOwner with a new UID changes its ducts', afterUid !== before, `${before} → ${afterUid}`);
+const setDefault = 'mutation($id:Int!){ setDefaultOwner(ownerId:$id) { id isDefault } }';
+check('setDefaultOwner', (await gql(setDefault, { id: other.id })).setDefaultOwner.isDefault);
+const defaults = (await gql(`{ listOwner { ${OWNER} } }`)).listOwner.filter((owner) => owner.isDefault);
+check('exactly one default owner', defaults.length === 1 && defaults[0].id === other.id, JSON.stringify(defaults));
+check('setDefaultOwner keeps changedAt', (await changedAt()) === afterUid);
+const deleteOwner = 'mutation($id:Int!){ deleteOwner(ownerId:$id) }';
+await refused('deleteOwner of the default owner', deleteOwner, { id: other.id }, /Standard-Eigentümer/);
+await refused('deleteOwner with Schächte and ducts', deleteOwner, { id: standard.id }, /7 Schächte und 6 Trassen/);
+await gql(setDefault, { id: standard.id });
+check('deleteOwner without objects', (await gql(deleteOwner, { id: other.id })).deleteOwner === true);
+await refused('updateOwner of a deleted owner', updateOwner, { id: other.id, o: { name: 'Weg' } }, /nicht gefunden/);
 
 console.log(failures ? `\n${failures} Prüfung(en) fehlgeschlagen` : '\nAlle Prüfungen bestanden');
 process.exit(failures ? 1 : 0);

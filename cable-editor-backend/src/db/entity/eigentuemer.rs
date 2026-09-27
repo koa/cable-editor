@@ -1,8 +1,11 @@
 //! Owners of Schächte and ducts; the Leitungskataster is delivered per owner (see
 //! docs/leitungskataster.md).
 
-use crate::db::schema;
-use async_graphql::Object;
+use crate::{
+    db::schema,
+    graphql::loader::{EigentuemerCounts, OwnedCounts, get_loader},
+};
+use async_graphql::{Context, Object};
 use diesel::{HasQuery, Identifiable};
 
 #[derive(Identifiable, HasQuery, Debug, Clone, PartialEq)]
@@ -44,5 +47,24 @@ impl Eigentuemer {
     /// Owner of new Schächte and ducts
     async fn is_default(&self) -> bool {
         self.standard
+    }
+    async fn schacht_count(&self, ctx: &Context<'_>) -> async_graphql::Result<i32> {
+        Ok(self.counts(ctx).await?.schaechte)
+    }
+    async fn duct_count(&self, ctx: &Context<'_>) -> async_graphql::Result<i32> {
+        Ok(self.counts(ctx).await?.ducts)
+    }
+    /// Ducts delivered to the Leitungskataster
+    async fn delivered_duct_count(&self, ctx: &Context<'_>) -> async_graphql::Result<i32> {
+        Ok(self.counts(ctx).await?.delivered_ducts)
+    }
+}
+
+impl Eigentuemer {
+    async fn counts(&self, ctx: &Context<'_>) -> async_graphql::Result<OwnedCounts> {
+        Ok(get_loader(ctx)?
+            .load_one(EigentuemerCounts(self.id))
+            .await?
+            .unwrap_or_default())
     }
 }

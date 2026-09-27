@@ -1,5 +1,7 @@
 use crate::util::get_backdrop;
-use patternfly_yew::prelude::{Backdrop, Bullseye, Button, ButtonVariant, Modal, ModalVariant};
+use patternfly_yew::prelude::{
+    Backdrop, Backdropper, Bullseye, Button, ButtonVariant, Modal, ModalVariant,
+};
 use web_sys::MouseEvent;
 use yew::{BaseComponent, Callback, Html, Properties, function_component, html, html::Scope};
 
@@ -12,23 +14,31 @@ pub fn confirm_delete(
     let Some(backdropper) = get_backdrop(scope) else {
         return Callback::noop();
     };
-    Callback::from(move |_| {
-        let on_confirm = {
-            let backdropper = backdropper.clone();
-            let on_confirm = on_confirm.clone();
-            Callback::from(move |()| {
-                backdropper.close();
-                on_confirm.emit(());
-            })
-        };
-        let on_cancel = {
-            let backdropper = backdropper.clone();
-            Callback::from(move |()| backdropper.close())
-        };
-        backdropper.open(Backdrop::new(html! {
-            <DeleteConfirmationDialog {on_confirm} {on_cancel}/>
-        }));
-    })
+    Callback::from(move |_| open_delete_confirmation(&backdropper, on_confirm.clone()))
+}
+
+/// Like `confirm_delete`, for a deletion started elsewhere, e.g. from a menu item.
+pub fn ask_delete(scope: &Scope<impl BaseComponent>, on_confirm: Callback<()>) {
+    if let Some(backdropper) = get_backdrop(scope) {
+        open_delete_confirmation(&backdropper, on_confirm);
+    }
+}
+
+fn open_delete_confirmation(backdropper: &Backdropper, on_confirm: Callback<()>) {
+    let on_confirm = {
+        let backdropper = backdropper.clone();
+        Callback::from(move |()| {
+            backdropper.close();
+            on_confirm.emit(());
+        })
+    };
+    let on_cancel = {
+        let backdropper = backdropper.clone();
+        Callback::from(move |()| backdropper.close())
+    };
+    backdropper.open(Backdrop::new(html! {
+        <DeleteConfirmationDialog {on_confirm} {on_cancel}/>
+    }));
 }
 
 /// Asks before deleting, opened by `confirm_delete`.

@@ -4,6 +4,7 @@
 mod cable;
 mod duct;
 pub mod implement;
+mod owner;
 mod panel;
 mod plan;
 mod schacht;
@@ -18,4 +19,5 @@ pub struct Mutation(
     duct::DuctMutation,
     panel::PanelMutation,
     plan::PlanMutation,
+    owner::OwnerMutation,
 );

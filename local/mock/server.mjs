@@ -76,6 +76,39 @@ const schachtFromInput = ({ name, typeId, position }) => {
   const wgs84 = position ? positionToWgs84(position) : null;
   return [name.trim(), wgs84 ? [wgs84.lat, wgs84.lng] : null, typeId ?? null];
 };
+// Owners of Schächte and ducts; the Gemeinde has no UID, so its delivered duct can't be delivered
+const ownerRows = [
+  { id: 1, name: 'Genossenschaft Glasfaser Berg', lkName: null, uid: 'CHE-123.456.789', isDefault: true },
+  { id: 2, name: 'Gemeinde Berg', lkName: null, uid: null, isDefault: false },
+  { id: 3, name: 'Hans Muster', lkName: 'Keine_Angabe', uid: 'ZHE-100.100.101', isDefault: false },
+];
+// Owner of a Schacht (default 1) and a duct (default 1), ducts delivered to the Leitungskataster
+const schachtOwner = { 5: 2 };
+const ductOwner = { 714: 2, 715: 3 };
+const deliveredDucts = new Set([711, 713, 714]);
+const ownerFromInput = ({ name, lkName, uid }, ownerId) => {
+  const clean = (value) => value?.trim() || null;
+  if (!name.trim()) throw new Error('Der Eigentümer braucht einen Namen');
+  if (clean(uid) && !/^(CHE|ZHE)-\d{3}\.\d{3}\.\d{3}$/.test(clean(uid))) {
+    throw new Error(`Die UID ${clean(uid)} hat nicht die Form CHE-123.456.789 (fiktiv: ZHE-…)`);
+  }
+  const other = ownerRows.find((o) => o.id !== ownerId && (o.name === name.trim() || (clean(uid) && o.uid === clean(uid))));
+  if (other) throw new Error(`Es gibt schon einen Eigentümer ${other.name} mit diesem Namen oder dieser UID`);
+  return { name: name.trim(), lkName: clean(lkName), uid: clean(uid) };
+};
+const ownerOfSchacht = (id) => schachtOwner[id] ?? 1;
+const ownerOfDuct = (id) => ductOwner[id] ?? 1;
+const owner = (id) => {
+  const row = ownerRows.find((o) => o.id === id);
+  if (!row) return null;
+  const ducts = ductRows.filter((r) => ownerOfDuct(r.id) === id);
+  return {
+    ...row,
+    schachtCount: schachtRows.filter((r) => ownerOfSchacht(r[0]) === id).length,
+    ductCount: ducts.length,
+    deliveredDuctCount: ducts.filter((r) => deliveredDucts.has(r.id)).length,
+  };
+};
 const cableRows = [
   // id, name, bundles, fibers, length, schacht a, schacht z
   [11, 'K-1001', 4, 12, 420.5, 1, 2], [12, 'K-1002', 2, 12, 310, 1, 3],
@@ -346,6 +379,7 @@ const root = {
   listDuct: () => ductRows.map(duct),
   duct: ({ ductId }) => { const row = ductRows.find((r) => r.id === ductId); return row ? duct(row) : null; },
   checkDuctLine: ({ schachtA, schachtZ, line }) => fitLine(schachtA, schachtZ, line),
+  listOwner: () => ownerRows.map((o) => owner(o.id)).sort((a, b) => a.name.localeCompare(b.name)),
   listPlan: () => plans.map((p) => plan(p.id)),
   plan: ({ planId }) => plan(planId),
   panel: ({ panelId }) => panel(panelId),
@@ -393,6 +427,26 @@ const root = {
     const cables = duct(row).cables().length;
     if (cables) throw new Error(`Durch die Trasse führen noch ${cables} Kabel`);
     ductRows.splice(ductRows.indexOf(row), 1);
+    return true;
+  },
+  createOwner: ({ owner: input }) => {
+    const row = { id: Math.max(...ownerRows.map((o) => o.id)) + 1, ...ownerFromInput(input), isDefault: false };
+    ownerRows.push(row);
+    return owner(row.id);
+  },
+  updateOwner: ({ ownerId, owner: input }) => {
+    Object.assign(ownerRows.find((o) => o.id === ownerId), ownerFromInput(input, ownerId));
+    return owner(ownerId);
+  },
+  setDefaultOwner: ({ ownerId }) => {
+    ownerRows.forEach((o) => { o.isDefault = o.id === ownerId; });
+    return owner(ownerId);
+  },
+  deleteOwner: ({ ownerId }) => {
+    const { isDefault, schachtCount, ductCount } = owner(ownerId);
+    if (isDefault) throw new Error('Der Standard-Eigentümer kann nicht gelöscht werden, zuerst einen anderen als Standard setzen');
+    if (schachtCount || ductCount) throw new Error(`Dem Eigentümer gehören noch ${schachtCount} Schächte und ${ductCount} Trassen`);
+    ownerRows.splice(ownerRows.findIndex((o) => o.id === ownerId), 1);
     return true;
   },
   deleteSchacht: ({ schachtId }) => {

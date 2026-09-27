@@ -20,7 +20,10 @@ use crate::{
     graphql::model::GeoPoint,
 };
 use async_graphql::{Context, dataloader::DataLoader, dataloader::Loader};
-use diesel::{ExpressionMethods, HasQuery, QueryDsl, SelectableHelper, dsl::sum};
+use diesel::{
+    ExpressionMethods, HasQuery, QueryDsl, SelectableHelper,
+    dsl::{count_star, sum},
+};
 use diesel_async::{AsyncPgConnection, RunQueryDsl, pooled_connection::deadpool::Object};
 use postgis_diesel::types::{LineString, Point};
 use std::{collections::HashMap, sync::Arc};
@@ -67,6 +70,18 @@ pub struct CableId(pub i32);
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct EigentuemerId(pub i32);
+
+/// How many Schächte and ducts an owner has; missing: none.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct EigentuemerCounts(pub i32);
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct OwnedCounts {
+    pub schaechte: i32,
+    pub ducts: i32,
+    /// Ducts delivered to the Leitungskataster
+    pub delivered_ducts: i32,
+}
 
 /// Position of a Schacht in WGS84, missing without geometry.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -162,6 +177,54 @@ impl Loader<EigentuemerId> for DbLoader {
             .load(&mut connection)
             .await?;
         Ok(list.into_iter().map(|e| (EigentuemerId(e.id), e)).collect())
+    }
+}
+
+impl Loader<EigentuemerCounts> for DbLoader {
+    type Value = OwnedCounts;
+    type Error = async_graphql::Error;
+
+    async fn load(
+        &self,
+        keys: &[EigentuemerCounts],
+    ) -> Result<HashMap<EigentuemerCounts, OwnedCounts>, Self::Error> {
+        let owners = ids(keys, |k| k.0);
+        let mut connection = self.connection.lock().await;
+        let schaechte: Vec<(i32, i64)> = schema::schacht::table
+            .filter(schema::schacht::eigentuemer_id.eq_any(&owners))
+            .group_by(schema::schacht::eigentuemer_id)
+            .select((schema::schacht::eigentuemer_id, count_star()))
+            .load(&mut connection)
+            .await?;
+        let ducts: Vec<(i32, bool, i64)> = schema::trasse::table
+            .filter(schema::trasse::eigentuemer_id.eq_any(&owners))
+            .group_by((
+                schema::trasse::eigentuemer_id,
+                schema::trasse::leitungskataster,
+            ))
+            .select((
+                schema::trasse::eigentuemer_id,
+                schema::trasse::leitungskataster,
+                count_star(),
+            ))
+            .load(&mut connection)
+            .await?;
+        let mut counts: HashMap<EigentuemerCounts, OwnedCounts> = HashMap::new();
+        for (owner, count) in schaechte {
+            counts
+                .entry(EigentuemerCounts(owner))
+                .or_default()
+                .schaechte = i32::try_from(count)?;
+        }
+        for (owner, delivered, count) in ducts {
+            let count = i32::try_from(count)?;
+            let entry = counts.entry(EigentuemerCounts(owner)).or_default();
+            entry.ducts += count;
+            if delivered {
+                entry.delivered_ducts = count;
+            }
+        }
+        Ok(counts)
     }
 }
 

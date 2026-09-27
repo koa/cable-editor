@@ -1,17 +1,18 @@
 # Konzept: Seiten für Eigentümer und Schachttypen
 
-Stand: 27.09.2026 – Konzept, noch nicht umgesetzt. Was davon der Leitungskataster braucht
+Stand: 27.09.2026 – Konzept; umgesetzt sind die Eigentümer (bis auf die Spalte in der Trassenliste). Was davon der Leitungskataster braucht
 (UID, Name in der Lieferung, Objektart, Masse), steht in `docs/leitungskataster.md`; wo die
 Seiten liegen, in `docs/navigation.md`.
 
-## Eigentümer
+## Eigentümer (umgesetzt)
 
 Eigentümer von Schächten und Trassen (Tabelle `eigentuemer`, GraphQL `Owner`, `listOwner`).
 
 - Seite `PlanView::ListOfOwners`, Bereich „Eigentümer“; für alle lesbar, ändern nur Admin.
 - Tabelle: Name, Name in der Lieferung, UID, Standard, Anzahl Schächte und Trassen (davon
   geliefert).
-- Anlegen und Bearbeiten in einem Dialog (drei Felder), keine eigene Seite.
+- Anlegen und Bearbeiten in einem Dialog (drei Felder), keine eigene Seite; die Aktionen im
+  Menü der Zeile.
 - „Als Standard setzen“: der Standard-Eigentümer wird neuen Schächten und Trassen vorgewählt;
   es gibt genau einen.
 - Löschen nur ohne Schächte und Trassen und nicht den Standard-Eigentümer; sonst nennt die

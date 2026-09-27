@@ -19,6 +19,7 @@ use crate::{
         duct::{list::ListOfDucts, properties::EditDuctProperties, show::ShowDuct},
         list_of_cables::ListOfCables,
         map::Map,
+        owner::list::ListOfOwners,
         panel::EditPanel,
         planning::{edit::EditPlan, list::ListOfPlannings},
     },
@@ -154,6 +155,7 @@ pub enum PlanView {
         #[target(nested)]
         view: DuctView,
     },
+    ListOfOwners,
     Panel {
         id: i32,
         #[target(nested)]
@@ -177,15 +179,17 @@ impl PlanView {
                 ("Trasse".into(), PlanView::ListOfDucts)
             }
             PlanView::Map => ("Karte".into(), PlanView::Map),
+            PlanView::ListOfOwners => ("Eigentümer".into(), PlanView::ListOfOwners),
         };
 
         // The areas of the plan, each leading to its start page
-        let areas: [(&str, PlanView); 5] = [
+        let areas: [(&str, PlanView); 6] = [
             ("Ändern", PlanView::Edit),
             ("Schacht", PlanView::ListOfCabinets),
             ("Kabel", PlanView::ListOfCables),
             ("Trasse", PlanView::ListOfDucts),
             ("Karte", PlanView::Map),
+            ("Eigentümer", PlanView::ListOfOwners),
         ];
         let entries = areas
             .into_iter()
@@ -308,6 +312,7 @@ impl PlanView {
             PlanView::Panel { id, view } => view.content(plan_id, id),
             PlanView::Map => html!(<Map {plan_id}/>),
             PlanView::ListOfDucts => html!(<ListOfDucts/>),
+            PlanView::ListOfOwners => html!(<ListOfOwners/>),
             PlanView::NewDuct { id } => {
                 html!(<EditDuctProperties {plan_id} duct={IdOrNew::Temporary(id)}/>)
             }

@@ -15,6 +15,7 @@ pub mod list_plans;
 pub mod list_schacht;
 pub mod map;
 pub mod netbox_sync;
+pub mod owners;
 pub mod panel_navigation;
 pub mod panel_overview;
 pub mod plan_details;
