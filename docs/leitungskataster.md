@@ -10,19 +10,29 @@ Grundlage: Weisung LK01-2023 vom 18.08.2023 (auf dem Deckblatt als *Entwurf* bez
 rechtlich §19 KGeoIG und Leitungskatasterverordnung (LKV, LS 704.14, in Kraft seit 1.5.2022)
 <https://www.lexfind.ch/tolv/215462/de>.
 
+- **Unterlagen** (Weisungen, Modelle, Werkkontakte) verlinkt der Kanton auf
+  <https://www.zh.ch/de/planen-bauen/geoinformation/kataster/leitungskataster.html>
+  (dort Stand 27.09.2026: LK01 vom 18.08.2023, LK02 Zugangs- und Nutzungsbestimmungen vom
+  10.02.2026).
 - **Modell** `SIA405_LKMap_2015_LV95`, Version `27.04.2018`, INTERLIS 2.3, XTF, LV95.
-  Modelldateien (lizenzpflichtig, SIA):
-  - <https://405.sia.ch/models/2015/Base_d-20181005.ili>
-  - <https://405.sia.ch/models/2015/SIA405_Base_d-20181005.ili>
-  - <https://405.sia.ch/models/2015/SIA405_LKMap_2015_2_d-20180427.ili>
+  Die Modelldateien des SIA gehören nicht ins (öffentliche) Repo: das LKMap-Modell ist
+  lizenzpflichtig, alle drei stehen unter Copyright des SIA. Sie liegen auf:
+  - <https://405.sia.ch/models/2015/Base_d-20181005.ili> (`Base`, `Base_LV95`, 05.10.2018)
+  - <https://405.sia.ch/models/2015/SIA405_Base_d-20181005.ili> (`SIA405_Base`,
+    `SIA405_Base_LV95`, 05.10.2018)
+  - <https://405.sia.ch/models/2015/SIA405_LKMap_2015_2_d-20180427.ili> (`SIA405_LKMap_2015`,
+    `SIA405_LKMap_2015_LV95`, 27.04.2018)
+
+  Dazu `Units` (INTERLIS-Standardmodell, bringt ilivalidator mit). Was der Export daraus
+  braucht, steht unten.
 - **Termin** (§4 lit. a LKV): innerhalb einer Woche nach Erfassung einer Änderung, mindestens
   am Ende jedes Quartals.
 - **Umfang**: pro Medium (hier *Kommunikation*) und Eigentümer immer der ganze Bestand, keine
   Teil- oder inkrementellen Lieferungen. Keine Leitungen anderer Eigentümer („Fremddaten“).
 - **Zuständigkeitsperimeter**: Pflicht (§1 Abs. 3 LKV), eigenes Modell
-  `Perimeter_LK_ZH_V2_LV95`, Version `2019-04-16` (beim Kanton zu beziehen, die Weisung nennt
-  keinen Link). Einmalig vor der ersten LKMap-Lieferung, danach bei Änderungen. Der Checkservice
-  warnt, wenn LKMap-Objekte ausserhalb liegen.
+  `Perimeter_LK_ZH_V2_LV95`, Version `2019-04-16` (vom Kanton, ohne Lizenzvorbehalt, im Repo:
+  `docs/perimeter_lk_zh_v2_lv95.zip`, siehe unten). Einmalig vor der ersten LKMap-Lieferung,
+  danach bei Änderungen. Der Checkservice warnt, wenn LKMap-Objekte ausserhalb liegen.
 - **Dateinamen**: klein geschrieben, in der UID `.` → `-`:
   `<uid-datenherr>-kommunikation-lkmap.xtf` und `<uid-datenherr>-zustaendigkeit-peri.xtf`,
   je in einem ZIP gleichen Namens.
@@ -50,20 +60,81 @@ rechtlich §19 KGeoIG und Leitungskatasterverordnung (LKV, LS 704.14, in Kraft s
 - Einen Eigentümer „privat“ sehen die Vorschriften nicht vor: unter der eigenen UID wäre die
   Trasse im Kataster die eigene (Fremddaten). Möglich ist die Lieferung *als Datenlieferant im
   Auftrag*, in einer eigenen Datei unter der (fiktiven) UID des Eigentümers.
+- **Name nicht freigegeben**: das Modell sieht dafür in `Eigentuemer` den Text `Keine_Angabe`
+  vor (Kommentar in `LKObjekt`). Der `Datenherr` (UID) bleibt trotzdem der des Eigentümers.
 
-### Pflichtangaben pro Objekt (SIA405_LKMap_2015_LV95)
+### Modell `Perimeter_LK_ZH_V2_LV95`
 
-| Attribut | Inhalt |
-|---|---|
-| OID (`STANDARDOID`), `OBJ_ID` (TEXT*16) | stabile, eindeutige Objekt-Id |
-| `Metaattribute.Datenherr` | UID des Eigentümers (Weisung 1.2) |
-| `Metaattribute.Datenlieferant` | UID der liefernden Stelle |
-| `Metaattribute.Letzte_Aenderung` | Datum `JJJJMMTT`, unbekannt: `18000101` |
-| `Eigentuemer` | Name, TEXT*80 |
-| `Lagebestimmung` | `genau` (±10 cm), `ungenau`, `unbekannt` |
-| `Status` (optional) | `in_Betrieb`, `ausser_Betrieb`, `tot`, `unbekannt`, `weitere` |
-| LKLinie: `Linie`, `Objektart` | Polyline; `Kommunikation.Trasse.unterirdisch` / `.oberirdisch`; optional `Breite` (mm) |
-| LKPunkt: `SymbolPos`, `Objektart` | Koordinate; `Kommunikation.Schacht.rund` / `.rechteckig`, `.Bauwerk`, `.Tragwerk`, `.unbekannt`; optional `SymbolOri`, `Dimension1/2` (mm) |
+`docs/perimeter_lk_zh_v2_lv95.zip` enthält `Perimeter_LK_ZH_V2_LV95.ILI` (INTERLIS 2.3,
+Latin-1). Modell-URI `http://models.geo.zh.ch`, Version `2019-04-16`; importiert `Units`,
+`Base_LV95` und `SIA405_Base_LV95` – zum Prüfen braucht es also auch die SIA-Basismodelle.
+Topic `Perimeter_LK_ZH` (Basket `Perimeter_LK_ZH_V2_LV95.Perimeter_LK_ZH`), eine Klasse
+`Perimeter`, ohne Metaattribute-Struktur und ohne `OBJ_ID`:
+
+| Attribut | Typ | Inhalt für uns |
+|---|---|---|
+| `Medium` | Pflicht, Aufzählung `Abwasser` … `Kommunikation` … `weitereMedien` | `Kommunikation` |
+| `Datenherr` | Pflicht, `TEXT*15` (UID) | UID des Eigentümers |
+| `Datenlieferant` | Pflicht, `TEXT*15` (UID) | aus der Konfiguration |
+| `Letzte_Aenderung` | Pflicht, `INTERLIS_1_DATE` (`JJJJMMTT`) | letzte Änderung, sonst Datum des Exports |
+| `Art` | Pflicht, `Zustaendigkeitsperimeter`, `Projektperimeter`, `Perimeter_entlassenes_Gebiet`, `Perimeter_eingeschraenkte_Nutzung` | `Zustaendigkeitsperimeter` (die beiden letzten erfasst die Katasterleitung) |
+| `Begleitdokument` | optional, `URI` | leer |
+| `Geometrie` | Pflicht, `Base_LV95.Surface` | die Hülle mit Puffer |
+
+`Letzte_Aenderung`: laut Weisung `18000101`, wenn unbekannt; laut Modellkommentar das Datum
+des Exports. Bei uns ist sie immer bekannt (`geaendert_am`).
+
+`Base_LV95.Surface` ist `SURFACE WITH (STRAIGHTS, ARCS) VERTEX LKoord WITHOUT OVERLAPS > 0.050`:
+eine *einzelne* Fläche (Aussenrand, allenfalls Löcher), obwohl der Kommentar im Modell
+„Multifläche“ sagt. Mehrere Teilflächen wären mehrere `Perimeter`-Objekte; die konvexe Hülle
+ist immer eine Fläche. Da `Medium` pro Objekt steht, gehören alle Medien eines Eigentümers in
+dieselbe Datei (Weisung 1.4) – für uns nur `Kommunikation`.
+
+### Modell `SIA405_LKMap_2015_LV95` (Auszug für Kommunikation)
+
+Topic `SIA405_LKMap` (Basket `SIA405_LKMap_2015_LV95.SIA405_LKMap`), Modell-URI
+`http://www.sia.ch/405`. Klassen `LKPunkt`, `LKLinie`, `LKFlaeche` (alle abgeleitet von
+`LKObjekt`) und `LKObjekt_Text` (Beschriftung, optional, per Komposition an ein `LKObjekt`).
+
+Allen gemeinsam (`SIA405_Base_LV95.SIA405_BaseClass`, `LKObjekt`):
+
+| Attribut | Typ | Inhalt für uns |
+|---|---|---|
+| OID (TID) | `STANDARDOID` (16 Zeichen: 8 Präfix + 8) | `oid_prefix` + `s`/`t` + 7 Ziffern |
+| `OBJ_ID` | `TEXT*16`, optional, `UNIQUE` | dieselbe Id wie die OID |
+| `Metaattribute` | Pflicht, Struktur `SIA405_Base_LV95.Metaattribute` | |
+| ↳ `Datenherr` | Pflicht, `OrganisationBezeichnung` (`TEXT*80`) | UID des Eigentümers (Weisung 1.2) |
+| ↳ `Datenlieferant` | Pflicht, `TEXT*80` | UID aus der Konfiguration |
+| ↳ `Letzte_Aenderung` | Pflicht, `INTERLIS_1_DATE` (`JJJJMMTT`) | `geaendert_am` |
+| `Eigentuemer` | Pflicht, `TEXT*80` | `lk_name` bzw. `name`, nicht freigegeben: `Keine_Angabe` |
+| `Lagebestimmung` | Pflicht, `genau` (±10 cm, aus verschiedenen Messungen ±30 cm), `ungenau`, `unbekannt` | Spalte `lagebestimmung` |
+| `Status` | optional, `ausser_Betrieb`, `in_Betrieb`, `tot`, `unbekannt`, `weitere` | `in_Betrieb` |
+| `Eigenschaft` | optional, `BAG OF Eigenschaften` (`Bezeichnung`, `Wert`, je `TEXT*80`) | allenfalls Anzahl Kabel |
+
+`LKPunkt` (Schacht):
+
+| Attribut | Typ | Inhalt für uns |
+|---|---|---|
+| `SymbolPos` | Pflicht, `Base_LV95.LKoord` | Position des Schachts |
+| `SymbolOri` | optional, `0.0 .. 359.9` Grad | leer (Standard 90°) |
+| `Dimension1`, `Dimension2` | optional, `0 .. 4000` mm (grösseres/kleineres Innenmass) | aus dem Schachttyp |
+| `Objektart` | Pflicht; Kommunikation: `Kommunikation.Bauwerk`, `Kommunikation.Schacht.rechteckig`, `Kommunikation.Schacht.rund`, `Kommunikation.Tragwerk`, `Kommunikation.unbekannt` | aus dem Schachttyp |
+
+`LKLinie` (Trasse):
+
+| Attribut | Typ | Inhalt für uns |
+|---|---|---|
+| `Linie` | Pflicht, `Base_LV95.Polyline` (`POLYLINE WITH (STRAIGHTS, ARCS) VERTEX LKoord`) | aus `trassen_mit_endpunkten` |
+| `Objektart` | Pflicht; Kommunikation: `Kommunikation.Trasse.oberirdisch`, `Kommunikation.Trasse.unterirdisch` | `Kommunikation.Trasse.unterirdisch` |
+| `Breite` | optional, `0 .. 4000` mm (ab 300 mm als Doppellinie gezeichnet; breiter als 4 m als Fläche) | `breite_mm` |
+| `Profiltyp` | optional, `Eiprofil` … `unbekannt`, `weitere` | leer (bisher nur Abwasser) |
+
+`LKFlaeche` (Kommunikation: `Bauwerk`, `Schacht`, `Tragwerk`, `Trasse`, `unbekannt`, Geometrie
+`Base_LV95.Surface`) ist für Bauwerke mit detaillierter Geometrie; wir liefern keine.
+
+Geometrie: `LKoord` = `COORD 2480000.000 .. 2840000.000, 1070000.000 .. 1300000.000` (LV95,
+3 Nachkommastellen, also auf mm runden); Linien ungerichtet, Bögen erlaubt (wir liefern nur
+Geraden).
 
 Kabel kommen in LKMap nicht vor, für Kommunikation nur Trassen, Schächte und Bauwerke.
 
@@ -112,7 +183,7 @@ Neue Tabelle `eigentuemer` (Stammdaten):
 |---|---|---|
 | `id` | serial | |
 | `name` | `text not null unique` | intern, der echte Name |
-| `lk_name` | `varchar(80) null` | `Eigentuemer` in der Lieferung, sonst `name` |
+| `lk_name` | `varchar(80) null` | `Eigentuemer` in der Lieferung, sonst `name`; `Keine_Angabe`, wenn nicht freigegeben |
 | `uid` | `varchar(15) null unique` | `Datenherr`, echte oder fiktive UID; ohne keine Lieferung |
 
 Die Migration legt den heutigen Eigentümer an (Name und UID danach in der Admin-Seite setzen)
@@ -183,16 +254,22 @@ Im Export konstant, ohne Spalte:
 - `SIA405_LKMap_2015_LV95`: Header mit Modell `SIA405_LKMap_2015_LV95`, Version `27.04.2018`,
   URI `http://www.sia.ch/405`; Basket `SIA405_LKMap_2015_LV95.SIA405_LKMap`; `LKPunkt` für
   die gelieferten Schächte (Objektart aus dem Schachttyp), `LKLinie` für die gelieferten
-  Trassen mit der Linie aus `trassen_mit_endpunkten`; verschachtelte `Metaattribute`.
+  Trassen mit der Linie aus `trassen_mit_endpunkten`; `Metaattribute` als verschachtelte
+  Struktur (`<Metaattribute><SIA405_Base_LV95.Metaattribute>…`), Aufzählungen mit Punkt
+  (`Kommunikation.Schacht.rund`).
 - XML über eine Bibliothek schreiben (Escaping), nicht per `format!`.
-- `Perimeter_LK_ZH_V2_LV95`: ein Perimeter, Medium `Kommunikation`, Art
-  `Zustaendigkeitsperimeter`, Geometrie aus PostGIS:
+- `Perimeter_LK_ZH_V2_LV95` (Header: Modell `Perimeter_LK_ZH_V2_LV95`, Version `2019-04-16`,
+  URI `http://models.geo.zh.ch`; Basket `Perimeter_LK_ZH_V2_LV95.Perimeter_LK_ZH`): ein
+  `Perimeter` pro Eigentümer, Medium `Kommunikation`, Art `Zustaendigkeitsperimeter`,
+  `Datenherr`/`Datenlieferant` wie im LKMap, Geometrie aus PostGIS als `SURFACE`
+  (`BOUNDARY`/`POLYLINE`/`COORD` mit `C1`/`C2`, auf mm gerundet):
   `ST_Buffer(ST_ConvexHull(ST_Collect(<Linien der gelieferten Trassen des Eigentümers>)), perimeter_puffer_m)`,
   Bögen als Geraden (`ST_Buffer` mit wenigen Segmenten pro Viertelkreis, z. B. `quad_segs=4`);
   `Letzte_Aenderung` = spätestes `geaendert_am` der gelieferten Trassen des Eigentümers.
 - Paketierung: Dateinamen nach Konvention, je ein ZIP.
-- Prüfung: `ilivalidator` gegen die Modelle als Test mit Beispieldaten (lokal/CI). Klären, ob
-  die lizenzpflichtigen SIA-Modelle ins Repo dürfen oder beim Test geladen werden.
+- Prüfung: `ilivalidator` gegen die Modelle als Test mit Beispieldaten (lokal/CI). Die
+  SIA-Modelle lädt der Test von 405.sia.ch in ein Cache-Verzeichnis (nicht ins Repo, siehe 1.),
+  das Perimeter-Modell kommt aus `docs/perimeter_lk_zh_v2_lv95.zip`.
 
 ## 6. UI
 
@@ -223,12 +300,11 @@ Im Export konstant, ohne Spalte:
 
 ## 8. Offen
 
-- Modell `Perimeter_LK_ZH_V2_LV95` beim Kanton beziehen.
 - Zugang zum Checkservice beantragen (leitungskataster@bd.zh.ch).
 - Pufferbreite des Perimeters (Vorschlag 10 m) mit dem Kanton abstimmen.
 - Mit der Katasterleitung klären, wie Privatpersonen ohne UID behandelt werden (fiktive UID
-  für natürliche Personen? Pseudonym in `Eigentuemer` zulässig?) und ob die Lieferung ihrer
-  Trassen durch uns als Datenlieferant akzeptiert wird.
+  für natürliche Personen? `Keine_Angabe` in `Eigentuemer` akzeptiert?) und ob die Lieferung
+  ihrer Trassen durch uns als Datenlieferant akzeptiert wird.
 - Ob private Anschlussleitungen in der Praxis geliefert werden müssen (die LKV macht keine
   Ausnahme).
 - Ob die Weisung inzwischen in einer finalen Fassung vorliegt (die geprüfte ist ein Entwurf).
