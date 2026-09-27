@@ -1,7 +1,7 @@
 use crate::{
     error::FrontendError,
     graphql::{
-        authenticated::{GeoPoint, Lv95Point, schema},
+        authenticated::{Genauigkeit, GeoPoint, Lv95Point, duct_properties::OwnerChoice, schema},
         mutate, query,
     },
 };
@@ -18,9 +18,11 @@ struct SchachtPropertiesQuery {
     #[arguments(schachtId: $schacht_id)]
     schacht: Option<SchachtProperties>,
     list_schacht_typ: Vec<SchachtTypeEntry>,
+    list_owner: Vec<OwnerChoice>,
 }
 
-/// Name, type and position of a Schacht, as the properties page edits them.
+/// Name, type, position, owner and Lagebestimmung of a Schacht, as the properties page edits
+/// them.
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
 #[cynic(graphql_type = "Schacht")]
 pub struct SchachtProperties {
@@ -30,6 +32,21 @@ pub struct SchachtProperties {
     /// LV95, as stored
     pub position: Option<Lv95Point>,
     pub location: Option<GeoPoint>,
+    pub owner: SchachtOwnerRef,
+    pub lagebestimmung: Genauigkeit,
+}
+
+#[derive(cynic::QueryFragment, Debug, Clone, Copy, PartialEq)]
+#[cynic(graphql_type = "Owner")]
+pub struct SchachtOwnerRef {
+    pub id: i32,
+}
+
+/// What a Schacht's properties choose from.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SchachtChoices {
+    pub types: Vec<SchachtTypeEntry>,
+    pub owners: Vec<OwnerChoice>,
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone, Copy, PartialEq)]
@@ -47,28 +64,35 @@ pub struct SchachtTypeEntry {
 
 #[derive(cynic::QueryFragment, Debug)]
 #[cynic(graphql_type = "Query")]
-struct SchachtTypesQuery {
+struct SchachtChoicesQuery {
     list_schacht_typ: Vec<SchachtTypeEntry>,
+    list_owner: Vec<OwnerChoice>,
 }
 
-/// The types to choose from, for a new Schacht.
-pub async fn fetch_schacht_types(
+/// The types and owners to choose from, for a new Schacht.
+pub async fn fetch_schacht_choices(
     credentials: Option<&OAuth2Context>,
-) -> Result<Vec<SchachtTypeEntry>, FrontendError> {
-    Ok(query::<SchachtTypesQuery, _>((), credentials)
-        .await?
-        .list_schacht_typ)
+) -> Result<SchachtChoices, FrontendError> {
+    let result = query::<SchachtChoicesQuery, _>((), credentials).await?;
+    Ok(SchachtChoices {
+        types: result.list_schacht_typ,
+        owners: result.list_owner,
+    })
 }
 
-/// The Schacht (missing if it doesn't exist) and the types to choose from.
+/// The Schacht (missing if it doesn't exist) and the types and owners to choose from.
 pub async fn fetch_schacht_properties(
     credentials: Option<&OAuth2Context>,
     schacht_id: i32,
-) -> Result<(Option<SchachtProperties>, Vec<SchachtTypeEntry>), FrontendError> {
+) -> Result<(Option<SchachtProperties>, SchachtChoices), FrontendError> {
     let result =
         query::<SchachtPropertiesQuery, _>(SchachtPropertiesVariables { schacht_id }, credentials)
             .await?;
-    Ok((result.schacht, result.list_schacht_typ))
+    let choices = SchachtChoices {
+        types: result.list_schacht_typ,
+        owners: result.list_owner,
+    };
+    Ok((result.schacht, choices))
 }
 
 #[derive(cynic::InputObject, Debug, Clone, Copy, PartialEq)]
@@ -94,6 +118,8 @@ pub struct SchachtInput {
     pub name: String,
     pub type_id: Option<i32>,
     pub position: Option<PositionInput>,
+    pub owner_id: i32,
+    pub lagebestimmung: Genauigkeit,
 }
 
 /// A position in both systems.

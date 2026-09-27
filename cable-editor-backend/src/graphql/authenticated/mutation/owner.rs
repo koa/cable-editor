@@ -211,6 +211,22 @@ impl OwnerInput {
     }
 }
 
+/// Refuses an owner that doesn't exist (instead of the foreign key's error).
+pub(super) async fn ensure_owner_exists(
+    connection: &mut AsyncPgConnection,
+    owner_id: i32,
+) -> async_graphql::Result<()> {
+    let owners: i64 = schema::eigentuemer::table
+        .find(owner_id)
+        .count()
+        .get_result(connection)
+        .await?;
+    if owners == 0 {
+        return Err(owner_not_found(owner_id));
+    }
+    Ok(())
+}
+
 fn owner_not_found(owner_id: i32) -> async_graphql::Error {
     UserError::NotFound {
         kind: ObjectKind::Owner,

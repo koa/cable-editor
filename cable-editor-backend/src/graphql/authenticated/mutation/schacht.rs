@@ -1,7 +1,11 @@
 //! Schächte.
 
+use super::owner::ensure_owner_exists;
 use crate::{
-    db::{entity::schacht::Schacht, schema},
+    db::{
+        entity::{lkmap::Genauigkeit, schacht::Schacht},
+        schema,
+    },
     graphql::authenticated,
     graphql::authorization::{Role, RoleGuard},
     graphql::geo::{self, PositionInput},
@@ -24,18 +28,20 @@ impl SchachtMutation {
         schacht: SchachtInput,
     ) -> async_graphql::Result<Schacht> {
         let mut connection = authenticated::get_connection(ctx).await?;
-        let (name, typ, geom) = schacht.values(&mut connection).await?;
+        let values = schacht.values(&mut connection).await?;
         Ok(diesel::insert_into(schema::schacht::table)
             .values((
-                schema::schacht::name.eq(name),
-                schema::schacht::typ.eq(typ),
-                schema::schacht::geom.eq(geom),
+                schema::schacht::name.eq(values.name),
+                schema::schacht::typ.eq(values.typ),
+                schema::schacht::geom.eq(values.geom),
+                schema::schacht::eigentuemer_id.eq(values.owner_id),
+                schema::schacht::lagebestimmung.eq(values.lagebestimmung),
             ))
             .returning(Schacht::as_returning())
             .get_result(&mut connection)
             .await?)
     }
-    /// Replaces name, type and position of the Schacht; its ducts follow the position (their
+    /// Replaces name, type, position, owner and Lagebestimmung of the Schacht; its ducts follow the position (their
     /// lines start and end at their Schächte, see the view trassen_mit_endpunkten).
     #[graphql(guard = "RoleGuard(Role::Planner)")]
     async fn update_schacht(
@@ -45,12 +51,14 @@ impl SchachtMutation {
         schacht: SchachtInput,
     ) -> async_graphql::Result<Schacht> {
         let mut connection = authenticated::get_connection(ctx).await?;
-        let (name, typ, geom) = schacht.values(&mut connection).await?;
+        let values = schacht.values(&mut connection).await?;
         Ok(diesel::update(schema::schacht::table.find(schacht_id))
             .set((
-                schema::schacht::name.eq(name),
-                schema::schacht::typ.eq(typ),
-                schema::schacht::geom.eq(geom),
+                schema::schacht::name.eq(values.name),
+                schema::schacht::typ.eq(values.typ),
+                schema::schacht::geom.eq(values.geom),
+                schema::schacht::eigentuemer_id.eq(values.owner_id),
+                schema::schacht::lagebestimmung.eq(values.lagebestimmung),
             ))
             .returning(Schacht::as_returning())
             .get_result(&mut connection)
@@ -88,21 +96,34 @@ impl SchachtMutation {
     }
 }
 
-/// Name, type and position of a Schacht.
+/// Name, type and position of a Schacht, and what the delivery to the Leitungskataster takes
+/// from it.
 #[derive(Debug, Clone, PartialEq, InputObject)]
 struct SchachtInput {
     name: String,
     type_id: Option<i32>,
     /// Missing: the Schacht has no position
     position: Option<PositionInput>,
+    owner_id: i32,
+    /// Accuracy of the position
+    lagebestimmung: Genauigkeit,
+}
+
+/// The column values of a `SchachtInput`.
+struct SchachtValues {
+    name: String,
+    typ: Option<i32>,
+    geom: Option<Point>,
+    owner_id: i32,
+    lagebestimmung: Genauigkeit,
 }
 
 impl SchachtInput {
-    /// The column values: the name checked, the position in LV95.
+    /// The column values: the name checked, the position in LV95, the owner existing.
     async fn values(
         self,
         connection: &mut AsyncPgConnection,
-    ) -> async_graphql::Result<(String, Option<i32>, Option<Point>)> {
+    ) -> async_graphql::Result<SchachtValues> {
         let name = self.name.trim().to_string();
         if name.is_empty() {
             return Err(UserError::NameMissing.into());
@@ -114,6 +135,13 @@ impl SchachtInput {
             Some(position) => Some(geo::to_lv95(connection, position).await?),
             None => None,
         };
-        Ok((name, self.type_id, geom))
+        ensure_owner_exists(connection, self.owner_id).await?;
+        Ok(SchachtValues {
+            name,
+            typ: self.type_id,
+            geom,
+            owner_id: self.owner_id,
+            lagebestimmung: self.lagebestimmung,
+        })
     }
 }

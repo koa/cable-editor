@@ -1,5 +1,6 @@
 //! Ducts (their course: graphql/duct_line.rs).
 
+use super::owner::ensure_owner_exists;
 use crate::{
     db::{
         entity::{Duct, lkmap::Genauigkeit},
@@ -11,7 +12,7 @@ use crate::{
 };
 use async_graphql::{Context, InputObject, Object};
 use cable_editor_common::{
-    ObjectKind, UserError,
+    UserError,
     limits::{MAX_DESCRIPTION, MAX_MILLIMETRES},
 };
 use diesel::{ExpressionMethods, HasQuery, QueryDsl, SelectableHelper};
@@ -202,19 +203,7 @@ impl DuctInput {
             }
             .into());
         }
-        let owners: i64 = schema::eigentuemer::table
-            .find(self.owner_id)
-            .count()
-            .get_result(connection)
-            .await?;
-        if owners == 0 {
-            return Err(UserError::NotFound {
-                kind: ObjectKind::Owner,
-                id: self.owner_id.into(),
-            }
-            .into());
-        }
-        Ok(())
+        ensure_owner_exists(connection, self.owner_id).await
     }
 }
 

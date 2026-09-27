@@ -1,7 +1,7 @@
 # Konzept: Datenlieferung an den Leitungskataster Kanton Zürich
 
 Stand: 27.09.2026 – Konzept; umgesetzt sind die Datenbank mit den Feldern in GraphQL (Abschnitt
-4) und die Konfiguration (Abschnitt 3). Der heutige Export
+4), die Konfiguration (Abschnitt 3) und die Felder in der UI (Abschnitt 6, ohne die Admin-Seite). Der heutige Export
 (`cable-editor-backend/src/export.rs`) ist ein Platzhalter und wird ersetzt.
 
 ## 1. Anforderungen
@@ -354,13 +354,13 @@ Was die Lieferung in der UI braucht; die Seiten für Eigentümer und Schachttype
 
 1. ~~Migration (`eigentuemer`, Enums, Spalten, Trigger, `lk_lieferung`), Diesel-Schema~~
    (erledigt); ~~Konfiguration `lkmap`, Backend-Felder (lesend)~~ (erledigt).
-2. UI (Abschnitt 6):
+2. ~~UI (Abschnitt 6)~~ (erledigt):
    1. ~~Migration: Lagebestimmung standardmässig `ungenau` (bestehende `unbekannt` stammen alle
       vom Standardwert und werden `ungenau`, ohne `geaendert_am` zu verschieben)~~ (erledigt).
    2. ~~Eigentümer- und Schachttyp-Seiten (`docs/stammdaten.md`)~~ (erledigt).
    3. ~~Trassen: Felder in `DuctInput`, Eigenschaften, Trassen-Seite, Spalte „LK“ der Liste~~
       (erledigt).
-   4. Schächte: Felder in `SchachtInput`, Eigenschaften.
+   4. ~~Schächte: Felder in `SchachtInput`, Eigenschaften~~ (erledigt).
 3. LKMap-Export mit Validierungstest.
 4. Perimeter-Export.
 5. Admin-Seite mit Download und Protokoll.

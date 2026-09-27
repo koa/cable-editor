@@ -182,12 +182,19 @@ check('storing it confirmed', near(stored.setDuctLine.length, farResult.length, 
 await gql('mutation($l:LineInput){ setDuctLine(ductId:5, line:$l) { id } }', { l: line('LV95', reversedPoints) });
 
 // ---------------------------------------------------------------- mutations
-const created = await gql('mutation{ createSchacht(schacht:{name:"Neu", typeId:0, position:{wgs84:{lat:47.4185,lng:8.885}}}) { id location { lat lng } } }');
+const created = await gql('mutation{ createSchacht(schacht:{name:"Neu", typeId:0, position:{wgs84:{lat:47.4185,lng:8.885}}, ownerId:1, lagebestimmung:GENAU}) { id location { lat lng } owner { id } lagebestimmung } }');
 const schachtId = created.createSchacht.id;
 check('createSchacht at its position', near(created.createSchacht.location.lat, 47.4185, 1e-6));
+check('createSchacht with owner and Lagebestimmung', created.createSchacht.owner.id === 1 && created.createSchacht.lagebestimmung === 'GENAU', JSON.stringify(created.createSchacht));
+await refused('createSchacht with an unknown owner', 'mutation{ createSchacht(schacht:{name:"X", ownerId:999, lagebestimmung:UNGENAU}) { id } }', {}, { code: 'NotFound', kind: 'Owner', id: 999 });
 const duct = await gql('mutation($z:Int!){ createDuct(duct:{schachtA:6, schachtZ:$z, ownerId:1, leitungskataster:false, lagebestimmung:UNGENAU}) { id length line { lat } } }', { z: schachtId });
 check('createDuct without course: straight', duct.createDuct.line.length === 2 && duct.createDuct.length > 0);
-await gql('mutation($id:Int!){ updateSchacht(schachtId:$id, schacht:{name:"Neu", typeId:0, position:{lv95:{e:2709150,n:1253000}}}) { id } }', { id: schachtId });
+const schachtChanged = async () => (await gql('query($s:Int!){ schacht(schachtId:$s) { changedAt } }', { s: schachtId })).schacht.changedAt;
+const ductChanged = async () => (await gql('query($d:Int!){ duct(ductId:$d) { changedAt } }', { d: duct.createDuct.id })).duct.changedAt;
+const [schachtBefore, ductBefore6] = [await schachtChanged(), await ductChanged()];
+await gql('mutation($id:Int!){ updateSchacht(schachtId:$id, schacht:{name:"Neu", typeId:0, position:{wgs84:{lat:47.4185,lng:8.885}}, ownerId:1, lagebestimmung:UNGENAU}) { id } }', { id: schachtId });
+check('a new Lagebestimmung changes the Schacht, not its ducts', (await schachtChanged()) !== schachtBefore && (await ductChanged()) === ductBefore6);
+await gql('mutation($id:Int!){ updateSchacht(schachtId:$id, schacht:{name:"Neu", typeId:0, position:{lv95:{e:2709150,n:1253000}}, ownerId:1, lagebestimmung:UNGENAU}) { id } }', { id: schachtId });
 const moved = await gql('query($d:Int!){ duct(ductId:$d) { length } }', { d: duct.createDuct.id });
 check('the duct follows its Schacht', !near(moved.duct.length, duct.createDuct.length, 1), `${duct.createDuct.length.toFixed(1)} → ${moved.duct.length.toFixed(1)}`);
 // What the Leitungskataster takes from a duct

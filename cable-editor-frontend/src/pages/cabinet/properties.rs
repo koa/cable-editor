@@ -9,12 +9,12 @@ use crate::{
         map::{MapHolder, div_icon, lat_lng},
     },
     graphql::authenticated::{
-        GeoPoint, IdOrNew,
+        Genauigkeit, GeoPoint, IdOrNew,
         current_user::Role,
         schacht_properties::{
-            ConvertedPoint, GeoPointInput, Lv95Input, PositionInput, SchachtInput,
-            SchachtProperties, SchachtTypeEntry, convert_point, create_schacht, delete_schacht,
-            fetch_schacht_properties, fetch_schacht_types, update_schacht,
+            ConvertedPoint, GeoPointInput, Lv95Input, PositionInput, SchachtChoices, SchachtInput,
+            SchachtProperties, convert_point, create_schacht, delete_schacht,
+            fetch_schacht_choices, fetch_schacht_properties, update_schacht,
         },
     },
     pages::router::{CabinetView, PlanView},
@@ -39,15 +39,19 @@ const CONVERT_DELAY_MS: u32 = 400;
 /// Zoom when showing the position; the cadastral map starts at 17.
 const POSITION_ZOOM: f64 = 18.0;
 
-/// Name, type and position of a Schacht, or a new one (`IdOrNew::Temporary`). The position
-/// can be set on the map (click, drag the marker), typed in LV95 or WGS84 or taken from the
-/// device's location. Readers see the same page read-only.
+/// Name, type, owner, position and Lagebestimmung of a Schacht, or a new one
+/// (`IdOrNew::Temporary`). The position can be set on the map (click, drag the marker), typed in
+/// LV95 or WGS84 or taken from the device's location; the Lagebestimmung stays as set (ungenau
+/// unless set explicitly), also for a position from the device. Readers see the same page
+/// read-only.
 pub struct CabinetProperties {
-    /// The Schacht as stored (missing for a new one) and the types to choose from
-    loaded: Option<(Option<SchachtProperties>, Vec<SchachtTypeEntry>)>,
+    /// The Schacht as stored (missing for a new one) and the types and owners to choose from
+    loaded: Option<(Option<SchachtProperties>, SchachtChoices)>,
     error: Option<FrontendError>,
     name: String,
     type_id: Option<i32>,
+    owner: Option<i32>,
+    lagebestimmung: Genauigkeit,
     system: CoordinateSystem,
     /// The coordinate fields as typed
     first: String,
@@ -82,10 +86,12 @@ enum PositionState {
 }
 
 pub enum Msg {
-    Loaded(Option<SchachtProperties>, Vec<SchachtTypeEntry>),
+    Loaded(Option<SchachtProperties>, SchachtChoices),
     LoadError(FrontendError),
     SetName(String),
     SetType(Option<i32>),
+    SetOwner(Option<i32>),
+    SetLagebestimmung(Option<Genauigkeit>),
     SetSystem(CoordinateSystem),
     SetFirst(String),
     SetSecond(String),
@@ -127,6 +133,8 @@ impl Component for CabinetProperties {
             error: None,
             name: String::new(),
             type_id: None,
+            owner: None,
+            lagebestimmung: Genauigkeit::Ungenau,
             system: CoordinateSystem::default(),
             first: String::new(),
             second: String::new(),
@@ -143,14 +151,24 @@ impl Component for CabinetProperties {
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
-            Msg::Loaded(schacht, types) => {
+            Msg::Loaded(schacht, choices) => {
                 self.error = None;
                 self.take_stored(ctx, schacht.as_ref());
-                self.loaded = Some((schacht, types));
+                if schacht.is_none() {
+                    // A new Schacht: the default owner
+                    self.owner = choices.owners.iter().find(|o| o.is_default).map(|o| o.id);
+                }
+                self.loaded = Some((schacht, choices));
             }
             Msg::LoadError(error) => self.error = Some(error),
             Msg::SetName(name) => self.name = name,
             Msg::SetType(type_id) => self.type_id = type_id,
+            Msg::SetOwner(owner) => self.owner = owner,
+            Msg::SetLagebestimmung(lagebestimmung) => {
+                if let Some(lagebestimmung) = lagebestimmung {
+                    self.lagebestimmung = lagebestimmung;
+                }
+            }
             Msg::SetSystem(system) => {
                 self.system = system;
                 if let PositionState::Valid(point) = self.position {
@@ -318,11 +336,11 @@ impl Component for CabinetProperties {
         };
         let content = if let Some(error) = &self.error {
             error.into_prop_value()
-        } else if let Some((stored, types)) = &self.loaded {
+        } else if let Some((stored, choices)) = &self.loaded {
             if stored.is_none() && !is_new {
                 (&FrontendError::NotFound).into_prop_value()
             } else {
-                self.view_form(ctx, types)
+                self.view_form(ctx, choices)
             }
         } else {
             html!(<Spinner/>)
@@ -375,12 +393,12 @@ impl CabinetProperties {
         spawn_local(async move {
             let result = match cabinet {
                 IdOrNew::Id(id) => fetch_schacht_properties(credentials.as_ref(), id).await,
-                IdOrNew::Temporary(_) => fetch_schacht_types(credentials.as_ref())
+                IdOrNew::Temporary(_) => fetch_schacht_choices(credentials.as_ref())
                     .await
-                    .map(|types| (None, types)),
+                    .map(|choices| (None, choices)),
             };
             scope.send_message(match result {
-                Ok((schacht, types)) => Msg::Loaded(schacht, types),
+                Ok((schacht, choices)) => Msg::Loaded(schacht, choices),
                 Err(error) => Msg::LoadError(error),
             });
         });
@@ -394,6 +412,9 @@ impl CabinetProperties {
     fn take_stored(&mut self, ctx: &Context<Self>, schacht: Option<&SchachtProperties>) {
         self.name = schacht.map(|s| s.name.clone()).unwrap_or_default();
         self.type_id = schacht.and_then(|s| s.typ).map(|t| t.id);
+        self.owner = schacht.map(|s| s.owner.id);
+        // Ungenau unless set explicitly
+        self.lagebestimmung = schacht.map_or(Genauigkeit::Ungenau, |s| s.lagebestimmung);
         self.accuracy = None;
         let stored = schacht.and_then(stored_position);
         match stored {
@@ -524,10 +545,15 @@ impl CabinetProperties {
             })),
             _ => return,
         };
+        let Some(owner_id) = self.owner else {
+            return;
+        };
         let input = SchachtInput {
             name: self.name.trim().to_string(),
             type_id: self.type_id,
             position,
+            owner_id,
+            lagebestimmung: self.lagebestimmung,
         };
         self.saving = true;
         let scope = ctx.link().clone();
@@ -562,11 +588,14 @@ impl CabinetProperties {
         self.name.trim() != stored.name
             || self.type_id != stored.typ.map(|t| t.id)
             || position != stored_point
+            || self.owner != Some(stored.owner.id)
+            || self.lagebestimmung != stored.lagebestimmung
     }
 
-    fn view_form(&self, ctx: &Context<Self>, types: &[SchachtTypeEntry]) -> Html {
+    fn view_form(&self, ctx: &Context<Self>, choices: &SchachtChoices) -> Html {
         let readonly = !self.can_edit(ctx);
         let link = ctx.link();
+        let types = &choices.types;
 
         let type_options = types.iter().map(|t| {
             let description = t.name.clone().unwrap_or_else(|| format!("Typ {}", t.id));
@@ -614,6 +643,9 @@ impl CabinetProperties {
                     />
                 </FormGroup>
                 <FormGroup label="Typ">{type_field}</FormGroup>
+                <FormGroup label="Eigentümer" required={!readonly}>
+                    {self.view_owner(ctx, choices)}
+                </FormGroup>
                 <FormGroup label="Position">
                     <ToggleGroup>
                         {system_item(CoordinateSystem::Lv95)}
@@ -655,9 +687,51 @@ impl CabinetProperties {
                             disabled={self.position == PositionState::Empty}
                         />
                     </ActionGroup>
+                }
+                <FormGroup label="Lagebestimmung">{self.view_lagebestimmung(ctx)}</FormGroup>
+                if !readonly {
                     {self.view_actions(ctx)}
                 }
             </Form>
+        }
+    }
+
+    /// The owner; a new Schacht gets the default one.
+    fn view_owner(&self, ctx: &Context<Self>, choices: &SchachtChoices) -> Html {
+        if !self.can_edit(ctx) {
+            let value = choices
+                .owners
+                .iter()
+                .find(|o| Some(o.id) == self.owner)
+                .map(|o| o.name.clone())
+                .unwrap_or_default();
+            return html!(<TextInput {value} readonly=true/>);
+        }
+        let options = choices.owners.iter().map(
+            |o| html_nested!(<FormSelectOption<i32> value={o.id} description={o.name.clone()}/>),
+        );
+        html! {
+            <FormSelect<i32> value={self.owner} onchange={ctx.link().callback(Msg::SetOwner)} placeholder=" - ">
+                {for options}
+            </FormSelect<i32>>
+        }
+    }
+
+    /// The accuracy of the position for the Leitungskataster; ungenau unless set explicitly.
+    fn view_lagebestimmung(&self, ctx: &Context<Self>) -> Html {
+        if !self.can_edit(ctx) {
+            return html!(<TextInput value={self.lagebestimmung.title()} readonly=true/>);
+        }
+        let options = Genauigkeit::ALL.iter().map(
+            |g| html_nested!(<FormSelectOption<Genauigkeit> value={*g} description={g.title()}/>),
+        );
+        html! {
+            <FormSelect<Genauigkeit>
+                value={Some(self.lagebestimmung)}
+                onchange={ctx.link().callback(Msg::SetLagebestimmung)}
+            >
+                {for options}
+            </FormSelect<Genauigkeit>>
         }
     }
 
@@ -720,7 +794,10 @@ impl CabinetProperties {
             self.position,
             PositionState::Empty | PositionState::Valid(_)
         );
-        let can_save = position_ok && !self.name.trim().is_empty() && self.has_changes();
+        let can_save = position_ok
+            && !self.name.trim().is_empty()
+            && self.owner.is_some()
+            && self.has_changes();
         let delete = (!is_new && get_role(ctx.link()) >= Role::Admin).then(|| {
             let onclick = confirm_delete(ctx.link(), ctx.link().callback(|()| Msg::Delete));
             html_nested!(<Button variant={ButtonVariant::DangerSecondary} label="Löschen" {onclick}/>)

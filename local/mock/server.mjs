@@ -102,6 +102,14 @@ const ownerRows = [
 // Owner of a Schacht (default 1) and a duct (default 1), ducts delivered to the Leitungskataster
 const schachtOwner = { 5: 2 };
 const ductOwner = { 714: 2, 715: 3 };
+// Lagebestimmung of a Schacht (default UNGENAU)
+const schachtLage = { 1: 'GENAU' };
+// Stores owner and Lagebestimmung of a Schacht's input
+const storeSchachtDelivery = (id, { ownerId, lagebestimmung }) => {
+  if (!ownerRows.some((o) => o.id === ownerId)) refuse('NotFound', { kind: 'Owner', id: ownerId });
+  schachtOwner[id] = ownerId;
+  schachtLage[id] = lagebestimmung;
+};
 const deliveredDucts = new Set([711, 713, 714]);
 const ownerFromInput = ({ name, lkName, uid }, ownerId) => {
   const clean = (value) => value?.trim() || null;
@@ -186,6 +194,9 @@ const schacht = (id) => {
     id, name: r[1], typ: schachtTyp(schachtTypes.find((t) => t.id === r[3])) ?? null,
     position: r[2] && toLv95({ lat: r[2][0], lng: r[2][1] }),
     location: r[2] && { lat: r[2][0], lng: r[2][1] },
+    owner: owner(ownerOfSchacht(id)),
+    lagebestimmung: schachtLage[id] ?? 'UNGENAU',
+    changedAt: '2026-09-27T08:15:00+00:00',
     connectingDuct: () => [],
     rootPanels: () => panelRows.filter((p) => p[2] === id && p[3] === null).map((p) => panel(p[0])),
     cable: ({ cableId }) => cablesAt(id).find((c) => c.cable.id === cableId) ?? null,
@@ -428,13 +439,17 @@ const root = {
   syncPlanToNetbox: () => [],
   createSchacht: ({ schacht: input }) => {
     const id = Math.max(...schachtRows.map((r) => r[0])) + 1;
-    schachtRows.push([id, ...schachtFromInput(input)]);
+    const values = schachtFromInput(input);
+    storeSchachtDelivery(id, input);
+    schachtRows.push([id, ...values]);
     return schacht(id);
   },
   updateSchacht: ({ schachtId, schacht: input }) => {
     const row = schachtRows.find((r) => r[0] === schachtId);
     if (!row) refuse('NotFound', { kind: 'Schacht', id: schachtId });
-    row.splice(1, 3, ...schachtFromInput(input));
+    const values = schachtFromInput(input);
+    storeSchachtDelivery(schachtId, input);
+    row.splice(1, 3, ...values);
     return schacht(schachtId);
   },
   createDuct: ({ duct: input, line, confirmed }) => {
