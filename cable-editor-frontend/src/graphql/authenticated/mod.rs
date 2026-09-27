@@ -52,13 +52,6 @@ pub fn write_port_label(out: &mut impl Write, label: &str) -> fmt::Result {
     write!(out, " : {label}")
 }
 
-#[derive(cynic::QueryFragment, Debug, Clone, Copy, PartialEq, PartialOrd)]
-#[cynic(graphql_type = "Point")]
-pub struct Point {
-    pub x: f64,
-    pub y: f64,
-}
-
 /// WGS84, for the map
 #[derive(cynic::QueryFragment, Debug, Clone, Copy, PartialEq)]
 pub struct GeoPoint {

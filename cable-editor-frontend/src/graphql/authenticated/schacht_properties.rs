@@ -28,7 +28,7 @@ pub struct SchachtProperties {
     pub name: String,
     pub typ: Option<SchachtTypeRef>,
     /// LV95, as stored
-    pub position: Option<Lv95Position>,
+    pub position: Option<Lv95Point>,
     pub location: Option<GeoPoint>,
 }
 
@@ -36,14 +36,6 @@ pub struct SchachtProperties {
 #[cynic(graphql_type = "SchachtTyp")]
 pub struct SchachtTypeRef {
     pub id: i32,
-}
-
-/// `Schacht.position`, the raw LV95 point
-#[derive(cynic::QueryFragment, Debug, Clone, Copy, PartialEq)]
-#[cynic(graphql_type = "Point")]
-pub struct Lv95Position {
-    pub x: f64,
-    pub y: f64,
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]

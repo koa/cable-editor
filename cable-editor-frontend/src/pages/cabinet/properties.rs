@@ -742,10 +742,7 @@ impl CabinetProperties {
 /// The stored position in both systems.
 fn stored_position(schacht: &SchachtProperties) -> Option<ConvertedPoint> {
     Some(ConvertedPoint {
-        lv95: crate::graphql::authenticated::Lv95Point {
-            e: schacht.position?.x,
-            n: schacht.position?.y,
-        },
+        lv95: schacht.position?,
         wgs84: schacht.location?,
     })
 }

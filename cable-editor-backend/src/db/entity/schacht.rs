@@ -19,7 +19,7 @@ use crate::{
         loader::{
             SchachtId, SchachtLocation, SchachtRootPanels, SchachtTypId, get_loader, load_one,
         },
-        model::{self, GeoPoint},
+        model::{GeoPoint, Lv95Point},
     },
 };
 use postgis_diesel::types::Point;
@@ -58,7 +58,8 @@ impl Schacht {
             None => Ok(None),
         }
     }
-    async fn position(&self) -> Option<model::Point> {
+    /// LV95, as stored (`location` is WGS84)
+    async fn position(&self) -> Option<Lv95Point> {
         self.geom.map(Point::into)
     }
     /// Position in WGS84 for the map (`position` is LV95)

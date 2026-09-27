@@ -132,7 +132,7 @@ const schacht = (id) => {
   if (!r) return null;
   return {
     id, name: r[1], typ: schachtTypes.find((t) => t.id === r[3]) ?? null,
-    position: r[2] && (({ e, n }) => ({ x: e, y: n }))(toLv95({ lat: r[2][0], lng: r[2][1] })),
+    position: r[2] && toLv95({ lat: r[2][0], lng: r[2][1] }),
     location: r[2] && { lat: r[2][0], lng: r[2][1] },
     connectingDuct: () => [],
     rootPanels: () => panelRows.filter((p) => p[2] === id && p[3] === null).map((p) => panel(p[0])),

@@ -1,9 +1,6 @@
 use crate::{
     error::FrontendError,
-    graphql::{
-        authenticated::{Point, schema},
-        query,
-    },
+    graphql::{authenticated::schema, query},
 };
 use yew_oauth2::context::OAuth2Context;
 
@@ -18,7 +15,6 @@ struct ListSchachtQuery {
 pub struct SchachtListEntry {
     pub id: i32,
     pub name: String,
-    pub position: Option<Point>,
     pub root_panels: Vec<SchachtListPanelEntry>,
 }
 
