@@ -188,9 +188,13 @@ impl OwnerInput {
             .into());
         }
         let others = || {
-            schema::eigentuemer::table
-                .filter(schema::eigentuemer::id.ne(owner_id.unwrap_or(0)))
+            let mut others = schema::eigentuemer::table
                 .select(schema::eigentuemer::name)
+                .into_boxed();
+            if let Some(owner_id) = owner_id {
+                others = others.filter(schema::eigentuemer::id.ne(owner_id));
+            }
+            others
         };
         if let Some(other) = others()
             .filter(schema::eigentuemer::name.eq(&name))
