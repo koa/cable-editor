@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["cable-editor-backend", "cable-editor-binary", "cable-editor-frontend"]
+members = ["cable-editor-backend", "cable-editor-binary", "cable-editor-common", "cable-editor-frontend"]
 default-members = ["cable-editor-binary"]
 
 

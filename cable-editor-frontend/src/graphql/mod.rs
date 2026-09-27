@@ -1,10 +1,11 @@
 use crate::error::FrontendError;
+use cable_editor_common::UserError;
 use cynic::{
     GraphQlResponse, MutationBuilder, Operation, QueryBuilder, QueryFragment, QueryVariables,
     http::{CynicReqwestError, ReqwestExt},
 };
 use reqwest::header::{AUTHORIZATION, HeaderMap};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use yew_oauth2::prelude::{Authentication, OAuth2Context};
 
 pub mod anonymous;
@@ -81,9 +82,26 @@ where
     .await
 }
 
+/// What the backend adds to a GraphQL error: why it refused the request (see
+/// docs/fehlermeldungen.md). Read leniently, so an unknown reason (a newer backend) is a
+/// technical error instead of an unreadable response.
+#[derive(Deserialize, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+struct ErrorExtensions {
+    #[serde(default)]
+    user_error: Option<serde_json::Value>,
+}
+
+impl ErrorExtensions {
+    fn user_error(&self) -> Option<UserError> {
+        serde_json::from_value(self.user_error.clone()?).ok()
+    }
+}
+
 /// Sends `operation` to `url`, with the bearer token of `credentials` if logged in, and returns
-/// the data of the response: its errors, if any, as `FrontendError::Graphql`, and a response
-/// with neither data nor errors as `FrontendError::NotFound`.
+/// the data of the response. Its first error: `FrontendError::User` if the backend refused the
+/// request, else `FrontendError::Graphql` with the messages; a response with neither data nor
+/// errors: `FrontendError::NotFound`.
 async fn run<Q, V>(
     url: &str,
     credentials: Option<&OAuth2Context>,
@@ -103,16 +121,25 @@ where
         .default_headers(headers)
         .build()
         .map_err(connect_error)?;
-    let response = client
+    let response: GraphQlResponse<Q, ErrorExtensions> = client
         .post(url)
         .run_graphql(operation)
+        .retain_extensions::<ErrorExtensions>()
         .await
         .map_err(transfer_error)?;
     match response {
         GraphQlResponse {
             errors: Some(errors),
             ..
-        } => Err(FrontendError::Graphql(errors)),
+        } => Err(
+            match errors
+                .iter()
+                .find_map(|e| e.extensions.as_ref()?.user_error())
+            {
+                Some(user_error) => FrontendError::User(user_error),
+                None => FrontendError::Graphql(errors.into_iter().map(|e| e.message).collect()),
+            },
+        ),
         GraphQlResponse {
             data: Some(data), ..
         } => Ok(data),

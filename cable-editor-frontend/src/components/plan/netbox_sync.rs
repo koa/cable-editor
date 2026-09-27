@@ -1,8 +1,6 @@
 use crate::{
-    error::FrontendError,
-    graphql::authenticated::netbox_sync::{
-        AsymmetricDuplexError, BlindEndError, MissingNetboxReferenceError, SyncIssue, SyncNetbox,
-    },
+    error::{FrontendError, messages},
+    graphql::authenticated::netbox_sync::{AsymmetricDuplexError, SyncIssue, SyncNetbox},
     util::get_credentials,
 };
 use patternfly_yew::prelude::{Button, ButtonVariant, Modal, ModalVariant};
@@ -85,73 +83,22 @@ impl Component for NetboxSyncModal {
             .sync_issues
             .iter()
             .map(|issue| match issue {
-                SyncIssue::MissingNetboxReference(MissingNetboxReferenceError { port }) => {
-                    let msg = format!("Fehlende Netbox refernz beim Port {}", port.port_label());
-                    html!(msg)
-                }
-                SyncIssue::BlindEnd(BlindEndError { port }) => format!(
-                    "Verbindung endet nicht auf einem Stecker {} ",
-                    port.port_label()
-                )
-                .into_prop_value(),
-                SyncIssue::AsymmetricDuplex(AsymmetricDuplexError {
-                    start_netbox_port,
-                    connections,
-                }) => {
-                    let msg = format!(
-                        "Verschiedene Netbox-Gegenstellen zu {}",
-                        start_netbox_port.display_name()
-                    );
-
-                    html! {
-                        <>
-                        <dt>{msg}</dt>
-                        {for connections.iter().map(|conn| html! {
-                            <>
-                            {for conn.pairs.iter().map(|pair| {
-                                let pair_msg = format!(
-                                    "{}: {} -> {}",
-                                    conn.target_netbox_port.display_name(),
-                                    pair.source_port.port_label(),
-                                    pair.target_port.port_label()
-                                );
-                                html!(<dd>{pair_msg}</dd>)
-                            })}
-                            </>
-                        })}
-                        </>
-                    }
-                }
-                SyncIssue::PortBlockedInNetbox(err) => {
-                    let msg = format!(
-                        "Port {} blockiert in Netbox: Netbox Port {}",
-                        err.port.port_label(),
-                        err.netbox_port.display_name()
-                    );
-                    html!(msg)
-                }
-                SyncIssue::NameCollision(err) => {
-                    let msg = format!("Namenskollision bei Circuit: {}", err.circuit_name);
-                    html!(msg)
-                }
-                SyncIssue::MissingNetboxMasterData(err) => {
-                    let msg = format!("Fehlende Netbox Stammdaten für Typ: {}", err.entity_type);
-                    html!(msg)
-                }
-                SyncIssue::RoutingLoop(err) => {
-                    let msg = format!(
-                        "Routing Loop festgestellt bei Port {}",
-                        err.port.port_label()
-                    );
-                    html!(msg)
-                }
-                SyncIssue::InvalidTargetReference(err) => {
-                    let msg = format!("Ungültiges Ziel bei Port {}", err.port.port_label());
-                    html!(msg)
-                }
-                SyncIssue::Unknown => {
-                    html!("Unbekannter Fehler")
-                }
+                // The pairs of ports leading to the different counterparts
+                SyncIssue::AsymmetricDuplex(AsymmetricDuplexError { connections, .. }) => html! {
+                    <>
+                        <dt>{messages::sync_issue(issue)}</dt>
+                        {for connections.iter().flat_map(|conn| conn.pairs.iter().map(move |pair| {
+                            let pair_msg = format!(
+                                "{}: {} -> {}",
+                                conn.target_netbox_port.display_name(),
+                                pair.source_port.port_label(),
+                                pair.target_port.port_label()
+                            );
+                            html!(<dd>{pair_msg}</dd>)
+                        }))}
+                    </>
+                },
+                issue => html!(messages::sync_issue(issue)),
             })
             .map(|i: Html| html!(<p>{i}</p>));
         html! {

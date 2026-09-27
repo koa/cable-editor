@@ -1,4 +1,5 @@
 use async_graphql::{Context, Object};
+use cable_editor_common::{ObjectKind, UserError};
 use diesel::{
     Associations, BoolExpressionMethods, ExpressionMethods, HasQuery, Identifiable, Insertable,
     OptionalExtension, QueryDsl,
@@ -116,10 +117,10 @@ impl Schacht {
             .into_iter()
             .map(|duct| {
                 let other = other_end(&duct);
-                let schacht = others
-                    .get(&other)
-                    .cloned()
-                    .ok_or_else(|| format!("{other:?} not found"))?;
+                let schacht = others.get(&other).cloned().ok_or(UserError::NotFound {
+                    kind: ObjectKind::Schacht,
+                    id: other.0.into(),
+                })?;
                 Ok(PotentialPathSegment { duct, schacht })
             })
             .collect()

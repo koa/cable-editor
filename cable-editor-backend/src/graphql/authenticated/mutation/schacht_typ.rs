@@ -10,6 +10,10 @@ use crate::{
     graphql::authorization::{Role, RoleGuard},
 };
 use async_graphql::{Context, InputObject, Object};
+use cable_editor_common::{
+    ObjectKind, UserError,
+    limits::{MAX_ICON_BYTES, MAX_MILLIMETRES, MAX_NAME},
+};
 use diesel::{
     ExpressionMethods, OptionalExtension, QueryDsl, QueryableByName, SelectableHelper, sql_query,
     sql_types::{Bool, Text},
@@ -80,9 +84,13 @@ impl SchachtTypMutation {
                     .await
             }
         };
-        updated
-            .optional()?
-            .ok_or_else(|| format!("Schachttyp {typ_id} nicht gefunden").into())
+        updated.optional()?.ok_or_else(|| {
+            UserError::NotFound {
+                kind: ObjectKind::SchachtTyp,
+                id: typ_id.into(),
+            }
+            .into()
+        })
     }
     /// Only a type without Schächte.
     #[graphql(guard = "RoleGuard(Role::Admin)")]
@@ -98,7 +106,7 @@ impl SchachtTypMutation {
             .get_result(&mut connection)
             .await?;
         if schaechte > 0 {
-            return Err(format!("Der Schachttyp hat noch {schaechte} Schächte").into());
+            return Err(UserError::SchachtTypReferenced { schaechte }.into());
         }
         let deleted = diesel::delete(schema::schacht_typ::table.find(typ_id))
             .execute(&mut connection)
@@ -109,15 +117,6 @@ impl SchachtTypMutation {
 
 /// The icon of a type created without one.
 const DEFAULT_ICON: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><circle cx="50" cy="50" r="42" stroke="#4d5258" stroke-width="8" fill="#f0f0f0"/></svg>"##;
-
-/// Enough for a drawn symbol; a bigger file is likely a photo or an export with embedded images.
-const MAX_ICON_BYTES: usize = 64 * 1024;
-
-/// `schacht_typ.name` is `varchar(20)`
-const MAX_NAME: usize = 20;
-
-/// `Dimension1`/`Dimension2` of SIA405 `LKPunkt`
-const MAX_DIMENSION: i32 = 4000;
 
 /// Name, icon, Objektart and dimensions of a type of Schacht.
 #[derive(Debug, Clone, PartialEq, InputObject)]
@@ -140,7 +139,7 @@ struct WellFormed {
 }
 
 impl SchachtTypInput {
-    /// Refuses what the table would refuse, with a message, and a name another type has (the
+    /// Refuses what the table would refuse and a name another type has (the
     /// Schacht's page chooses by name); `typ_id` is the type being changed.
     async fn checked(
         mut self,
@@ -149,10 +148,10 @@ impl SchachtTypInput {
     ) -> async_graphql::Result<SchachtTypInput> {
         self.name = self.name.trim().to_string();
         if self.name.is_empty() {
-            return Err("Der Schachttyp braucht einen Namen".into());
+            return Err(UserError::NameMissing.into());
         }
         if self.name.chars().count() > MAX_NAME {
-            return Err(format!("Der Name hat mehr als {MAX_NAME} Zeichen").into());
+            return Err(UserError::NameTooLong { max: MAX_NAME }.into());
         }
         let mut others = schema::schacht_typ::table
             .filter(schema::schacht_typ::name.eq(&self.name))
@@ -163,35 +162,39 @@ impl SchachtTypInput {
         }
         let taken = others.first::<i32>(connection).await.optional()?;
         if taken.is_some() {
-            return Err(format!("Es gibt schon einen Schachttyp {}", self.name).into());
+            return Err(UserError::NameTaken {
+                kind: ObjectKind::SchachtTyp,
+                name: self.name,
+            }
+            .into());
         }
-        for (label, value) in [
-            ("Dimension 1", self.dimension1_mm),
-            ("Dimension 2", self.dimension2_mm),
-        ] {
+        for (dimension, value) in [(1, self.dimension1_mm), (2, self.dimension2_mm)] {
             if let Some(value) = value
-                && !(0..=MAX_DIMENSION).contains(&value)
+                && !(0..=MAX_MILLIMETRES).contains(&value)
             {
-                return Err(
-                    format!("{label} muss zwischen 0 und {MAX_DIMENSION} mm liegen").into(),
-                );
+                return Err(UserError::DimensionOutOfRange {
+                    dimension,
+                    max: MAX_MILLIMETRES,
+                }
+                .into());
             }
         }
         match (self.dimension1_mm, self.dimension2_mm) {
             (None, Some(_)) => {
-                return Err("Dimension 2 (das kleinere Mass) nur zusammen mit Dimension 1".into());
+                return Err(UserError::Dimension2WithoutDimension1.into());
             }
             (Some(larger), Some(smaller)) if smaller > larger => {
-                return Err("Dimension 1 ist das grössere, Dimension 2 das kleinere Mass".into());
+                return Err(UserError::DimensionsSwapped.into());
             }
             _ => {}
         }
         if let Some(icon) = &mut self.icon {
             *icon = icon.trim().to_string();
             if icon.len() > MAX_ICON_BYTES {
-                return Err(
-                    format!("Das Icon ist grösser als {} KiB", MAX_ICON_BYTES / 1024).into(),
-                );
+                return Err(UserError::IconTooLarge {
+                    max_bytes: MAX_ICON_BYTES,
+                }
+                .into());
             }
             let well_formed = sql_query("select xml_is_well_formed_document($1) as well_formed")
                 .bind::<Text, _>(icon.as_str())
@@ -199,7 +202,7 @@ impl SchachtTypInput {
                 .await?
                 .well_formed;
             if !well_formed || !is_svg(icon) {
-                return Err("Das Icon ist keine SVG-Datei".into());
+                return Err(UserError::IconNotSvg.into());
             }
         }
         Ok(self)

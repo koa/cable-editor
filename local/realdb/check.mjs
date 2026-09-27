@@ -39,11 +39,16 @@ async function gql(query, variables = {}) {
   return result.data;
 }
 
-/** A refused mutation: its error message, which must be in German (not the database's). */
-async function refused(label, query, variables = {}, pattern) {
+/**
+ * A refused request: the reason the backend sends in extensions.userError (the frontend words it,
+ * see docs/fehlermeldungen.md) must have `expected`'s code and fields.
+ */
+async function refused(label, query, variables = {}, expected) {
   const result = await run(query, variables);
-  const message = result.errors?.[0]?.message;
-  check(label, message !== undefined && pattern.test(message), message ?? 'not refused');
+  const reason = result.errors?.[0]?.extensions?.userError;
+  const matches = reason !== undefined
+    && Object.entries(expected).every(([key, value]) => JSON.stringify(reason[key]) === JSON.stringify(value));
+  check(label, matches, reason ? JSON.stringify(reason) : (result.errors?.[0]?.message ?? 'not refused'));
 }
 
 const statements = (data) => (data.statements === undefined ? '' : ` (${data.statements} SQL statements)`);
@@ -149,7 +154,7 @@ check('other end of the fibers', end.cable.end.fibers.every((fiber) => fiber.oth
 const bern = await gql('{ a: convertPoint(position:{lv95:{e:2600000,n:1200000}}) { wgs84 { lat lng } } b: convertPoint(position:{wgs84:{lat:46.9510828,lng:7.4386324}}) { lv95 { e n } } }');
 check('LV95 → WGS84', near(bern.a.wgs84.lat, 46.9510828, 1e-6) && near(bern.a.wgs84.lng, 7.4386324, 1e-6), JSON.stringify(bern.a.wgs84));
 check('WGS84 → LV95', near(bern.b.lv95.e, 2600000, 0.1) && near(bern.b.lv95.n, 1200000, 0.1), JSON.stringify(bern.b.lv95));
-await refused('position outside of Switzerland', '{ convertPoint(position:{wgs84:{lat:48.2082,lng:16.3738}}) { lv95 { e } } }', {}, /nicht in der Schweiz/);
+await refused('position outside of Switzerland', '{ convertPoint(position:{wgs84:{lat:48.2082,lng:16.3738}}) { lv95 { e } } }', {}, { code: 'PositionOutsideSwitzerland' });
 
 // Duct 5: Berghof 1061 (A) to Grosswies (Z), its stored points between them
 const A = [2709099.229648728, 1252890.2705348001];
@@ -171,7 +176,7 @@ check('WGS84 line from A to Z', !wgsResult.reversed && wgsResult.removedEnds ===
 const far = line('LV95', [A, ...between, [Z[0] - 20, Z[1]]]);
 const farResult = await checkLine(far);
 check('end 20 m off its Schacht', farResult.needsConfirmation && near(farResult.endDistance, 20, 0.01), JSON.stringify(farResult));
-await refused('storing it unconfirmed', 'mutation($l:LineInput){ setDuctLine(ductId:5, line:$l) { id } }', { l: far }, /bestätigen/);
+await refused('storing it unconfirmed', 'mutation($l:LineInput){ setDuctLine(ductId:5, line:$l) { id } }', { l: far }, { code: 'LineNeedsConfirmation' });
 const stored = await gql('mutation($l:LineInput){ setDuctLine(ductId:5, line:$l, confirmed:true) { length } }', { l: far });
 check('storing it confirmed', near(stored.setDuctLine.length, farResult.length, 0.01));
 await gql('mutation($l:LineInput){ setDuctLine(ductId:5, line:$l) { id } }', { l: line('LV95', reversedPoints) });
@@ -195,14 +200,14 @@ check('updateDuct with a change moves changedAt', delivered.changedAt !== ductBe
 const unchanged = (await gql(updateDuct, ductInput({ leitungskataster: true, lagebestimmung: 'GENAU', widthMm: 300 }))).updateDuct;
 check('updateDuct without change keeps changedAt', unchanged.changedAt === delivered.changedAt);
 check('the owner counts the delivered duct', (await gql('{ listOwner { id deliveredDuctCount } }')).listOwner.find((o) => o.id === 1).deliveredDuctCount === 1);
-await refused('updateDuct with a width over 4 m', updateDuct, ductInput({ widthMm: 4001 }), /zwischen 0 und 4000/);
-await refused('updateDuct with an unknown owner', updateDuct, ductInput({ ownerId: 999 }), /Eigentümer 999 nicht gefunden/);
-await refused('deleteDuct with cables', 'mutation{ deleteDuct(ductId:4) }', {}, /Kabel/);
-await refused('deleteSchacht with ducts', 'mutation($id:Int!){ deleteSchacht(schachtId:$id) }', { id: schachtId }, /Trassen/);
-await refused('updateCable to an empty path', 'mutation($c:Int!){ updateCable(cableId:$c, path:[]) { id } }', { c: cables.K4 }, /Segment/);
-await refused('setPortUsage on the baseline', 'mutation($p:Int!){ setPortUsage(planId:0, changes:[{portId:$p, side:FRONT, fiber:{remove:true}}]) }', { p: ports[4][0] }, /Baseline|baseline/);
-await refused('deleteCable attached in the baseline', 'mutation($c:Int!){ deleteCable(cableId:$c) }', { c: cables.K1 }, /Baseline: 6/);
-await refused('deleteCable attached in a plan', 'mutation($c:Int!){ deleteCable(cableId:$c) }', { c: cables.K4 }, /Umbau Berg: 3/);
+await refused('updateDuct with a width over 4 m', updateDuct, ductInput({ widthMm: 4001 }), { code: 'WidthOutOfRange', max: 4000 });
+await refused('updateDuct with an unknown owner', updateDuct, ductInput({ ownerId: 999 }), { code: 'NotFound', kind: 'Owner', id: 999 });
+await refused('deleteDuct with cables', 'mutation{ deleteDuct(ductId:4) }', {}, { code: 'DuctHasCables' });
+await refused('deleteSchacht with ducts', 'mutation($id:Int!){ deleteSchacht(schachtId:$id) }', { id: schachtId }, { code: 'SchachtReferenced', panels: 0, ducts: 1 });
+await refused('updateCable to an empty path', 'mutation($c:Int!){ updateCable(cableId:$c, path:[]) { id } }', { c: cables.K4 }, { code: 'CableWithoutSegment' });
+await refused('setPortUsage on the baseline', 'mutation($p:Int!){ setPortUsage(planId:0, changes:[{portId:$p, side:FRONT, fiber:{remove:true}}]) }', { p: ports[4][0] }, { code: 'BaselineUnchangeable' });
+await refused('deleteCable attached in the baseline', 'mutation($c:Int!){ deleteCable(cableId:$c) }', { c: cables.K1 }, { code: 'CableAttached', plans: [{ plan: 'Baseline', ports: 6 }] });
+await refused('deleteCable attached in a plan', 'mutation($c:Int!){ deleteCable(cableId:$c) }', { c: cables.K4 }, { code: 'CableAttached', plans: [{ plan: 'Umbau Berg', ports: 3 }] });
 const spare = (await gql('mutation{ createCable(name:"Reserve"){ id } }')).createCable.id;
 await gql('mutation($c:Int!){ updateCable(cableId:$c, path:[5]){ id } }', { c: spare });
 check('deleteCable without ports', (await gql('mutation($c:Int!){ deleteCable(cableId:$c) }', { c: spare })).deleteCable === true);
@@ -218,11 +223,11 @@ check('the default owner has all Schächte and ducts', standard?.schachtCount ==
 const createOwner = 'mutation($o:OwnerInput!){ createOwner(owner:$o) { id name lkName uid isDefault } }';
 const other = (await gql(createOwner, { o: { name: '  Private Leitung ', lkName: 'Keine_Angabe', uid: ' ZHE-100.100.101 ' } })).createOwner;
 check('createOwner trims', other.name === 'Private Leitung' && other.uid === 'ZHE-100.100.101' && other.lkName === 'Keine_Angabe' && !other.isDefault, JSON.stringify(other));
-await refused('createOwner without name', createOwner, { o: { name: ' ' } }, /Namen/);
-await refused('createOwner with a taken name', createOwner, { o: { name: 'Private Leitung' } }, /schon einen Eigentümer/);
-await refused('createOwner with a malformed UID', createOwner, { o: { name: 'X', uid: 'CHE-123456789' } }, /Form CHE-/);
-await refused('createOwner with a taken UID', createOwner, { o: { name: 'X', uid: 'ZHE-100.100.101' } }, /schon der Eigentümer Private Leitung/);
-await refused('createOwner with a long name in the delivery', createOwner, { o: { name: 'X', lkName: 'x'.repeat(81) } }, /80 Zeichen/);
+await refused('createOwner without name', createOwner, { o: { name: ' ' } }, { code: 'NameMissing' });
+await refused('createOwner with a taken name', createOwner, { o: { name: 'Private Leitung' } }, { code: 'NameTaken', kind: 'Owner', name: 'Private Leitung' });
+await refused('createOwner with a malformed UID', createOwner, { o: { name: 'X', uid: 'CHE-123456789' } }, { code: 'InvalidUid', uid: 'CHE-123456789' });
+await refused('createOwner with a taken UID', createOwner, { o: { name: 'X', uid: 'ZHE-100.100.101' } }, { code: 'UidTaken', uid: 'ZHE-100.100.101', owner: 'Private Leitung' });
+await refused('createOwner with a long name in the delivery', createOwner, { o: { name: 'X', lkName: 'x'.repeat(81) } }, { code: 'LkNameTooLong', max: 80 });
 const updateOwner = 'mutation($id:Int!,$o:OwnerInput!){ updateOwner(ownerId:$id, owner:$o) { name lkName uid } }';
 const cleared = (await gql(updateOwner, { id: other.id, o: { name: 'Private Leitung', lkName: '', uid: null } })).updateOwner;
 check('updateOwner clears empty values', cleared.lkName === null && cleared.uid === null, JSON.stringify(cleared));
@@ -241,11 +246,11 @@ const defaults = (await gql(`{ listOwner { ${OWNER} } }`)).listOwner.filter((own
 check('exactly one default owner', defaults.length === 1 && defaults[0].id === other.id, JSON.stringify(defaults));
 check('setDefaultOwner keeps changedAt', (await changedAt()) === afterUid);
 const deleteOwner = 'mutation($id:Int!){ deleteOwner(ownerId:$id) }';
-await refused('deleteOwner of the default owner', deleteOwner, { id: other.id }, /Standard-Eigentümer/);
-await refused('deleteOwner with Schächte and ducts', deleteOwner, { id: standard.id }, /7 Schächte und 6 Trassen/);
+await refused('deleteOwner of the default owner', deleteOwner, { id: other.id }, { code: 'DefaultOwnerNotDeletable' });
+await refused('deleteOwner with Schächte and ducts', deleteOwner, { id: standard.id }, { code: 'OwnerReferenced', schaechte: 7, ducts: 6 });
 await gql(setDefault, { id: standard.id });
 check('deleteOwner without objects', (await gql(deleteOwner, { id: other.id })).deleteOwner === true);
-await refused('updateOwner of a deleted owner', updateOwner, { id: other.id, o: { name: 'Weg' } }, /nicht gefunden/);
+await refused('updateOwner of a deleted owner', updateOwner, { id: other.id, o: { name: 'Weg' } }, { code: 'NotFound', kind: 'Owner', id: other.id });
 
 // ---------------------------------------------------------------- Schacht types
 const TYP = 'id name icon lkmapObjektart dimension1Mm dimension2Mm schachtCount';
@@ -257,14 +262,14 @@ const createTyp = 'mutation($t:SchachtTypInput!){ createSchachtTyp(typ:$t) { id 
 const newTyp = (await gql(createTyp, { t: { name: ' Rechteckschacht ', lkmapObjektart: 'SCHACHT_RECHTECKIG', dimension1Mm: 1200, dimension2Mm: 800 } })).createSchachtTyp;
 check('createSchachtTyp trims and gets an icon', newTyp.name === 'Rechteckschacht' && newTyp.icon.startsWith('<svg') && newTyp.dimension2Mm === 800, JSON.stringify(newTyp));
 const typInput = (changes) => ({ t: { name: 'X', lkmapObjektart: 'SCHACHT_RUND', ...changes } });
-await refused('createSchachtTyp without name', createTyp, typInput({ name: ' ' }), /Namen/);
-await refused('createSchachtTyp with a long name', createTyp, typInput({ name: 'x'.repeat(21) }), /20 Zeichen/);
-await refused('createSchachtTyp with a taken name', createTyp, typInput({ name: 'Rechteckschacht' }), /schon einen Schachttyp/);
-await refused('createSchachtTyp with dimension 2 alone', createTyp, typInput({ dimension2Mm: 500 }), /nur zusammen/);
-await refused('createSchachtTyp with dimension 2 larger', createTyp, typInput({ dimension1Mm: 500, dimension2Mm: 600 }), /grössere/);
-await refused('createSchachtTyp with a dimension over 4 m', createTyp, typInput({ dimension1Mm: 4001 }), /zwischen 0 und 4000/);
-await refused('createSchachtTyp with an icon that is no SVG', createTyp, typInput({ icon: '<html><svg/></html>' }), /keine SVG/);
-await refused('createSchachtTyp with a malformed icon', createTyp, typInput({ icon: '<svg><g></svg>' }), /keine SVG/);
+await refused('createSchachtTyp without name', createTyp, typInput({ name: ' ' }), { code: 'NameMissing' });
+await refused('createSchachtTyp with a long name', createTyp, typInput({ name: 'x'.repeat(21) }), { code: 'NameTooLong', max: 20 });
+await refused('createSchachtTyp with a taken name', createTyp, typInput({ name: 'Rechteckschacht' }), { code: 'NameTaken', kind: 'SchachtTyp', name: 'Rechteckschacht' });
+await refused('createSchachtTyp with dimension 2 alone', createTyp, typInput({ dimension2Mm: 500 }), { code: 'Dimension2WithoutDimension1' });
+await refused('createSchachtTyp with dimension 2 larger', createTyp, typInput({ dimension1Mm: 500, dimension2Mm: 600 }), { code: 'DimensionsSwapped' });
+await refused('createSchachtTyp with a dimension over 4 m', createTyp, typInput({ dimension1Mm: 4001 }), { code: 'DimensionOutOfRange', dimension: 1, max: 4000 });
+await refused('createSchachtTyp with an icon that is no SVG', createTyp, typInput({ icon: '<html><svg/></html>' }), { code: 'IconNotSvg' });
+await refused('createSchachtTyp with a malformed icon', createTyp, typInput({ icon: '<svg><g></svg>' }), { code: 'IconNotSvg' });
 check('createSchachtTyp with an icon behind an XML declaration', (await gql(createTyp, typInput({ name: 'Mit Icon', icon: '<?xml version="1.0"?>\n<svg xmlns="http://www.w3.org/2000/svg"/>' }))).createSchachtTyp.icon.includes('<svg'));
 const updateTyp = 'mutation($id:Int!,$t:SchachtTypInput!){ updateSchachtTyp(typId:$id, typ:$t) { name icon lkmapObjektart dimension1Mm } }';
 check('updateSchachtTyp keeps its own name', (await gql(updateTyp, { id: newTyp.id, t: { name: 'Rechteckschacht', lkmapObjektart: 'SCHACHT_RECHTECKIG' } })).updateSchachtTyp.dimension1Mm === null);
@@ -277,7 +282,7 @@ check('renaming a type keeps changedAt of its Schächte', (await schachtChangedA
 await gql(updateTyp, { id: usedTyp.id, t: { name: usedTyp.name, lkmapObjektart: 'BAUWERK' } });
 check('a new Objektart changes its Schächte', (await schachtChangedAt()) !== usedSchacht.changedAt);
 const deleteTyp = 'mutation($id:Int!){ deleteSchachtTyp(typId:$id) }';
-await refused('deleteSchachtTyp with Schächte', deleteTyp, { id: usedTyp.id }, new RegExp(`noch ${usedTyp.schachtCount} Schächte`));
+await refused('deleteSchachtTyp with Schächte', deleteTyp, { id: usedTyp.id }, { code: 'SchachtTypReferenced', schaechte: usedTyp.schachtCount });
 check('deleteSchachtTyp without Schächte', (await gql(deleteTyp, { id: newTyp.id })).deleteSchachtTyp === true);
 check('schachtTyp of a deleted type', (await gql('query($id:Int!){ schachtTyp(typId:$id) { id } }', { id: newTyp.id })).schachtTyp === null);
 

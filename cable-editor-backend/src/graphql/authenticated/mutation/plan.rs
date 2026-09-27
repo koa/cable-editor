@@ -12,6 +12,7 @@ use crate::{
     graphql::authorization::{Role, RoleGuard},
 };
 use async_graphql::{Context, InputObject, Object};
+use cable_editor_common::UserError;
 use diesel::{ExpressionMethods, HasQuery, QueryDsl};
 use diesel_async::{AsyncConnection, RunQueryDsl};
 
@@ -50,7 +51,7 @@ impl PlanMutation {
                     .first(conn)
                     .await?;
                 if plan.is_baseline() {
-                    return Err("The baseline can't be renamed".into());
+                    return Err(UserError::BaselineUnchangeable.into());
                 }
                 plan.name = name;
                 diesel::update(&plan).set(&plan).execute(conn).await?;

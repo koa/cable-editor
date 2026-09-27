@@ -1,3 +1,6 @@
+pub mod messages;
+
+use cable_editor_common::UserError;
 use cynic::http::CynicReqwestError;
 use patternfly_yew::prelude::{Alert, AlertType};
 use reqwest::header::InvalidHeaderValue;
@@ -17,8 +20,12 @@ pub enum FrontendError {
     ErrorQueryingAuthenticatedTransfer(CynicReqwestError),
     #[error("Invalid http header: {0}")]
     InvalidHeader(#[from] InvalidHeaderValue),
-    #[error("{}", .0.iter().map(|error| error.message.as_str()).collect::<Vec<_>>().join("; "))]
-    Graphql(Vec<cynic::GraphQlError>),
+    /// The backend refused the request, worded in `messages`
+    #[error("{}", messages::user_error(.0))]
+    User(UserError),
+    /// A technical error of the backend (database, Netbox), its messages
+    #[error("Unerwarteter Fehler vom Server: {}", .0.join("; "))]
+    Graphql(Vec<String>),
     #[error("Plan not found: {0}")]
     PlanNotFound(i32),
     #[error("Expected data not found")]
@@ -57,18 +64,15 @@ impl IntoPropValue<Html> for &FrontendError {
             FrontendError::InvalidHeader(e) => {
                 html!(<Alert inline=true title={format!("Ungültiger Header: {e}")} r#type={AlertType::Danger} />)
             }
-            FrontendError::Graphql(errors) => {
-                let title = match errors.as_slice() {
-                    [error] => format!("Fehler vom Server: {}", error.message),
-                    _ => "Fehler vom Server".to_string(),
-                };
+            FrontendError::User(error) => {
+                html!(<Alert inline=true title={messages::user_error(error)} r#type={AlertType::Danger} />)
+            }
+            FrontendError::Graphql(details) => {
                 html! {
-                    <Alert inline=true {title} r#type={AlertType::Danger}>
-                        if errors.len() > 1 {
-                            <ul>
-                                {for errors.iter().map(|error| html!(<li>{error.message.as_str()}</li>))}
-                            </ul>
-                        }
+                    <Alert inline=true title="Unerwarteter Fehler vom Server" r#type={AlertType::Danger}>
+                        <ul>
+                            {for details.iter().map(|detail| html!(<li>{detail.as_str()}</li>))}
+                        </ul>
                     </Alert>
                 }
             }

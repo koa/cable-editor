@@ -8,7 +8,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildSchema, graphql } from 'graphql';
+import { buildSchema, graphql, GraphQLError } from 'graphql';
 import { generateKeyPair, exportJWK, SignJWT } from 'jose';
 
 const FRONTEND = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../cable-editor-frontend');
@@ -34,6 +34,12 @@ async function idToken(nonce) {
     .setIssuedAt().setExpirationTime('2h').sign(privateKey);
 }
 
+// A refused request as the backend sends it: the reason in extensions.userError, worded by the
+// frontend (see docs/fehlermeldungen.md)
+const refuse = (code, data = {}) => {
+  throw new GraphQLError(code, { extensions: { userError: { code, ...data } } });
+};
+
 // ---------------------------------------------------------------- data
 // Plan 0 is the current state; plan 1 is open and changes two ports of Spleisskassette 2.
 const schachtRows = [
@@ -50,12 +56,12 @@ const schachtTypes = [
 ];
 const schachtTyp = (t) => t && { ...t, schachtCount: schachtRows.filter((r) => r[3] === t.id).length };
 const schachtTypFromInput = ({ name, icon, lkmapObjektart, dimension1Mm, dimension2Mm }, typId) => {
-  if (!name.trim()) throw new Error('Der Schachttyp braucht einen Namen');
-  if (name.trim().length > 20) throw new Error('Der Name hat mehr als 20 Zeichen');
-  if (schachtTypes.some((t) => t.id !== typId && t.name === name.trim())) throw new Error(`Es gibt schon einen Schachttyp ${name.trim()}`);
-  if (dimension2Mm != null && dimension1Mm == null) throw new Error('Dimension 2 (das kleinere Mass) nur zusammen mit Dimension 1');
-  if (dimension2Mm != null && dimension2Mm > dimension1Mm) throw new Error('Dimension 1 ist das grössere, Dimension 2 das kleinere Mass');
-  if (icon && !/^\s*(<\?[^>]*\?>\s*)?<svg/.test(icon)) throw new Error('Das Icon ist keine SVG-Datei');
+  if (!name.trim()) refuse('NameMissing');
+  if (name.trim().length > 20) refuse('NameTooLong', { max: 20 });
+  if (schachtTypes.some((t) => t.id !== typId && t.name === name.trim())) refuse('NameTaken', { kind: 'SchachtTyp', name: name.trim() });
+  if (dimension2Mm != null && dimension1Mm == null) refuse('Dimension2WithoutDimension1');
+  if (dimension2Mm != null && dimension2Mm > dimension1Mm) refuse('DimensionsSwapped');
+  if (icon && !/^\s*(<\?[^>]*\?>\s*)?<svg/.test(icon)) refuse('IconNotSvg');
   return { name: name.trim(), lkmapObjektart, dimension1Mm: dimension1Mm ?? null, dimension2Mm: dimension2Mm ?? null, ...(icon ? { icon } : {}) };
 };
 
@@ -78,12 +84,12 @@ const positionToWgs84 = (position) => {
   const wgs84 = position.lv95 ? toWgs84(position.lv95) : position.wgs84;
   const { e, n } = toLv95(wgs84);
   if (!(e >= 2480000 && e <= 2840000 && n >= 1070000 && n <= 1300000)) {
-    throw new Error(`Position E ${e.toFixed(2)} / N ${n.toFixed(2)} liegt nicht in der Schweiz`);
+    refuse('PositionOutsideSwitzerland', { e, n });
   }
   return wgs84;
 };
 const schachtFromInput = ({ name, typeId, position }) => {
-  if (!name.trim()) throw new Error('Der Schacht braucht einen Namen');
+  if (!name.trim()) refuse('NameMissing');
   const wgs84 = position ? positionToWgs84(position) : null;
   return [name.trim(), wgs84 ? [wgs84.lat, wgs84.lng] : null, typeId ?? null];
 };
@@ -99,12 +105,14 @@ const ductOwner = { 714: 2, 715: 3 };
 const deliveredDucts = new Set([711, 713, 714]);
 const ownerFromInput = ({ name, lkName, uid }, ownerId) => {
   const clean = (value) => value?.trim() || null;
-  if (!name.trim()) throw new Error('Der Eigentümer braucht einen Namen');
+  if (!name.trim()) refuse('NameMissing');
   if (clean(uid) && !/^(CHE|ZHE)-\d{3}\.\d{3}\.\d{3}$/.test(clean(uid))) {
-    throw new Error(`Die UID ${clean(uid)} hat nicht die Form CHE-123.456.789 (fiktiv: ZHE-…)`);
+    refuse('InvalidUid', { uid: clean(uid) });
   }
-  const other = ownerRows.find((o) => o.id !== ownerId && (o.name === name.trim() || (clean(uid) && o.uid === clean(uid))));
-  if (other) throw new Error(`Es gibt schon einen Eigentümer ${other.name} mit diesem Namen oder dieser UID`);
+  const others = ownerRows.filter((o) => o.id !== ownerId);
+  if (others.some((o) => o.name === name.trim())) refuse('NameTaken', { kind: 'Owner', name: name.trim() });
+  const uidOwner = clean(uid) && others.find((o) => o.uid === clean(uid));
+  if (uidOwner) refuse('UidTaken', { uid: clean(uid), owner: uidOwner.name });
   return { name: name.trim(), lkName: clean(lkName), uid: clean(uid) };
 };
 const ownerOfSchacht = (id) => schachtOwner[id] ?? 1;
@@ -218,8 +226,8 @@ const ductOfCable = (c) => duct(ductRows.find((r) => r.id === 700 + c[0]));
 // checkDuctLine's fitting, like graphql/duct_line.rs (distances in LV95)
 const fitLine = (aId, zId, { system, points }) => {
   const a = schacht(aId)?.location, z = schacht(zId)?.location;
-  if (!a || !z) throw new Error('Schacht hat keine Position, der Verlauf kann nicht geprüft werden');
-  if (lv95Distance(a, z) < 0.5) throw new Error('Anfangs- und Endschacht liegen am selben Ort, die Richtung ist unbestimmt');
+  if (!a || !z) refuse('SchachtWithoutPosition', { schacht: schacht(a ? zId : aId)?.name ?? String(a ? zId : aId) });
+  if (lv95Distance(a, z) < 0.5) refuse('SchaechteAtSamePlace');
   let line = points.map(({ x, y }) => (system === 'WGS84' ? { lat: y, lng: x }
     : toWgs84(system === 'LV95' ? { e: x, n: y } : { e: x + 2000000, n: y + 1000000 })));
   const reversed = lv95Distance(line[0], z) + lv95Distance(line.at(-1), a) < lv95Distance(line[0], a) + lv95Distance(line.at(-1), z);
@@ -239,14 +247,14 @@ const checkedPoints = (aId, zId, line, confirmed) => {
   if (!line) return [];
   const fitted = fitLine(aId, zId, line);
   if (fitted.needsConfirmation && !confirmed) {
-    throw new Error(`Der Verlauf endet ${fitted.startDistance.toFixed(1)} m bzw. ${fitted.endDistance.toFixed(1)} m von den Schächten entfernt, bitte bestätigen`);
+    refuse('LineNeedsConfirmation', { startDistance: fitted.startDistance, endDistance: fitted.endDistance });
   }
   return fitted.points;
 };
 const ductFromInput = ({ schachtA, schachtZ, description, ownerId, leitungskataster, lagebestimmung, widthMm }) => {
-  if (schachtA === schachtZ) throw new Error('Anfangs- und Endschacht müssen verschieden sein');
-  if (widthMm != null && (widthMm < 0 || widthMm > 4000)) throw new Error('Die Breite muss zwischen 0 und 4000 mm liegen');
-  if (!ownerRows.some((o) => o.id === ownerId)) throw new Error(`Eigentümer ${ownerId} nicht gefunden`);
+  if (schachtA === schachtZ) refuse('SameSchachtAtBothEnds');
+  if (widthMm != null && (widthMm < 0 || widthMm > 4000)) refuse('WidthOutOfRange', { max: 4000 });
+  if (!ownerRows.some((o) => o.id === ownerId)) refuse('NotFound', { kind: 'Owner', id: ownerId });
   return { a: schachtA, z: schachtZ, description: description?.trim() || null, ownerId, leitungskataster, lagebestimmung, widthMm: widthMm ?? null };
 };
 // Stores what ductFromInput checked in the owner and delivery tables of the mock
@@ -425,7 +433,7 @@ const root = {
   },
   updateSchacht: ({ schachtId, schacht: input }) => {
     const row = schachtRows.find((r) => r[0] === schachtId);
-    if (!row) throw new Error(`Schacht ${schachtId} not found`);
+    if (!row) refuse('NotFound', { kind: 'Schacht', id: schachtId });
     row.splice(1, 3, ...schachtFromInput(input));
     return schacht(schachtId);
   },
@@ -440,7 +448,7 @@ const root = {
     const row = ductRows.find((r) => r.id === ductId);
     const changes = ductFromInput(input);
     if ((changes.a !== row.a || changes.z !== row.z) && duct(row).cables().length) {
-      throw new Error('Die Trasse enthält Kabel, ihre Schächte können nicht geändert werden');
+      refuse('DuctEndsFixed');
     }
     Object.assign(row, changes);
     storeDelivery(row);
@@ -454,7 +462,7 @@ const root = {
   deleteDuct: ({ ductId }) => {
     const row = ductRows.find((r) => r.id === ductId);
     const cables = duct(row).cables().length;
-    if (cables) throw new Error(`Durch die Trasse führen noch ${cables} Kabel`);
+    if (cables) refuse('DuctHasCables', { cables });
     ductRows.splice(ductRows.indexOf(row), 1);
     return true;
   },
@@ -470,7 +478,7 @@ const root = {
   },
   deleteSchachtTyp: ({ typId }) => {
     const { schachtCount } = schachtTyp(schachtTypes.find((t) => t.id === typId));
-    if (schachtCount) throw new Error(`Der Schachttyp hat noch ${schachtCount} Schächte`);
+    if (schachtCount) refuse('SchachtTypReferenced', { schaechte: schachtCount });
     schachtTypes.splice(schachtTypes.findIndex((t) => t.id === typId), 1);
     return true;
   },
@@ -489,15 +497,15 @@ const root = {
   },
   deleteOwner: ({ ownerId }) => {
     const { isDefault, schachtCount, ductCount } = owner(ownerId);
-    if (isDefault) throw new Error('Der Standard-Eigentümer kann nicht gelöscht werden, zuerst einen anderen als Standard setzen');
-    if (schachtCount || ductCount) throw new Error(`Dem Eigentümer gehören noch ${schachtCount} Schächte und ${ductCount} Trassen`);
+    if (isDefault) refuse('DefaultOwnerNotDeletable');
+    if (schachtCount || ductCount) refuse('OwnerReferenced', { schaechte: schachtCount, ducts: ductCount });
     ownerRows.splice(ownerRows.findIndex((o) => o.id === ownerId), 1);
     return true;
   },
   deleteSchacht: ({ schachtId }) => {
     const panels = panelRows.filter((p) => p[2] === schachtId).length;
     const ducts = ductRows.filter((r) => r.a === schachtId || r.z === schachtId).length;
-    if (panels || ducts) throw new Error(`Der Schacht hat noch ${panels} Panels und ${ducts} Trassen`);
+    if (panels || ducts) refuse('SchachtReferenced', { panels, ducts });
     schachtRows.splice(schachtRows.findIndex((r) => r[0] === schachtId), 1);
     return true;
   },

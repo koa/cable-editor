@@ -7,6 +7,7 @@ use crate::{
     graphql::geo::{self, PositionInput},
 };
 use async_graphql::{Context, InputObject, Object};
+use cable_editor_common::{UserError, limits::MAX_NAME};
 use diesel::{BoolExpressionMethods, ExpressionMethods, QueryDsl, SelectableHelper};
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use postgis_diesel::types::Point;
@@ -78,7 +79,7 @@ impl SchachtMutation {
             .get_result(&mut connection)
             .await?;
         if panels > 0 || ducts > 0 {
-            return Err(format!("Der Schacht hat noch {panels} Panels und {ducts} Trassen").into());
+            return Err(UserError::SchachtReferenced { panels, ducts }.into());
         }
         let deleted = diesel::delete(schema::schacht::table.find(schacht_id))
             .execute(&mut connection)
@@ -104,11 +105,10 @@ impl SchachtInput {
     ) -> async_graphql::Result<(String, Option<i32>, Option<Point>)> {
         let name = self.name.trim().to_string();
         if name.is_empty() {
-            return Err("Der Schacht braucht einen Namen".into());
+            return Err(UserError::NameMissing.into());
         }
-        // varchar(20)
-        if name.chars().count() > 20 {
-            return Err("Der Name darf höchstens 20 Zeichen lang sein".into());
+        if name.chars().count() > MAX_NAME {
+            return Err(UserError::NameTooLong { max: MAX_NAME }.into());
         }
         let geom = match self.position {
             Some(position) => Some(geo::to_lv95(connection, position).await?),

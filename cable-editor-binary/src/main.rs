@@ -12,7 +12,7 @@ use actix_web::{
 };
 use actix_web_prometheus::PrometheusMetricsBuilder;
 use async_graphql::{
-    Response, ServerError, dataloader::DataLoader, futures_util::future::join_all,
+    Pos, Response, ServerError, dataloader::DataLoader, futures_util::future::join_all,
 };
 use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse};
 use cable_editor_backend::{
@@ -27,6 +27,7 @@ use cable_editor_backend::{
     },
     sql_query,
 };
+use cable_editor_common::UserError;
 use cached::cached;
 use env_logger::Env;
 use log::{info, trace, warn};
@@ -118,7 +119,9 @@ async fn graphql(
             }
         }
     } else {
-        return Response::from_errors(vec![ServerError::new("No user token found", None)]).into();
+        let error =
+            async_graphql::Error::from(UserError::NotLoggedIn).into_server_error(Pos::default());
+        return Response::from_errors(vec![error]).into();
     };
 
     let mut connection = match context.pool.get().await {

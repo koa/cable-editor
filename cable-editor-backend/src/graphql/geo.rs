@@ -6,6 +6,7 @@ use crate::{
     graphql::model::{GeoPoint, Lv95Point},
 };
 use async_graphql::{InputObject, OneofObject, SimpleObject};
+use cable_editor_common::UserError;
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use postgis_diesel::types::Point;
 
@@ -53,16 +54,16 @@ pub async fn to_lv95(
             diesel::select(st_transform(wgs84, LV95 as i32))
                 .get_result::<Option<Point>>(connection)
                 .await?
-                .ok_or("Position konnte nicht umgerechnet werden")?
+                .ok_or(UserError::PositionNotConvertible)?
         }
     };
     if EAST.contains(&point.x) && NORTH.contains(&point.y) {
         Ok(point)
     } else {
-        Err(format!(
-            "Position E {:.2} / N {:.2} liegt nicht in der Schweiz",
-            point.x, point.y
-        )
+        Err(UserError::PositionOutsideSwitzerland {
+            e: point.x,
+            n: point.y,
+        }
         .into())
     }
 }
@@ -75,7 +76,7 @@ pub async fn to_wgs84(
     Ok(diesel::select(st_transform(point, WGS84))
         .get_result::<Option<Point>>(connection)
         .await?
-        .ok_or("Position konnte nicht umgerechnet werden")?
+        .ok_or(UserError::PositionNotConvertible)?
         .into())
 }
 

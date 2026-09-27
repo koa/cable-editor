@@ -1,0 +1,15 @@
+[package]
+name = "cable-editor-common"
+version = "0.1.0"
+edition = "2024"
+
+# Shared by backend and frontend (wasm): the errors refusing a request and the rules behind
+# them, see docs/fehlermeldungen.md.
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+async-graphql = { version = "7.0", optional = true }
+serde_json = { version = "1.0", optional = true }
+
+[features]
+# `From<UserError> for async_graphql::Error`, for the backend
+async-graphql = ["dep:async-graphql", "dep:serde_json"]

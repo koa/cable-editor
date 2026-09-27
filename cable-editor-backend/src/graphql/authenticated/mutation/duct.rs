@@ -10,6 +10,10 @@ use crate::{
     graphql::duct_line::{self, LineInput},
 };
 use async_graphql::{Context, InputObject, Object};
+use cable_editor_common::{
+    ObjectKind, UserError,
+    limits::{MAX_DESCRIPTION, MAX_MILLIMETRES},
+};
 use diesel::{ExpressionMethods, HasQuery, QueryDsl, SelectableHelper};
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use postgis_diesel::types::{GeometryContainer, LineString, Point};
@@ -78,9 +82,7 @@ impl DuctMutation {
         let mut geom = stored_line_of(&stored);
         if (stored.schacht_a, stored.schacht_z) != (duct.schacht_a, duct.schacht_z) {
             if duct_cable_count(&mut connection, duct_id).await? > 0 {
-                return Err(
-                    "Die Trasse enthält Kabel, ihre Schächte können nicht geändert werden".into(),
-                );
+                return Err(UserError::DuctEndsFixed.into());
             }
             if let Some(line) = geom {
                 let a = duct_line::schacht_position(&mut connection, duct.schacht_a).await?;
@@ -143,7 +145,7 @@ impl DuctMutation {
         let mut connection = authenticated::get_connection(ctx).await?;
         let cables = duct_cable_count(&mut connection, duct_id).await?;
         if cables > 0 {
-            return Err(format!("Durch die Trasse führen noch {cables} Kabel").into());
+            return Err(UserError::DuctHasCables { cables }.into());
         }
         let deleted = diesel::delete(schema::trasse::table.find(duct_id))
             .execute(&mut connection)
@@ -167,23 +169,22 @@ struct DuctInput {
     width_mm: Option<i32>,
 }
 
-/// `Breite` of SIA405 `LKLinie`
-const MAX_WIDTH: i32 = 4000;
-
 impl DuctInput {
     /// Trimmed, `None` if empty; the Schächte must differ.
     fn checked_description(&self) -> async_graphql::Result<Option<String>> {
         if self.schacht_a == self.schacht_z {
-            return Err("Anfangs- und Endschacht müssen verschieden sein".into());
+            return Err(UserError::SameSchachtAtBothEnds.into());
         }
         let description = self
             .description
             .as_deref()
             .map(str::trim)
             .filter(|d| !d.is_empty());
-        // varchar(50)
-        if description.is_some_and(|d| d.chars().count() > 50) {
-            return Err("Die Beschreibung darf höchstens 50 Zeichen lang sein".into());
+        if description.is_some_and(|d| d.chars().count() > MAX_DESCRIPTION) {
+            return Err(UserError::DescriptionTooLong {
+                max: MAX_DESCRIPTION,
+            }
+            .into());
         }
         Ok(description.map(str::to_string))
     }
@@ -194,9 +195,12 @@ impl DuctInput {
         connection: &mut AsyncPgConnection,
     ) -> async_graphql::Result<()> {
         if let Some(width) = self.width_mm
-            && !(0..=MAX_WIDTH).contains(&width)
+            && !(0..=MAX_MILLIMETRES).contains(&width)
         {
-            return Err(format!("Die Breite muss zwischen 0 und {MAX_WIDTH} mm liegen").into());
+            return Err(UserError::WidthOutOfRange {
+                max: MAX_MILLIMETRES,
+            }
+            .into());
         }
         let owners: i64 = schema::eigentuemer::table
             .find(self.owner_id)
@@ -204,7 +208,11 @@ impl DuctInput {
             .get_result(connection)
             .await?;
         if owners == 0 {
-            return Err(format!("Eigentümer {} nicht gefunden", self.owner_id).into());
+            return Err(UserError::NotFound {
+                kind: ObjectKind::Owner,
+                id: self.owner_id.into(),
+            }
+            .into());
         }
         Ok(())
     }
@@ -221,10 +229,10 @@ async fn checked_line(
 ) -> async_graphql::Result<Option<LineString<Point>>> {
     let (fitted, _, _) = duct_line::fit_line(connection, schacht_a, schacht_z, line).await?;
     if fitted.needs_confirmation() && !confirmed {
-        return Err(format!(
-            "Der Verlauf endet {:.1} m bzw. {:.1} m von den Schächten entfernt, bitte bestätigen",
-            fitted.start_distance, fitted.end_distance
-        )
+        return Err(UserError::LineNeedsConfirmation {
+            start_distance: fitted.start_distance,
+            end_distance: fitted.end_distance,
+        }
         .into());
     }
     Ok(duct_line::stored_line(&fitted))

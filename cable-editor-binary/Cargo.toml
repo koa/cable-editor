@@ -8,6 +8,7 @@ actix-web = "4"
 rust-embed = "8.0"
 mime_guess = "2.0"
 cable-editor-backend = { path = "../cable-editor-backend" }
+cable-editor-common = { path = "../cable-editor-common", features = ["async-graphql"] }
 async-graphql = { version = "7.0", features = ["dataloader"] }
 async-graphql-actix-web = "7.0"
 env_logger = "0.11"

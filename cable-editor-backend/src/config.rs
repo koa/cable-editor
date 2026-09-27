@@ -1,3 +1,4 @@
+use cable_editor_common::limits::is_uid;
 use config::{Config, ConfigError, Environment, File};
 use serde::Deserialize;
 use std::{net::IpAddr, sync::LazyLock};
@@ -138,22 +139,6 @@ impl LkmapSettings {
     }
 }
 
-/// A real (`CHE-`) or fictitious (`ZHE-`) UID like `CHE-123.456.789`, as the table eigentuemer
-/// checks it.
-pub fn is_uid(uid: &str) -> bool {
-    let Some(digits) = uid
-        .strip_prefix("CHE-")
-        .or_else(|| uid.strip_prefix("ZHE-"))
-    else {
-        return false;
-    };
-    let groups: Vec<&str> = digits.split('.').collect();
-    groups.len() == 3
-        && groups
-            .iter()
-            .all(|g| g.len() == 3 && g.bytes().all(|b| b.is_ascii_digit()))
-}
-
 fn create_lkmap_settings() -> Result<Option<LkmapSettings>, ConfigError> {
     match read_cfg()?.get::<LkmapSettings>("lkmap") {
         Ok(settings) => settings.validated().map(Some),
@@ -187,18 +172,3 @@ pub static NETBOX_CONFIG: LazyLock<NetboxSettings> =
 /// Missing without the section `lkmap`; an invalid one stops the start (`main.rs` reads it early).
 pub static LKMAP_CONFIG: LazyLock<Option<LkmapSettings>> =
     LazyLock::new(|| create_lkmap_settings().expect("Invalid section lkmap in config.yaml"));
-
-#[cfg(test)]
-mod tests {
-    use super::is_uid;
-
-    #[test]
-    fn uids() {
-        assert!(is_uid("CHE-123.456.789"));
-        assert!(is_uid("ZHE-100.100.101"));
-        assert!(!is_uid("CHE-123.456.78"));
-        assert!(!is_uid("CHE-123456789"));
-        assert!(!is_uid("DE-123.456.789"));
-        assert!(!is_uid("CHE-12a.456.789"));
-    }
-}

@@ -2,12 +2,15 @@
 //! Datenherr of the delivery to the Leitungskataster.
 
 use crate::{
-    config::is_uid,
     db::{entity::eigentuemer::Eigentuemer, schema},
     graphql::authenticated,
     graphql::authorization::{Role, RoleGuard},
 };
 use async_graphql::{Context, InputObject, Object};
+use cable_editor_common::{
+    ObjectKind, UserError,
+    limits::{MAX_LK_NAME, is_uid},
+};
 use diesel::{ExpressionMethods, HasQuery, OptionalExtension, QueryDsl, SelectableHelper};
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
 
@@ -55,7 +58,7 @@ impl OwnerMutation {
             .get_result(&mut connection)
             .await
             .optional()?
-            .ok_or_else(|| format!("Eigentümer {owner_id} nicht gefunden").into())
+            .ok_or_else(|| owner_not_found(owner_id))
     }
     /// The owner new Schächte and ducts get; there is always exactly one.
     #[graphql(guard = "RoleGuard(Role::Admin)")]
@@ -86,10 +89,7 @@ impl OwnerMutation {
         let mut connection = authenticated::get_connection(ctx).await?;
         let owner = find_owner(&mut connection, owner_id).await?;
         if owner.standard {
-            return Err(
-                "Der Standard-Eigentümer kann nicht gelöscht werden, zuerst einen anderen als Standard setzen"
-                    .into(),
-            );
+            return Err(UserError::DefaultOwnerNotDeletable.into());
         }
         let schaechte: i64 = schema::schacht::table
             .filter(schema::schacht::eigentuemer_id.eq(owner_id))
@@ -107,16 +107,10 @@ impl OwnerMutation {
             .get_result(&mut connection)
             .await?;
         if schaechte > 0 || ducts > 0 {
-            return Err(format!(
-                "Dem Eigentümer gehören noch {schaechte} Schächte und {ducts} Trassen"
-            )
-            .into());
+            return Err(UserError::OwnerReferenced { schaechte, ducts }.into());
         }
         if deliveries > 0 {
-            return Err(format!(
-                "Für den Eigentümer sind {deliveries} Lieferungen an den Leitungskataster protokolliert"
-            )
-            .into());
+            return Err(UserError::OwnerDelivered { deliveries }.into());
         }
         let deleted = diesel::delete(schema::eigentuemer::table.find(owner_id))
             .execute(&mut connection)
@@ -134,7 +128,7 @@ async fn find_owner(
         .first(connection)
         .await
         .optional()?
-        .ok_or_else(|| format!("Eigentümer {owner_id} nicht gefunden").into())
+        .ok_or_else(|| owner_not_found(owner_id))
 }
 
 /// Name, name in the delivery and UID of an owner.
@@ -155,11 +149,8 @@ struct CheckedOwner {
     uid: Option<String>,
 }
 
-/// `Eigentuemer` in SIA405 is `TEXT*80`
-const MAX_LK_NAME: usize = 80;
-
 impl OwnerInput {
-    /// Refuses what the table would refuse, with a message; `owner_id` is the owner being
+    /// Refuses what the table would refuse; `owner_id` is the owner being
     /// changed (its own name and UID don't count as taken).
     async fn checked(
         self,
@@ -168,24 +159,19 @@ impl OwnerInput {
     ) -> async_graphql::Result<CheckedOwner> {
         let name = self.name.trim().to_string();
         if name.is_empty() {
-            return Err("Der Eigentümer braucht einen Namen".into());
+            return Err(UserError::NameMissing.into());
         }
         let lk_name = non_empty(self.lk_name);
         if let Some(lk_name) = &lk_name
             && lk_name.chars().count() > MAX_LK_NAME
         {
-            return Err(
-                format!("Der Name in der Lieferung hat mehr als {MAX_LK_NAME} Zeichen").into(),
-            );
+            return Err(UserError::LkNameTooLong { max: MAX_LK_NAME }.into());
         }
         let uid = non_empty(self.uid);
         if let Some(uid) = &uid
             && !is_uid(uid)
         {
-            return Err(format!(
-                "Die UID {uid} hat nicht die Form CHE-123.456.789 (fiktiv: ZHE-…)"
-            )
-            .into());
+            return Err(UserError::InvalidUid { uid: uid.clone() }.into());
         }
         let others = || {
             let mut others = schema::eigentuemer::table
@@ -202,7 +188,11 @@ impl OwnerInput {
             .await
             .optional()?
         {
-            return Err(format!("Es gibt schon einen Eigentümer {other}").into());
+            return Err(UserError::NameTaken {
+                kind: ObjectKind::Owner,
+                name: other,
+            }
+            .into());
         }
         if let Some(uid) = &uid
             && let Some(other) = others()
@@ -211,10 +201,22 @@ impl OwnerInput {
                 .await
                 .optional()?
         {
-            return Err(format!("Die UID {uid} hat schon der Eigentümer {other}").into());
+            return Err(UserError::UidTaken {
+                uid: uid.clone(),
+                owner: other,
+            }
+            .into());
         }
         Ok(CheckedOwner { name, lk_name, uid })
     }
+}
+
+fn owner_not_found(owner_id: i32) -> async_graphql::Error {
+    UserError::NotFound {
+        kind: ObjectKind::Owner,
+        id: owner_id.into(),
+    }
+    .into()
 }
 
 fn non_empty(value: Option<String>) -> Option<String> {

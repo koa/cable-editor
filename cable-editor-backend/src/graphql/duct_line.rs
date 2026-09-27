@@ -7,6 +7,7 @@ use crate::{
     graphql::{geo::LV95, model::GeoPoint},
 };
 use async_graphql::{Enum, InputObject, SimpleObject};
+use cable_editor_common::UserError;
 use diesel::{ExpressionMethods, QueryDsl};
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use postgis_diesel::types::{LineString, Point};
@@ -79,12 +80,12 @@ fn distance(a: &Point, b: &Point) -> f64 {
 }
 
 /// Turns the line (LV95) to run from `a` to `z` and leaves out ends repeating them.
-pub fn fit(mut points: Vec<Point>, a: &Point, z: &Point) -> Result<FittedLine, &'static str> {
+pub fn fit(mut points: Vec<Point>, a: &Point, z: &Point) -> Result<FittedLine, UserError> {
     let (Some(first), Some(last)) = (points.as_slice().first(), points.as_slice().last()) else {
-        return Err("Der Verlauf enthält keine Punkte");
+        return Err(UserError::LineWithoutPoints);
     };
     if distance(a, z) < SAME_POINT_METRES {
-        return Err("Anfangs- und Endschacht liegen am selben Ort, die Richtung ist unbestimmt");
+        return Err(UserError::SchaechteAtSamePlace);
     }
     let reversed = distance(first, z) + distance(last, a) < distance(first, a) + distance(last, z);
     if reversed {
@@ -126,7 +127,7 @@ pub async fn to_lv95(
     line: &LineInput,
 ) -> async_graphql::Result<Vec<Point>> {
     if line.points.is_empty() {
-        return Err("Der Verlauf enthält keine Punkte".into());
+        return Err(UserError::LineWithoutPoints.into());
     }
     let srid = line.system.srid();
     let points: Vec<Point> = line
@@ -152,7 +153,7 @@ pub async fn to_lv95(
     ))
     .get_result::<Option<LineString<Point>>>(connection)
     .await?
-    .ok_or("Verlauf konnte nicht umgerechnet werden")?;
+    .ok_or(UserError::LineNotConvertible)?;
     let mut points = converted.points;
     if single {
         points.truncate(1);
@@ -171,10 +172,9 @@ pub async fn schacht_position(
         .first(connection)
         .await?;
     geom.ok_or_else(|| {
-        format!(
-            "Schacht {} hat keine Position, der Verlauf kann nicht geprüft werden",
-            name.unwrap_or_else(|| schacht_id.to_string())
-        )
+        UserError::SchachtWithoutPosition {
+            schacht: name.unwrap_or_else(|| schacht_id.to_string()),
+        }
         .into()
     })
 }
@@ -237,7 +237,7 @@ pub async fn check(
     ))
     .get_result::<Option<LineString<Point>>>(connection)
     .await?
-    .ok_or("Verlauf konnte nicht umgerechnet werden")?;
+    .ok_or(UserError::LineNotConvertible)?;
     Ok(DuctLineCheck {
         line: wgs84.points.into_iter().map(GeoPoint::from).collect(),
         reversed: fitted.reversed,

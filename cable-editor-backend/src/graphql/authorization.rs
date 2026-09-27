@@ -1,5 +1,6 @@
 use crate::{config::CONFIG, graphql::context::UserInfo};
 use async_graphql::{Context, Enum, Guard};
+use cable_editor_common::UserError;
 
 /// What a user may do, from the OIDC groups mapped in the config; each role includes the ones
 /// before it. Every logged in user may read.
@@ -37,7 +38,7 @@ impl Guard for RoleGuard {
         if ctx.data::<UserInfo>()?.role() >= self.0 {
             Ok(())
         } else {
-            Err("Keine Berechtigung für diese Änderung".into())
+            Err(UserError::NotAllowed.into())
         }
     }
 }

@@ -5,6 +5,7 @@ use crate::db::{
     },
     schema,
 };
+use cable_editor_common::UserError;
 use diesel::{ExpressionMethods, HasQuery, QueryDsl, associations::HasTable};
 use diesel_async::{
     AsyncConnection, AsyncPgConnection, RunQueryDsl, pooled_connection::deadpool::Object,
@@ -23,9 +24,7 @@ pub async fn implement_plan(
                 .first(conn)
                 .await?;
             if plan.is_baseline() {
-                return Err(async_graphql::Error::new(
-                    "The baseline can't be implemented",
-                ));
+                return Err(UserError::BaselineUnchangeable.into());
             }
             let ports_to_apply = PortUsage::query()
                 .filter(schema::port_usage::plan_id.eq(plan_id))

@@ -8,7 +8,7 @@ use crate::{
         page_layout::PageLayout,
         table::ListModel,
     },
-    error::FrontendError,
+    error::{FrontendError, messages},
     graphql::authenticated::{
         current_user::Role,
         owners::{
@@ -472,7 +472,7 @@ impl Component for OwnerDialog {
                             <TextInput
                                 value={self.uid.clone()}
                                 onchange={link.callback(DialogMsg::Uid)}
-                                placeholder="CHE-123.456.789"
+                                placeholder={messages::UID_EXAMPLE}
                             />
                         </FormGroup>
                         <p class="owner-dialog__hint">

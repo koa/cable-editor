@@ -20,6 +20,7 @@ use crate::{
     graphql::model::GeoPoint,
 };
 use async_graphql::{Context, dataloader::DataLoader, dataloader::Loader};
+use cable_editor_common::{ObjectKind, UserError};
 use diesel::{
     ExpressionMethods, HasQuery, QueryDsl, SelectableHelper,
     dsl::{count_star, sum},
@@ -49,14 +50,45 @@ pub fn get_loader<'a>(ctx: &'a Context<'_>) -> async_graphql::Result<&'a DataLoa
 /// Loads one referenced object, which must exist (foreign key).
 pub async fn load_one<K>(ctx: &Context<'_>, key: K) -> async_graphql::Result<DbValue<K>>
 where
-    K: Send + Sync + std::hash::Hash + Eq + Clone + std::fmt::Debug + 'static,
+    K: ObjectKey + Send + Sync + std::hash::Hash + Eq + Clone + std::fmt::Debug + 'static,
     DbLoader: Loader<K, Error = async_graphql::Error>,
 {
-    get_loader(ctx)?
-        .load_one(key.clone())
-        .await?
-        .ok_or_else(|| format!("{key:?} not found").into())
+    let id = key.id();
+    get_loader(ctx)?.load_one(key).await?.ok_or_else(|| {
+        UserError::NotFound {
+            kind: K::KIND,
+            id: id.into(),
+        }
+        .into()
+    })
 }
+
+/// A key naming one object, for the error when it doesn't exist.
+pub trait ObjectKey {
+    const KIND: ObjectKind;
+    fn id(&self) -> i32;
+}
+
+macro_rules! object_key {
+    ($($key:ident => $kind:ident),* $(,)?) => {
+        $(impl ObjectKey for $key {
+            const KIND: ObjectKind = ObjectKind::$kind;
+            fn id(&self) -> i32 {
+                self.0
+            }
+        })*
+    };
+}
+
+object_key!(
+    SchachtId => Schacht,
+    SchachtTypId => SchachtTyp,
+    CableId => Cable,
+    EigentuemerId => Owner,
+    PanelId => Panel,
+    PanelPortId => Port,
+    PlanId => Plan,
+);
 type DbValue<K> = <DbLoader as Loader<K>>::Value;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]

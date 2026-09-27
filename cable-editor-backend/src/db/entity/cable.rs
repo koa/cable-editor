@@ -18,6 +18,7 @@ use crate::{
     },
 };
 use async_graphql::{Context, Object};
+use cable_editor_common::UserError;
 use diesel::{
     AsChangeset, ExpressionMethods, HasQuery, Identifiable, Insertable, OptionalExtension,
     QueryDsl, QueryableByName, sql_query,
@@ -66,16 +67,16 @@ impl Cable {
             .collect::<Result<Vec<_>, _>>()
             .map_err(|error| match error {
                 DuctAlignmentError::NoConnectionFoundOnPair { first, second } => {
-                    async_graphql::Error::new(format!(
-                        "Duct {} and {} are not connected",
-                        first.0.id, second.0.id
-                    ))
+                    UserError::DuctsNotConnected {
+                        duct: first.0.id,
+                        next: second.0.id,
+                    }
                 }
                 DuctAlignmentError::NoConnectionFoundForSchacht { last_schacht, duct } => {
-                    async_graphql::Error::new(format!(
-                        "Duct {} don't contain schacht {}",
-                        duct.0.id, last_schacht
-                    ))
+                    UserError::DuctNotAtSchacht {
+                        duct: duct.0.id,
+                        schacht: last_schacht,
+                    }
                 }
             })?;
         Ok(segments
@@ -242,12 +243,14 @@ impl CableEnd {
         &self.schacht
     }
     async fn path(&self, ctx: &Context<'_>) -> async_graphql::Result<CablePath> {
-        let path = self.cable.load_path(ctx).await?.ok_or_else(|| {
-            async_graphql::Error::new(format!(
-                "invalid cable end on duct {} for cable {}",
-                self.schacht.id, self.cable.id
-            ))
-        })?;
+        let path = self
+            .cable
+            .load_path(ctx)
+            .await?
+            .ok_or(UserError::InvalidCableEnd {
+                schacht: self.schacht.id,
+                cable: self.cable.id,
+            })?;
         Ok(if path.near_schacht == self.schacht.id {
             path
         } else {

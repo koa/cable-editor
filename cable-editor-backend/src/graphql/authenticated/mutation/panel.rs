@@ -11,6 +11,7 @@ use crate::{
 };
 use async_graphql::{Context, InputObject, Object, OneofObject};
 use async_recursion::async_recursion;
+use cable_editor_common::UserError;
 use diesel::{
     AsChangeset, BoolExpressionMethods, ExpressionMethods, QueryDsl, associations::HasTable,
     dsl::max,
@@ -111,11 +112,8 @@ impl PanelMutation {
                             if let Some(id) = p_id.id {
                                 Some(id)
                             } else if let Some(temp) = p_id.temporary {
-                                Some(*temp_id_map.get(&temp).ok_or_else(|| {
-                                    async_graphql::Error::new(
-                                        "Parent temporary ID not found in mapping",
-                                    )
-                                })?)
+                                // The frontend sends parents before their children
+                                Some(*temp_id_map.get(&temp).ok_or(UserError::InvalidRequest)?)
                             } else {
                                 None
                             }
@@ -152,9 +150,8 @@ impl PanelMutation {
                         // Die neue DB-ID für potenziell folgende Kinder-Panels merken
                         temp_id_map.insert(temp_id, inserted_id);
                     } else {
-                        return Err(async_graphql::Error::new(
-                            "Change must have either id or temporary id",
-                        ));
+                        // Either id or temporary id
+                        return Err(UserError::InvalidRequest.into());
                     }
                 }
 
@@ -227,9 +224,8 @@ impl PanelMutation {
                             .execute(conn)
                             .await?;
                     } else {
-                        return Err(async_graphql::Error::new(
-                            "Change must have either id or temporary id",
-                        ));
+                        // Either id or temporary id
+                        return Err(UserError::InvalidRequest.into());
                     }
                 }
 
@@ -247,7 +243,7 @@ impl PanelMutation {
         changes: Vec<PortUsageInput>,
     ) -> async_graphql::Result<bool> {
         if plan_id == BASELINE_PLAN_ID {
-            return Err("The baseline can only be changed by implementing a plan".into());
+            return Err(UserError::BaselineUnchangeable.into());
         }
         let mut connection = authenticated::get_connection(ctx).await?;
         connection

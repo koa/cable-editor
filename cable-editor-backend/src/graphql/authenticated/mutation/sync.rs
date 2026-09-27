@@ -11,6 +11,7 @@ use crate::{
     },
 };
 use async_graphql::{SimpleObject, Union};
+use cable_editor_common::{ObjectKind, UserError, error::NetboxStep};
 use diesel::{ExpressionMethods, HasQuery, QueryDsl};
 use diesel_async::pooled_connection::deadpool::Object;
 use diesel_async::{AsyncConnection, AsyncPgConnection, RunQueryDsl};
@@ -370,10 +371,7 @@ pub async fn sync_plan_to_netbox(
                     .map_err(|e| async_graphql::Error::new(e.to_string()))?;
 
                 if !res.status().is_success() {
-                    return Err(async_graphql::Error::new(format!(
-                        "Fehler beim Löschen von Circuit {}: {:?}",
-                        id, res.text().await.unwrap_or_default()
-                    )));
+                    return Err(netbox_failed(NetboxStep::DeleteCircuit, id.to_string(), res).await);
                 }
             }
 
@@ -401,28 +399,25 @@ pub async fn sync_plan_to_netbox(
                     .map_err(|e| async_graphql::Error::new(e.to_string()))?;
 
                 if !res.status().is_success() {
-                    return Err(async_graphql::Error::new(format!(
-                        "Fehler beim Erstellen des Circuits {}: {:?}",
-                        circuit.cid(), res.text().await.unwrap_or_default()
-                    )));
+                    return Err(netbox_failed(NetboxStep::CreateCircuit, circuit.cid(), res).await);
                 }
 
                 let created_circuit: serde_json::Value = res.json().await
                     .map_err(|e| async_graphql::Error::new(e.to_string()))?;
                 let new_circuit_id = created_circuit["id"].as_i64().ok_or_else(|| {
-                    async_graphql::Error::new(format!(
-                        "Netbox returned no id for the circuit {}: {created_circuit}",
-                        circuit.cid()
-                    ))
+                    UserError::NetboxWithoutId {
+                        step: NetboxStep::CreateCircuit,
+                        object: circuit.cid(),
+                    }
                 })?;
 
                 // --- 5.2 Dynamische Site-IDs für die RearPorts aus Netbox abfragen ---
                 let start_rp = RearPort::fetch_by_id((circuit.start_netbox_id as u32).into())
                     .await?
-                    .ok_or_else(|| async_graphql::Error::new(format!("Start RearPort {} nicht gefunden", circuit.start_netbox_id)))?;
+                    .ok_or_else(|| rear_port_not_found(circuit.start_netbox_id))?;
                 let end_rp = RearPort::fetch_by_id((circuit.end_netbox_id as u32).into())
                     .await?
-                    .ok_or_else(|| async_graphql::Error::new(format!("End RearPort {} nicht gefunden", circuit.end_netbox_id)))?;
+                    .ok_or_else(|| rear_port_not_found(circuit.end_netbox_id))?;
 
                 for (side, rear_port_id, site_id, existing_cable_id) in [
                     ("A", circuit.start_netbox_id, u32::from(start_rp.device.site.id), start_rp.cable.map(|c| u32::from(c.id))),
@@ -443,18 +438,17 @@ pub async fn sync_plan_to_netbox(
                         .map_err(|e| async_graphql::Error::new(e.to_string()))?;
 
                     if !term_res.status().is_success() {
-                        return Err(async_graphql::Error::new(format!(
-                            "Fehler beim Erstellen der Termination Seite {}: {:?}",
-                            side, term_res.text().await.unwrap_or_default()
-                        )));
+                        let object = format!("{} {side}", circuit.cid());
+                        return Err(netbox_failed(NetboxStep::CreateTermination, object, term_res).await);
                     }
 
                     let created_term: serde_json::Value = term_res.json().await
                         .map_err(|e| async_graphql::Error::new(e.to_string()))?;
                     let term_id = created_term["id"].as_i64().ok_or_else(|| {
-                        async_graphql::Error::new(format!(
-                            "Netbox returned no id for the termination {side}: {created_term}"
-                        ))
+                        UserError::NetboxWithoutId {
+                            step: NetboxStep::CreateTermination,
+                            object: format!("{} {side}", circuit.cid()),
+                        }
                     })?;
 
                     // 5.2.2 Eventuell vorhandenes Kabel entfernen, das den Port blockiert
@@ -481,10 +475,8 @@ pub async fn sync_plan_to_netbox(
                         .map_err(|e| async_graphql::Error::new(e.to_string()))?;
 
                     if !cable_res.status().is_success() {
-                        return Err(async_graphql::Error::new(format!(
-                            "Fehler beim Patchen des Kabels Seite {}: {:?}",
-                            side, cable_res.text().await.unwrap_or_default()
-                        )));
+                        let object = format!("{} {side}", circuit.cid());
+                        return Err(netbox_failed(NetboxStep::PatchCable, object, cable_res).await);
                     }
                 }
             }
@@ -506,10 +498,7 @@ pub async fn sync_plan_to_netbox(
                     .map_err(|e| async_graphql::Error::new(e.to_string()))?;
 
                 if !res.status().is_success() {
-                    return Err(async_graphql::Error::new(format!(
-                        "Fehler beim Aktualisieren des Circuits {}: {:?}",
-                        circuit.cid(), res.text().await.unwrap_or_default()
-                    )));
+                    return Err(netbox_failed(NetboxStep::UpdateCircuit, circuit.cid(), res).await);
                 }
             }
             Ok(Vec::default())
@@ -518,23 +507,40 @@ pub async fn sync_plan_to_netbox(
     Ok(issues)
 }
 
+/// Netbox refused `step`; its answer goes along for support.
+async fn netbox_failed(
+    step: NetboxStep,
+    object: String,
+    response: reqwest::Response,
+) -> async_graphql::Error {
+    UserError::NetboxFailed {
+        step,
+        object,
+        detail: response.text().await.unwrap_or_default(),
+    }
+    .into()
+}
+
+fn rear_port_not_found(id: i32) -> UserError {
+    UserError::NotFound {
+        kind: ObjectKind::NetboxRearPort,
+        id: id.into(),
+    }
+}
+
 async fn create_asymetric_duplex_error(
     start_netbox_id: i32,
     r1: HashMap<i32, Vec<(PanelPort, PanelPort, f64)>>,
 ) -> async_graphql::Result<SyncIssue> {
     let start_netbox_port = RearPort::fetch_by_id((start_netbox_id as u32).into())
         .await?
-        .ok_or_else(|| {
-            async_graphql::Error::new(format!("Netbox RearPort {} not found", start_netbox_id))
-        })?;
+        .ok_or_else(|| rear_port_not_found(start_netbox_id))?;
 
     let mut connections = Vec::new();
     for (target_netbox_id, port_pairs) in r1 {
         let target_netbox_port = RearPort::fetch_by_id((target_netbox_id as u32).into())
             .await?
-            .ok_or_else(|| {
-                async_graphql::Error::new(format!("Netbox RearPort {} not found", target_netbox_id))
-            })?;
+            .ok_or_else(|| rear_port_not_found(target_netbox_id))?;
 
         let pairs: Vec<PortPair> = port_pairs
             .into_iter()

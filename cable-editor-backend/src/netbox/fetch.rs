@@ -3,6 +3,7 @@ use crate::error::BackendError;
 use crate::netbox::id::NumberId;
 use crate::netbox::{fetch_device_with_ports, query, schema};
 use async_graphql::{Context, Object};
+use cable_editor_common::{ObjectKind, UserError};
 use cynic::queries::VariableMatch;
 
 #[derive(cynic::QueryVariables, Debug)]
@@ -131,9 +132,13 @@ impl RearPort {
     }
     async fn device(&self) -> async_graphql::Result<DeviceWithRearPorts> {
         let id = self.device.id;
-        fetch_device_with_ports(id)
-            .await?
-            .ok_or_else(|| async_graphql::Error::new(format!("Device for id {id} not found")))
+        fetch_device_with_ports(id).await?.ok_or_else(|| {
+            UserError::NotFound {
+                kind: ObjectKind::NetboxDevice,
+                id: u32::from(id).into(),
+            }
+            .into()
+        })
     }
 }
 
