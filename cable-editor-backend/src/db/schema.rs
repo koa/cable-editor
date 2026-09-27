@@ -12,6 +12,18 @@ pub mod sql_types {
 }
 
 diesel::table! {
+    eigentuemer (id) {
+        id -> Int4,
+        name -> Text,
+        #[max_length = 80]
+        lk_name -> Nullable<Varchar>,
+        #[max_length = 15]
+        uid -> Nullable<Varchar>,
+        standard -> Bool,
+    }
+}
+
+diesel::table! {
     kabel (id) {
         id -> Int4,
         #[max_length = 20]
@@ -87,6 +99,7 @@ diesel::table! {
             #[max_length = 20]
             name -> Nullable<Varchar>,
             typ -> Nullable<Int4>,
+            eigentuemer_id -> Int4,
     }
 }
 
@@ -115,6 +128,7 @@ diesel::table! {
             description -> Nullable<Varchar>,
             schacht_a -> Int4,
             schacht_z -> Int4,
+            eigentuemer_id -> Int4,
     }
 }
 
@@ -138,7 +152,9 @@ diesel::table! {
 diesel::joinable!(kabel_trasse -> kabel (kabel));
 diesel::joinable!(kabel_trasse -> trasse (trasse));
 diesel::joinable!(kabel_trasse -> trassen_mit_endpunkten (trasse));
+diesel::joinable!(schacht -> eigentuemer (eigentuemer_id));
 diesel::joinable!(schacht -> schacht_typ (typ));
+diesel::joinable!(trasse -> eigentuemer (eigentuemer_id));
 diesel::joinable!(panel -> schacht (schacht_id));
 diesel::joinable!(panel_port -> panel (panel_id));
 diesel::joinable!(port_usage -> kabel (cable));
@@ -146,6 +162,7 @@ diesel::joinable!(port_usage -> panel_port (port_id));
 diesel::joinable!(port_usage -> plan (plan_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
+    eigentuemer,
     kabel,
     kabel_trasse,
     panel,

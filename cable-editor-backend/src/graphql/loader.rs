@@ -19,7 +19,7 @@ use crate::{
     graphql::model::GeoPoint,
 };
 use async_graphql::{Context, dataloader::DataLoader, dataloader::Loader};
-use diesel::{ExpressionMethods, HasQuery, QueryDsl, dsl::sum};
+use diesel::{ExpressionMethods, HasQuery, QueryDsl, SelectableHelper, dsl::sum};
 use diesel_async::{AsyncPgConnection, RunQueryDsl, pooled_connection::deadpool::Object};
 use postgis_diesel::types::{LineString, Point};
 use std::{collections::HashMap, sync::Arc};
@@ -321,7 +321,7 @@ impl Loader<CableDucts> for DbLoader {
             ))
             .select((
                 schema::kabel_trasse::kabel,
-                schema::trasse::all_columns,
+                Duct::as_select(),
                 schema::kabel_trasse::sequenz,
             ))
             .load(&mut connection)
