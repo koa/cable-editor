@@ -19,8 +19,8 @@ use crate::{
     graphql::{
         authenticated::get_connection,
         loader::{
-            EigentuemerId, SchachtId, SchachtLocation, SchachtRootPanels, SchachtTypId,
-            get_loader, load_one,
+            EigentuemerId, SchachtId, SchachtLocation, SchachtRootPanels, SchachtTypId, get_loader,
+            load_one,
         },
         model::{GeoPoint, Lv95Point},
     },

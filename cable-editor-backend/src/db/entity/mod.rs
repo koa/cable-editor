@@ -22,8 +22,6 @@ use crate::{
 use async_graphql::{Context, Object};
 use cable::Cable;
 use chrono::{DateTime, Utc};
-use eigentuemer::Eigentuemer;
-use lkmap::Genauigkeit;
 use diesel::{
     AsExpression, FromSqlRow, HasQuery, Identifiable, Insertable, QueryableByName, deserialize,
     deserialize::FromSql,
@@ -32,6 +30,8 @@ use diesel::{
     serialize::{IsNull, Output, ToSql},
     sql_types::{Integer, Nullable},
 };
+use eigentuemer::Eigentuemer;
+use lkmap::Genauigkeit;
 use postgis_diesel::{
     sql_types::Geometry,
     types::{GeometryContainer, Point},
