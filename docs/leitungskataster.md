@@ -181,6 +181,28 @@ verhindert den Start. Helm: `config.lkmap` (`datenlieferantUid`, `oidPrefix`,
 
 **OID / `OBJ_ID`** ohne eigene Spalte, stabil aus Präfix, Objektart und Datenbank-Id:
 Schacht 42 → `ch4711ab` + `s0000042`, Trasse 7 → `ch4711ab` + `t0000007`.
+Der Basket (`BID`) jeder Datei erhält eine OID nach demselben Schema, pro Eigentümer: LKMap
+`b` + Id des Eigentümers, Perimeter `p` + Id des Eigentümers.
+
+Das Präfix wird **zentral vergeben**, bestellt per Webformular auf
+<https://www.interlis.ch/dienste/oid-bestellen>. Regelung: INTERLIS 2.3 Referenzhandbuch, Anhang D
+„Aufbau von Objektidentifikatoren (OID)“
+(<https://www.interlis.ch/download/interlis2/ili2-refman_2006-04-13_d.pdf>, S. 126 ff.; im
+Referenzhandbuch 2.4 Anhang F):
+- OID = Präfix (8 Zeichen) + Postfix (8 Zeichen), nur Buchstaben und Ziffern.
+- Präfix: erstes Zeichen ein Buchstabe, die ersten zwei der Ländercode nach ISO 3166 (`ch`), die
+  übrigen sechs „von einer zuständigen, zentralen Stelle einmalig vergeben“.
+- Postfix: verwaltet der Datenproduzent selbst, freie Stellen links mit `0` aufgefüllt.
+- Zum Üben: `ch100000` für Objekte, `chB00000` für Baskets.
+- Der Anhang ist ausdrücklich nicht normativ, sondern ein „Standard-Erweiterungsvorschlag … im
+  Sinne einer Empfehlung“; normativ ist nur `STANDARDOID = OID TEXT*16`. Die Weisung LK01
+  sagt zu OIDs nichts.
+- Laut Anhang ist „typischerweise für jeden Behälter … ein neues Präfix erforderlich“. Da unsere
+  OIDs über alle Dateien eindeutig sind (Präfix + Objektart + Datenbank-Id), genügt ein Präfix
+  für die ganze Datenbank.
+
+`config.rs` prüft das Präfix nach Anhang D (8 Buchstaben oder Ziffern, vorne ein Buchstabe);
+`ch` am Anfang wird nicht erzwungen, da nur empfohlen.
 
 ## 4. Datenbank (umgesetzt)
 
@@ -331,6 +353,8 @@ Im Export konstant, ohne Spalte:
 ## 8. Offen
 
 - Zugang zum Checkservice beantragen (leitungskataster@bd.zh.ch).
+- OID-Präfix bestellen (<https://www.interlis.ch/dienste/oid-bestellen>, siehe 3.); `ch4711ab`
+  ist ein Platzhalter.
 - Pufferbreite des Perimeters (Vorschlag 10 m) mit dem Kanton abstimmen.
 - Mit der Katasterleitung klären, wie Privatpersonen ohne UID behandelt werden (fiktive UID
   für natürliche Personen? `Keine_Angabe` in `Eigentuemer` akzeptiert?) und ob die Lieferung
