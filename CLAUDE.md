@@ -6,14 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Fiber-optic cable / duct / patch-panel planning tool. Single deployable binary: a Rust (actix-web) backend serving a GraphQL API plus an embedded Yew (WASM) SPA. Data lives in PostgreSQL + PostGIS; planned panel/port changes can be synced to NetBox. Domain names are partly German (`kabel` = cable, `schacht` = manhole/cabinet, `trasse` = duct route, `sequenz`); code comments and log messages are mixed German/English.
 
-Concepts for work not yet done live in `docs/`, one file per topic: `docs/leitungskataster.md` (the quarterly INTERLIS delivery to the Leitungskataster Kanton Zürich, SIA405 LKMap; `backend/src/export.rs` is only a placeholder until then), `docs/stammdaten.md` (pages for owners and Schacht types), `docs/navigation.md` (every page under the plan's path), `docs/fehlermeldungen.md` (how errors reach the user; implemented).
+Concepts for work not yet done live in `docs/`, one file per topic: `docs/leitungskataster.md` (the quarterly INTERLIS delivery to the Leitungskataster Kanton Zürich, SIA405 LKMap; the transfer file exists in `backend/src/lkmap/`, perimeter, packaging and admin page are still to do), `docs/stammdaten.md` (pages for owners and Schacht types), `docs/navigation.md` (every page under the plan's path), `docs/fehlermeldungen.md` (how errors reach the user; implemented).
 
 ## Workspace layout
 
 Cargo workspace (`default-members = cable-editor-binary`):
 
 - `cable-editor-common` — shared by backend and frontend (serde only, builds for wasm): `UserError`, why a request was refused, and the limits/formats it checks (`limits`, e.g. `is_uid`).
-- `cable-editor-backend` — library: Diesel models/migrations, async-graphql schemas, NetBox client, INTERLIS2 export (`export.rs`).
+- `cable-editor-backend` — library: Diesel models/migrations, async-graphql schemas, NetBox client, the delivery to the Leitungskataster (`lkmap/`: SIA405 LKMap transfer file per owner, `lkmapExport`).
 - `cable-editor-binary` — actix-web server (`main.rs`): wires OIDC/JWT auth, DB pool, Prometheus, and embeds `cable-editor-frontend/dist` via `rust-embed` (SPA fallback to `index.html`).
 - `cable-editor-frontend` — Yew + PatternFly + Leaflet SPA, built with Trunk for `wasm32-unknown-unknown`. Not built by plain `cargo build` from the root. Label printing uses the external `brady-web-sdk` crate (git dependency, `https://git.panter.ch/open-source/brady-web-sdk-rs.git`, pinned in `Cargo.lock`).
 - `cable-editor-chart` — Helm chart; CI (`.github/workflows/build-and-publish.yml`) pushes the Docker image and chart to GHCR on pushes to `master`.

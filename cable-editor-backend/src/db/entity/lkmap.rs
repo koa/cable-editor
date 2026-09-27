@@ -16,6 +16,17 @@ pub enum Genauigkeit {
     Unbekannt,
 }
 
+impl Genauigkeit {
+    /// The value of `Lagebestimmung` in the transfer file.
+    pub fn transfer_value(self) -> &'static str {
+        match self {
+            Genauigkeit::Genau => "genau",
+            Genauigkeit::Ungenau => "ungenau",
+            Genauigkeit::Unbekannt => "unbekannt",
+        }
+    }
+}
+
 /// `Objektart` of a Schacht type's Schächte as `LKPunkt` (`Kommunikation.…`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, DbEnum, Enum)]
 #[ExistingTypePath = "crate::db::schema::sql_types::LkmapPunktObjektartEnum"]

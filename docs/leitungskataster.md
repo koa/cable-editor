@@ -1,7 +1,8 @@
 # Konzept: Datenlieferung an den Leitungskataster Kanton Zürich
 
 Stand: 27.09.2026 – Konzept; umgesetzt sind die Datenbank mit den Feldern in GraphQL (Abschnitt
-4), die Konfiguration (Abschnitt 3) und die Felder in der UI (Abschnitt 6, ohne die Admin-Seite). Der heutige Export
+4), die Konfiguration (Abschnitt 3), die Felder in der UI (Abschnitt 6, ohne die Admin-Seite)
+und der LKMap-Export (Abschnitt 5, `cable-editor-backend/src/lkmap/`). Der heutige Export
 (`cable-editor-backend/src/export.rs`) ist ein Platzhalter und wird ersetzt.
 
 ## 1. Anforderungen
@@ -310,7 +311,20 @@ Im Export konstant, ohne Spalte:
   Trassen mit der Linie aus `trassen_mit_endpunkten`; `Metaattribute` als verschachtelte
   Struktur (`<Metaattribute><SIA405_Base_LV95.Metaattribute>…`), Aufzählungen mit Punkt
   (`Kommunikation.Schacht.rund`).
-- XML über eine Bibliothek schreiben (Escaping), nicht per `format!`.
+- XML über eine Bibliothek schreiben (Escaping), nicht per `format!` (umgesetzt mit
+  `quick-xml`, `lkmap/xtf.rs`; die Attribute in der Reihenfolge des Modells, ein einzelner Punkt
+  wie `SymbolPos` ebenfalls in `COORD`).
+- Umgesetzt (`lkmap/mod.rs`, GraphQL `lkmapExport(ownerId)`, nur Admin):
+  - Geliefert wird eine Trasse mit gesetztem Schalter `leitungskataster`, ein Schacht, wenn eine
+    solche Trasse an ihm endet (egal wem die Trasse gehört), in der Datei seines Eigentümers.
+  - Eine Trasse ohne eigenen Verlauf ist eine gerade Linie zwischen ihren Schächten und wird mit
+    `Lagebestimmung` `unbekannt` geliefert, unabhängig vom gespeicherten Wert (die Trassen-Seite
+    zeigt das so an).
+  - Ein Schacht ohne Position wird nicht geliefert, ebenso eine gelieferte Trasse, die an ihm
+    endet; beide meldet der Export als Bericht (`schaechteWithoutPosition`, `ductsWithoutLine`).
+  - Keine `Eigenschaft` (auch nicht die Anzahl Kabel).
+  - Verweigert (`UserError`): ohne Abschnitt `lkmap`, Eigentümer ohne UID, nichts zu liefern,
+    eine Id mit mehr als 7 Stellen (OID).
 - `Perimeter_LK_ZH_V2_LV95` (Header: Modell `Perimeter_LK_ZH_V2_LV95`, Version `2019-04-16`,
   URI `http://models.geo.zh.ch`; Basket `Perimeter_LK_ZH_V2_LV95.Perimeter_LK_ZH`): ein
   `Perimeter` pro Eigentümer, Medium `Kommunikation`, Art `Zustaendigkeitsperimeter`,

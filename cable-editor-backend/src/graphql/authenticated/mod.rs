@@ -1,3 +1,4 @@
+pub mod lkmap;
 pub mod mutation;
 pub mod planned;
 
@@ -14,6 +15,7 @@ use crate::{
         schema::{eigentuemer, kabel, panel, plan, schacht, schacht_typ, trasse},
     },
     graphql::{
+        authorization::{Role, RoleGuard},
         context::UserInfo,
         duct_line::{self, DuctLineCheck, LineInput},
         geo::{self, ConvertedPoint, PositionInput},
@@ -166,6 +168,15 @@ impl Query {
     ) -> async_graphql::Result<DuctLineCheck> {
         let mut connection = get_connection(ctx).await?;
         duct_line::check(&mut connection, schacht_a, schacht_z, &line).await
+    }
+    /// The owner's delivery to the Leitungskataster (SIA405 LKMap transfer file)
+    #[graphql(guard = "RoleGuard(Role::Admin)")]
+    async fn lkmap_export(
+        &self,
+        ctx: &Context<'_>,
+        owner_id: i32,
+    ) -> async_graphql::Result<lkmap::LkmapExport> {
+        lkmap::export(ctx, owner_id).await
     }
     async fn netbox_devices(&self) -> async_graphql::Result<Vec<DeviceWithRearPorts>> {
         Ok(fetch_devices_and_ports().await?)

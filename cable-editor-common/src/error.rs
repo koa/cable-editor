@@ -160,6 +160,23 @@ pub enum UserError {
     /// The baseline changes only by implementing a plan
     BaselineUnchangeable,
 
+    // Delivery to the Leitungskataster
+    /// The section `lkmap` of the configuration is missing
+    LkmapNotConfigured,
+    /// The owner has no UID, so nothing of it can be delivered
+    OwnerWithoutUid {
+        owner: String,
+    },
+    /// An id doesn't fit into the 7 digits of an OID
+    LkmapIdTooLarge {
+        kind: ObjectKind,
+        id: i32,
+    },
+    /// The owner has no delivered duct and no Schacht where one ends
+    NothingToDeliver {
+        owner: String,
+    },
+
     // Netbox sync
     /// Netbox refused a step; `detail` is Netbox's answer, for support
     NetboxFailed {

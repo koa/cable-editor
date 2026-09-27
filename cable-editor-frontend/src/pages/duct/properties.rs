@@ -626,6 +626,16 @@ impl EditDuctProperties {
         }
     }
 
+    /// Whether the duct has a course of its own, stored or checked from a file to be stored.
+    fn has_course(&self) -> bool {
+        let stored = self
+            .stored()
+            .and_then(|duct| duct.line.as_ref())
+            .is_some_and(|line| line.len() > 2);
+        let checked = matches!(&self.check, CheckState::Checked(check) if check.line.len() > 2);
+        stored || checked
+    }
+
     /// Owner and what the Leitungskataster takes from the duct.
     fn view_delivery(&self, ctx: &Context<Self>, choices: &DuctChoices) -> Html {
         let readonly = !self.can_edit(ctx);
@@ -648,7 +658,12 @@ impl EditDuctProperties {
                 </FormSelect<i32>>
             }
         };
-        let lagebestimmung = if readonly {
+        // Without course the Leitungskataster gets a straight line between the Schächte, which
+        // says nothing about the real course (lkmap::export)
+        let without_course = !self.has_course();
+        let lagebestimmung = if without_course {
+            html!(<TextInput value={Genauigkeit::Unbekannt.title()} readonly=true/>)
+        } else if readonly {
             html!(<TextInput value={self.lagebestimmung.title()} readonly=true/>)
         } else {
             let options = Genauigkeit::ALL.iter().map(|g| {
@@ -680,7 +695,14 @@ impl EditDuctProperties {
                     />
                 </FormGroup>
                 <div class="duct-properties__delivery">
-                    <FormGroup label="Lagebestimmung">{lagebestimmung}</FormGroup>
+                    <FormGroup label="Lagebestimmung">
+                        {lagebestimmung}
+                        if without_course {
+                            <p class="duct-properties__hint">
+                                {"Ohne Verlauf wird die Trasse als gerade Linie zwischen den Schächten geliefert."}
+                            </p>
+                        }
+                    </FormGroup>
                     <FormGroup label="Breite (mm)">
                         <TextInput
                             r#type={TextInputType::Number}

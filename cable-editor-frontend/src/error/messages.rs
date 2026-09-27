@@ -128,6 +128,21 @@ pub fn user_error(error: &UserError) -> String {
             "Der Ist-Zustand ändert sich nur durch das Umsetzen einer Planung".into()
         }
 
+        UserError::LkmapNotConfigured => {
+            "Die Lieferung an den Leitungskataster ist nicht konfiguriert (Abschnitt lkmap)".into()
+        }
+        UserError::OwnerWithoutUid { owner } => format!(
+            "Der Eigentümer {owner} hat keine UID, seine Daten können nicht geliefert werden"
+        ),
+        UserError::LkmapIdTooLarge { kind, id } => format!(
+            "{} {id}: die Id hat mehr als 7 Stellen und passt nicht in die OID der Lieferung",
+            object(*kind)
+        ),
+        UserError::NothingToDeliver { owner } => format!(
+            "Für den Eigentümer {owner} gibt es nichts zu liefern (keine Trasse an den \
+             Leitungskataster)"
+        ),
+
         UserError::NetboxFailed {
             step,
             object,
