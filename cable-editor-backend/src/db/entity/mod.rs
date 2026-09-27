@@ -1,4 +1,5 @@
 pub mod cable;
+pub mod lkmap;
 pub mod panel;
 pub mod path;
 pub mod plan;

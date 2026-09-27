@@ -1,6 +1,6 @@
 # Konzept: Datenlieferung an den Leitungskataster Kanton Zürich
 
-Stand: 27.09.2026 – Konzept, noch nicht umgesetzt. Der heutige Export
+Stand: 27.09.2026 – Konzept; umgesetzt ist nur die Datenbank (Abschnitt 4). Der heutige Export
 (`cable-editor-backend/src/export.rs`) ist ein Platzhalter und wird ersetzt.
 
 ## 1. Anforderungen
@@ -175,7 +175,12 @@ Datenherr und Eigentümer stehen nicht in der Konfiguration, sondern in der Tabe
 **OID / `OBJ_ID`** ohne eigene Spalte, stabil aus Präfix, Objektart und Datenbank-Id:
 Schacht 42 → `ch4711ab` + `s0000042`, Trasse 7 → `ch4711ab` + `t0000007`.
 
-## 4. Datenbank (eine Migration)
+## 4. Datenbank (umgesetzt)
+
+Zwei Migrationen in `cable-editor-backend/migrations`: `…_eigentuemer` (Stammdaten, auch ohne
+Leitungskataster sinnvoll) und `…_leitungskataster`; Schema in `src/db/schema.rs`, die Enums
+als `db/entity/lkmap.rs` (`Genauigkeit`, `LkmapPunktObjektart`). Geprüft mit PostgreSQL 16 und
+PostGIS 3.6 an den Beispieldaten (`local/data.sql`), auch down und wieder up.
 
 Neue Tabelle `eigentuemer` (Stammdaten):
 
@@ -184,16 +189,18 @@ Neue Tabelle `eigentuemer` (Stammdaten):
 | `id` | serial | |
 | `name` | `text not null unique` | intern, der echte Name |
 | `lk_name` | `varchar(80) null` | `Eigentuemer` in der Lieferung, sonst `name`; `Keine_Angabe`, wenn nicht freigegeben |
-| `uid` | `varchar(15) null unique` | `Datenherr`, echte oder fiktive UID; ohne keine Lieferung |
+| `uid` | `varchar(15) null unique`, Format `CHE-`/`ZHE-123.456.789` | `Datenherr`, echte oder fiktive UID; ohne keine Lieferung |
+| `standard` | `boolean not null default false`, höchstens einer (partieller Unique-Index) | Eigentümer neuer Schächte und Trassen |
 
-Die Migration legt den heutigen Eigentümer an (Name und UID danach in der Admin-Seite setzen)
-und lässt alle bestehenden Schächte und Trassen auf ihn verweisen. Neue Schächte und Trassen
-erhalten im UI den zuletzt gewählten bzw. einzigen Eigentümer als Vorschlag.
+Die Migration legt den heutigen Eigentümer als Standard an (`Eigentümer`, Name und UID danach
+in der Admin-Seite setzen) und lässt alle bestehenden Schächte und Trassen auf ihn verweisen.
+Ein Insert ohne `eigentuemer_id` erhält den Standard-Eigentümer (Trigger, ein Spalten-Default
+kann keine Abfrage sein); so bleiben `createSchacht`/`createDuct` ohne Eigentümer gültig.
 
 Neue Enums:
-- `genauigkeit`: `genau`, `ungenau`, `unbekannt` (wie SIA405)
-- `lkmap_punkt_objektart`: `Schacht_rund`, `Schacht_rechteckig`, `Bauwerk`, `Tragwerk`,
-  `unbekannt` (Export: `Kommunikation.Schacht.rund` usw.)
+- `genauigkeit_enum`: `genau`, `ungenau`, `unbekannt` (wie SIA405)
+- `lkmap_punkt_objektart_enum`: `Schacht_rund`, `Schacht_rechteckig`, `Bauwerk`, `Tragwerk`,
+  `unbekannt` (Export: `LkmapPunktObjektart::transfer_value`, `Kommunikation.Schacht.rund` usw.)
 
 `trasse`:
 
@@ -201,7 +208,7 @@ Neue Enums:
 |---|---|---|
 | `eigentuemer_id` | `integer not null references eigentuemer` | `Datenherr`, `Eigentuemer`, Datei |
 | `leitungskataster` | `boolean not null default false` | wird geliefert (grundstücksübergreifend) |
-| `lagebestimmung` | `genauigkeit not null default 'unbekannt'` | `Lagebestimmung` |
+| `lagebestimmung` | `genauigkeit_enum not null default 'unbekannt'` | `Lagebestimmung` |
 | `breite_mm` | `integer null`, 0–4000 | optional `Breite` |
 | `geaendert_am` | `timestamptz not null default now()` | `Letzte_Aenderung` |
 
@@ -210,7 +217,7 @@ Neue Enums:
 | Spalte | Typ | Zweck |
 |---|---|---|
 | `eigentuemer_id` | `integer not null references eigentuemer` | `Datenherr`, `Eigentuemer`, Datei |
-| `lagebestimmung` | `genauigkeit not null default 'unbekannt'` | `Lagebestimmung` |
+| `lagebestimmung` | `genauigkeit_enum not null default 'unbekannt'` | `Lagebestimmung` |
 | `geaendert_am` | `timestamptz not null default now()` | `Letzte_Aenderung` |
 
 Ein Schacht wird geliefert, wenn mindestens eine gelieferte Trasse an ihm endet (kein eigener
@@ -222,13 +229,17 @@ einem Eigentümer ohne UID, fehlt er in der Lieferung; die Admin-Seite weist dar
 
 | Spalte | Typ | Zweck |
 |---|---|---|
-| `lkmap_objektart` | `lkmap_punkt_objektart not null default 'Schacht_rund'` | `Objektart` des LKPunkt |
-| `dimension1_mm`, `dimension2_mm` | `integer null`, 0–4000 | optional `Dimension1/2` |
+| `lkmap_objektart` | `lkmap_punkt_objektart_enum not null default 'Schacht_rund'` | `Objektart` des LKPunkt |
+| `dimension1_mm`, `dimension2_mm` | `integer null`, 0–4000, `dimension2_mm <= dimension1_mm` | optional `Dimension1/2` |
 
-Trigger für `geaendert_am`:
-- Ändern eines Schachts oder einer Trasse setzt `now()`.
-- Ändert sich die Position eines Schachts, auch `geaendert_am` seiner Trassen: die gelieferte
-  Linie (View `trassen_mit_endpunkten`) beginnt und endet an den Schächten.
+Trigger für `geaendert_am` (`now()`, also der Beginn der Transaktion):
+- Ändern eines Schachts oder einer Trasse, nur wenn sich die Zeile wirklich ändert
+  (`old.* is distinct from new.*`): Speichern ohne Änderung ist keine Änderung.
+- Ändert sich die Position eines Schachts, auch seine Trassen: die gelieferte Linie (View
+  `trassen_mit_endpunkten`) beginnt und endet an den Schächten.
+- Ändern von `lkmap_objektart` oder den Massen eines Schachttyps: seine Schächte.
+- Ändern von `name`, `lk_name` oder `uid` eines Eigentümers: seine Schächte und Trassen
+  (`Eigentuemer`, `Datenherr`).
 
 Neue Tabelle `lk_lieferung` (Protokoll):
 
@@ -238,8 +249,17 @@ Neue Tabelle `lk_lieferung` (Protokoll):
 | `erstellt_am` | `timestamptz not null default now()` |
 | `erstellt_von` | `text not null` (Benutzername) |
 | `eigentuemer_id` | `integer not null references eigentuemer` |
-| `anzahl_schaechte`, `anzahl_trassen` | integer |
+| `anzahl_schaechte`, `anzahl_trassen` | `integer not null` |
+| `pruefsumme` | `char(64) not null` – SHA-256 der gelieferten LKMap-Objekte |
 | `geliefert_am` | `timestamptz null` – beim manuellen Upload von Hand bestätigt, später vom automatischen Upload |
+
+Ob sich seit der letzten Lieferung etwas geändert hat, sagt der Vergleich der Prüfsumme mit
+der des aktuellen Exports – `geaendert_am` allein erkennt gelöschte Trassen nicht.
+
+Rust-Seite: `Timestamptz` braucht für Rust-Werte das Feature `chrono` von diesel (und
+async-graphql); es kommt dazu, sobald eine Abfrage die Zeitstempel liest (Export,
+Admin-Seite). `Duct` wird per `as_select()` geladen, neue Spalten stören bestehende Abfragen
+nicht.
 
 Im Export konstant, ohne Spalte:
 - `Status` = `in_Betrieb` (Geometrien sind nicht plan-bezogen, es gibt nur Bestehendes)
@@ -289,8 +309,8 @@ Im Export konstant, ohne Spalte:
 
 ## 7. Umsetzung (Reihenfolge)
 
-1. Konfiguration `lkmap`, Migration (`eigentuemer`, Enums, Spalten, Trigger, `lk_lieferung`),
-   Backend-Felder.
+1. ~~Migration (`eigentuemer`, Enums, Spalten, Trigger, `lk_lieferung`), Diesel-Schema~~
+   (erledigt); Konfiguration `lkmap`, Backend-Felder.
 2. UI: Eigentümerliste, Felder bei Trasse, Schacht (und Schachttyp bei Bedarf).
 3. LKMap-Export mit Validierungstest.
 4. Perimeter-Export.
