@@ -153,6 +153,7 @@ Kabel kommen in LKMap nicht vor, für Kommunikation nur Trassen, Schächte und B
 - **Eigenleistung** (entfernt) sagte nur, wer baut, nicht wem die Trasse gehört – für die
   Lieferung ohne Bedeutung.
 - **Objektart der Schächte** wird im Schachttyp konfiguriert; heute sind alle rund.
+- **Lagebestimmung** ist standardmässig `ungenau`, ausser sie wird ausdrücklich anders gesetzt.
 - **`geaendert_am`**: Standard *jetzt*, auch für bestehende Daten (alles ist noch im Bau).
 - **Zuständigkeitsperimeter** wird pro Eigentümer berechnet: konvexe Hülle seiner gelieferten
   Trassen und Schächte mit Puffer.
@@ -237,7 +238,7 @@ Neue Enums:
 |---|---|---|
 | `eigentuemer_id` | `integer not null references eigentuemer` | `Datenherr`, `Eigentuemer`, Datei |
 | `leitungskataster` | `boolean not null default false` | wird geliefert (grundstücksübergreifend) |
-| `lagebestimmung` | `genauigkeit_enum not null default 'unbekannt'` | `Lagebestimmung` |
+| `lagebestimmung` | `genauigkeit_enum not null default 'ungenau'` (erst `unbekannt`, siehe 7.) | `Lagebestimmung` |
 | `breite_mm` | `integer null`, 0–4000 | optional `Breite` |
 | `geaendert_am` | `timestamptz not null default now()` | `Letzte_Aenderung` |
 
@@ -246,7 +247,7 @@ Neue Enums:
 | Spalte | Typ | Zweck |
 |---|---|---|
 | `eigentuemer_id` | `integer not null references eigentuemer` | `Datenherr`, `Eigentuemer`, Datei |
-| `lagebestimmung` | `genauigkeit_enum not null default 'unbekannt'` | `Lagebestimmung` |
+| `lagebestimmung` | `genauigkeit_enum not null default 'ungenau'` (erst `unbekannt`, siehe 7.) | `Lagebestimmung` |
 | `geaendert_am` | `timestamptz not null default now()` | `Letzte_Aenderung` |
 
 Ein Schacht wird geliefert, wenn mindestens eine gelieferte Trasse an ihm endet (kein eigener
@@ -325,25 +326,40 @@ Im Export konstant, ohne Spalte:
 
 ## 6. UI
 
-- Trassen- und Schacht-Eigenschaften: Eigentümer (Auswahl, Planer).
-- Eigentümerliste (Admin): Name, Name in der Lieferung, UID; Löschen nur ohne Verweise.
-- Trassen-Eigenschaften: Schalter „An Leitungskataster liefern (grundstücksübergreifend)“,
-  Lagebestimmung, optional Breite.
-- Schacht-Eigenschaften: Lagebestimmung; beim Setzen per GPS Vorschlag aus der Genauigkeit
-  (≤ 10 cm → `genau`, sonst `ungenau`).
-- Schachttypen: Objektart und Masse – vorerst per Migration (alle `Schacht_rund`), eine
-  Bearbeitungsseite bei Bedarf.
-- Neue Admin-Seite „Leitungskataster“: pro Eigentümer Download der beiden ZIPs, Warnungen
-  (Eigentümer ohne UID mit gelieferten Trassen, Schächte solcher Eigentümer), Liste der Lieferungen,
-  „als geliefert markieren“, Hinweise auf Änderungen seit der letzten Lieferung (Wochenfrist)
-  und das nahende Quartalsende. Karte des Perimeters und der gelieferten Trassen zur Kontrolle.
-- GraphQL: Export und Protokoll mit `RoleGuard(Role::Admin)`.
+Was die Lieferung in der UI braucht; die Seiten für Eigentümer und Schachttypen selbst beschreibt
+`docs/stammdaten.md`.
+
+- **Eigentümer**: Name in der Lieferung („Name nicht freigeben“ setzt `Keine_Angabe`) und UID
+  (Datenherr) bearbeiten; die Liste warnt bei einem Eigentümer ohne UID mit gelieferten
+  Trassen. Ändern nur Admin, da der Eigentümer den Datenherrn der Lieferung bestimmt.
+- **Schachttyp**: Objektart (`LKPunkt.Objektart`) und Masse (Dimension 1 ≥ Dimension 2, je
+  0–4000 mm) bearbeiten; ändern nur Admin.
+- **Trassen-Eigenschaften**: Eigentümer (Planer; neu: der Standard-Eigentümer), Schalter „An
+  Leitungskataster liefern (grundstücksübergreifend)“, Lagebestimmung, optional Breite (mm); die
+  Trassen-Seite zeigt sie mit „geändert am“.
+- **Trassenliste**: Spalte „LK“ (wird geliefert).
+- **Schacht-Eigenschaften**: Eigentümer, Lagebestimmung.
+- **Lagebestimmung**: Standard immer `ungenau`, ausser man setzt sie ausdrücklich anders; kein
+  automatischer Vorschlag (auch nicht aus der GPS-Genauigkeit).
+- **Admin-Seite „Leitungskataster“** (Schritt 5): pro Eigentümer Download der beiden ZIPs,
+  Warnungen (Eigentümer ohne UID mit gelieferten Trassen, Schächte solcher Eigentümer), Liste
+  der Lieferungen, „als geliefert markieren“, Hinweise auf Änderungen seit der letzten Lieferung
+  (Wochenfrist) und das nahende Quartalsende. Karte des Perimeters und der gelieferten Trassen
+  zur Kontrolle.
+- GraphQL: Export und Protokoll mit `RoleGuard(Role::Admin)`; Eigentümer, Lieferung,
+  Lagebestimmung und Breite einer Trasse oder eines Schachts setzen Planer (`DuctInput`,
+  `SchachtInput`, Pflichtfelder).
 
 ## 7. Umsetzung (Reihenfolge)
 
 1. ~~Migration (`eigentuemer`, Enums, Spalten, Trigger, `lk_lieferung`), Diesel-Schema~~
    (erledigt); ~~Konfiguration `lkmap`, Backend-Felder (lesend)~~ (erledigt).
-2. UI: Eigentümerliste, Felder bei Trasse, Schacht (und Schachttyp bei Bedarf).
+2. UI (Abschnitt 6):
+   1. Migration: Lagebestimmung standardmässig `ungenau` (bestehende `unbekannt` stammen alle
+      vom Standardwert und werden `ungenau`).
+   2. Eigentümer- und Schachttyp-Seiten (`docs/stammdaten.md`).
+   3. Trassen: Felder in `DuctInput`, Eigenschaften, Trassen-Seite, Spalte „LK“ der Liste.
+   4. Schächte: Felder in `SchachtInput`, Eigenschaften.
 3. LKMap-Export mit Validierungstest.
 4. Perimeter-Export.
 5. Admin-Seite mit Download und Protokoll.
