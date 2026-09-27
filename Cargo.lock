@@ -457,6 +457,7 @@ dependencies = [
  "asynk-strim",
  "base64 0.22.1",
  "bytes",
+ "chrono",
  "fast_chemail",
  "fnv",
  "futures-channel",
@@ -826,6 +827,7 @@ version = "0.1.0"
 dependencies = [
  "async-graphql",
  "async-recursion",
+ "chrono",
  "config",
  "cynic",
  "cynic-codegen",
@@ -1551,6 +1553,7 @@ checksum = "715377c6e464cb44bb89bd8487584240516c8d5052bc645d6babc50bb8be46c3"
 dependencies = [
  "bitflags 2.13.1",
  "byteorder",
+ "chrono",
  "diesel_derives",
  "downcast-rs",
  "itoa",

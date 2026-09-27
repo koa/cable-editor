@@ -6,11 +6,12 @@ use crate::{
         entity::{
             Duct, FiberPathNode,
             cable::Cable,
+            eigentuemer::Eigentuemer,
             panel::Panel,
             plan::Plan,
             schacht::{Schacht, SchachtTyp},
         },
-        schema::{kabel, panel, plan, schacht, trasse},
+        schema::{eigentuemer, kabel, panel, plan, schacht, trasse},
     },
     graphql::{
         context::UserInfo,
@@ -69,6 +70,14 @@ impl Query {
         let query = SchachtTyp::query();
         let list = query.load(&mut connection).await?;
         Ok(list)
+    }
+    /// Owners of Schächte and ducts, by name
+    async fn list_owner(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Eigentuemer>> {
+        let mut connection = get_connection(ctx).await?;
+        Ok(Eigentuemer::query()
+            .order_by(eigentuemer::name)
+            .load(&mut connection)
+            .await?)
     }
     async fn list_cable(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Cable>> {
         let mut connection = get_connection(ctx).await?;

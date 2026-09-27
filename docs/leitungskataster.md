@@ -1,6 +1,7 @@
 # Konzept: Datenlieferung an den Leitungskataster Kanton Zürich
 
-Stand: 27.09.2026 – Konzept; umgesetzt ist nur die Datenbank (Abschnitt 4). Der heutige Export
+Stand: 27.09.2026 – Konzept; umgesetzt sind die Datenbank mit den Feldern in GraphQL (Abschnitt
+4) und die Konfiguration (Abschnitt 3). Der heutige Export
 (`cable-editor-backend/src/export.rs`) ist ein Platzhalter und wird ersetzt.
 
 ## 1. Anforderungen
@@ -262,10 +263,13 @@ Neue Tabelle `lk_lieferung` (Protokoll):
 Ob sich seit der letzten Lieferung etwas geändert hat, sagt der Vergleich der Prüfsumme mit
 der des aktuellen Exports – `geaendert_am` allein erkennt gelöschte Trassen nicht.
 
-Rust-Seite: `Timestamptz` braucht für Rust-Werte das Feature `chrono` von diesel (und
-async-graphql); es kommt dazu, sobald eine Abfrage die Zeitstempel liest (Export,
-Admin-Seite). `Duct` wird per `as_select()` geladen, neue Spalten stören bestehende Abfragen
-nicht.
+Rust-Seite: die Spalten sind Felder von `Duct`, `Schacht` und `SchachtTyp`, `eigentuemer` die
+Entität `Eigentuemer` (`db/entity/eigentuemer.rs`, über den Loader `EigentuemerId`); die
+Zeitstempel als `chrono::DateTime<Utc>` (Feature `chrono` von diesel und async-graphql).
+GraphQL (lesend): `listOwner`, `Owner { id name lkName uid isDefault }`, bei `Duct` `owner`,
+`leitungskataster`, `lagebestimmung`, `widthMm`, `changedAt`, bei `Schacht` `owner`,
+`lagebestimmung`, `changedAt`, bei `SchachtTyp` `lkmapObjektart`, `dimension1Mm`,
+`dimension2Mm`. Die Mutationen dazu kommen mit der UI (7., Schritt 2).
 
 Im Export konstant, ohne Spalte:
 - `Status` = `in_Betrieb` (Geometrien sind nicht plan-bezogen, es gibt nur Bestehendes)
@@ -316,7 +320,7 @@ Im Export konstant, ohne Spalte:
 ## 7. Umsetzung (Reihenfolge)
 
 1. ~~Migration (`eigentuemer`, Enums, Spalten, Trigger, `lk_lieferung`), Diesel-Schema~~
-   (erledigt); ~~Konfiguration `lkmap`~~ (erledigt), Backend-Felder.
+   (erledigt); ~~Konfiguration `lkmap`, Backend-Felder (lesend)~~ (erledigt).
 2. UI: Eigentümerliste, Felder bei Trasse, Schacht (und Schachttyp bei Bedarf).
 3. LKMap-Export mit Validierungstest.
 4. Perimeter-Export.

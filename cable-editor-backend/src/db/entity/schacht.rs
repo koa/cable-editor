@@ -10,6 +10,8 @@ use crate::{
         entity::{
             Duct, XmlDocument,
             cable::{Cable, CableEnd, PotentialPathSegment},
+            eigentuemer::Eigentuemer,
+            lkmap::{Genauigkeit, LkmapPunktObjektart},
             panel::Panel,
         },
         schema,
@@ -17,11 +19,13 @@ use crate::{
     graphql::{
         authenticated::get_connection,
         loader::{
-            SchachtId, SchachtLocation, SchachtRootPanels, SchachtTypId, get_loader, load_one,
+            EigentuemerId, SchachtId, SchachtLocation, SchachtRootPanels, SchachtTypId,
+            get_loader, load_one,
         },
         model::{GeoPoint, Lv95Point},
     },
 };
+use chrono::{DateTime, Utc};
 use postgis_diesel::types::Point;
 
 #[derive(Identifiable, Insertable, HasQuery, Debug, Clone, PartialEq)]
@@ -32,6 +36,9 @@ pub struct Schacht {
     pub name: Option<String>,
     pub typ: Option<i32>,
     pub geom: Option<Point>,
+    pub eigentuemer_id: i32,
+    pub lagebestimmung: Genauigkeit,
+    pub geaendert_am: DateTime<Utc>,
 }
 
 #[derive(HasQuery, Identifiable, Insertable, Associations, Debug, Clone, PartialEq)]
@@ -41,6 +48,9 @@ pub struct SchachtTyp {
     pub id: i32,
     pub name: Option<String>,
     pub icon: XmlDocument,
+    pub lkmap_objektart: LkmapPunktObjektart,
+    pub dimension1_mm: Option<i32>,
+    pub dimension2_mm: Option<i32>,
 }
 
 #[Object]
@@ -57,6 +67,17 @@ impl Schacht {
             Some(typ) => Ok(Some(load_one(ctx, SchachtTypId(typ)).await?)),
             None => Ok(None),
         }
+    }
+    async fn owner(&self, ctx: &Context<'_>) -> async_graphql::Result<Eigentuemer> {
+        load_one(ctx, EigentuemerId(self.eigentuemer_id)).await
+    }
+    /// Accuracy of the position
+    async fn lagebestimmung(&self) -> Genauigkeit {
+        self.lagebestimmung
+    }
+    /// Last change of the Schacht or its type (`Letzte_Aenderung`)
+    async fn changed_at(&self) -> DateTime<Utc> {
+        self.geaendert_am
     }
     /// LV95, as stored (`location` is WGS84)
     async fn position(&self) -> Option<Lv95Point> {
@@ -167,6 +188,18 @@ impl SchachtTyp {
     }
     async fn icon(&self) -> &str {
         self.icon.0.as_ref()
+    }
+    /// `Objektart` of its Schächte in the Leitungskataster
+    async fn lkmap_objektart(&self) -> LkmapPunktObjektart {
+        self.lkmap_objektart
+    }
+    /// Larger inner dimension in millimetres, optional
+    async fn dimension1_mm(&self) -> Option<i32> {
+        self.dimension1_mm
+    }
+    /// Smaller inner dimension in millimetres, optional
+    async fn dimension2_mm(&self) -> Option<i32> {
+        self.dimension2_mm
     }
     async fn list_schacht(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Schacht>> {
         let mut connection = get_connection(ctx).await?;

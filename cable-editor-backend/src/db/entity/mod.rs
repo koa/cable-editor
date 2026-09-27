@@ -1,4 +1,5 @@
 pub mod cable;
+pub mod eigentuemer;
 pub mod lkmap;
 pub mod panel;
 pub mod path;
@@ -12,12 +13,17 @@ use crate::{
         schema,
     },
     graphql::{
-        loader::{DuctCables, DuctLength, DuctLine, SchachtId, get_loader, load_one},
+        loader::{
+            DuctCables, DuctLength, DuctLine, EigentuemerId, SchachtId, get_loader, load_one,
+        },
         model::GeoPoint,
     },
 };
 use async_graphql::{Context, Object};
 use cable::Cable;
+use chrono::{DateTime, Utc};
+use eigentuemer::Eigentuemer;
+use lkmap::Genauigkeit;
 use diesel::{
     AsExpression, FromSqlRow, HasQuery, Identifiable, Insertable, QueryableByName, deserialize,
     deserialize::FromSql,
@@ -42,6 +48,11 @@ pub struct Duct {
     pub description: Option<String>,
     pub schacht_a: i32,
     pub schacht_z: i32,
+    pub eigentuemer_id: i32,
+    pub leitungskataster: bool,
+    pub lagebestimmung: Genauigkeit,
+    pub breite_mm: Option<i32>,
+    pub geaendert_am: DateTime<Utc>,
 }
 
 #[Object]
@@ -90,6 +101,25 @@ impl Duct {
 
     async fn schacht_z(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
         load_one(ctx, SchachtId(self.schacht_z)).await
+    }
+    async fn owner(&self, ctx: &Context<'_>) -> async_graphql::Result<Eigentuemer> {
+        load_one(ctx, EigentuemerId(self.eigentuemer_id)).await
+    }
+    /// Delivered to the Leitungskataster (crosses property boundaries)
+    async fn leitungskataster(&self) -> bool {
+        self.leitungskataster
+    }
+    /// Accuracy of the course
+    async fn lagebestimmung(&self) -> Genauigkeit {
+        self.lagebestimmung
+    }
+    /// Width in millimetres, optional
+    async fn width_mm(&self) -> Option<i32> {
+        self.breite_mm
+    }
+    /// Last change of the duct, its course or its Schächte' positions (`Letzte_Aenderung`)
+    async fn changed_at(&self) -> DateTime<Utc> {
+        self.geaendert_am
     }
     /// Metres, missing without geometry
     async fn length(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<f64>> {

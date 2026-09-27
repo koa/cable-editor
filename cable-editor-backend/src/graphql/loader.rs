@@ -9,6 +9,7 @@ use crate::{
         entity::{
             Duct, WGS84,
             cable::{Cable, cable_usages_at},
+            eigentuemer::Eigentuemer,
             panel::{Panel, PanelPort, PortUsage},
             plan::Plan,
             schacht::{Schacht, SchachtTyp},
@@ -63,6 +64,9 @@ pub struct SchachtTypId(pub i32);
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct CableId(pub i32);
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct EigentuemerId(pub i32);
 
 /// Position of a Schacht in WGS84, missing without geometry.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -141,6 +145,23 @@ impl Loader<SchachtTypId> for DbLoader {
             .load(&mut connection)
             .await?;
         Ok(list.into_iter().map(|t| (SchachtTypId(t.id), t)).collect())
+    }
+}
+
+impl Loader<EigentuemerId> for DbLoader {
+    type Value = Eigentuemer;
+    type Error = async_graphql::Error;
+
+    async fn load(
+        &self,
+        keys: &[EigentuemerId],
+    ) -> Result<HashMap<EigentuemerId, Eigentuemer>, Self::Error> {
+        let mut connection = self.connection.lock().await;
+        let list: Vec<Eigentuemer> = Eigentuemer::query()
+            .filter(schema::eigentuemer::id.eq_any(ids(keys, |k| k.0)))
+            .load(&mut connection)
+            .await?;
+        Ok(list.into_iter().map(|e| (EigentuemerId(e.id), e)).collect())
     }
 }
 
