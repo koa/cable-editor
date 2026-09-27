@@ -418,6 +418,12 @@ const types = { '.html': 'text/html', '.js': 'text/javascript', '.wasm': 'applic
 http.createServer(async (req, res) => {
   const url = new URL(req.url, ORIGIN);
   const p = url.pathname;
+  // The login may come from another origin, the real backend's app (local/realdb)
+  if (p.startsWith('/realms/')) {
+    res.setHeader('access-control-allow-origin', '*');
+    res.setHeader('access-control-allow-headers', '*');
+    if (req.method === 'OPTIONS') return res.writeHead(204).end();
+  }
   try {
     if (p === '/graphql' || p === '/graphql_anonymous') {
       const { query, variables, operationName } = JSON.parse(await body(req));
@@ -455,7 +461,8 @@ http.createServer(async (req, res) => {
     if (p === '/realms/cable/token') {
       const form = new URLSearchParams(await body(req));
       const nonce = nonces.get(form.get('code'));
-      return json(res, { access_token: 'mock-access', token_type: 'Bearer', expires_in: 7200, id_token: await idToken(nonce) });
+      // A JWT for the client as access token too, so the real backend accepts it (local/realdb)
+      return json(res, { access_token: await idToken(), token_type: 'Bearer', expires_in: 7200, id_token: await idToken(nonce) });
     }
     if (p === '/realms/cable/userinfo') return json(res, { sub: 'user-1', preferred_username: 'monteur' });
     // static, SPA fallback
