@@ -68,28 +68,14 @@ where
     I::Item: UnalignedDuct<S>,
     S: std::cmp::PartialEq,
 {
-    fn forward_result(
-        duct: <I as Iterator>::Item,
-    ) -> Option<
-        Result<
-            DirectedDuct<<I as Iterator>::Item, S>,
-            DuctAlignmentError<<I as Iterator>::Item, S>,
-        >,
-    > {
+    fn forward_result(duct: <I as Iterator>::Item) -> Option<AlignmentResult<I::Item, S>> {
         Some(Ok(DirectedDuct {
             direction: DuctDirection::Forward,
             duct,
             phantom: Default::default(),
         }))
     }
-    fn backward_result(
-        duct: <I as Iterator>::Item,
-    ) -> Option<
-        Result<
-            DirectedDuct<<I as Iterator>::Item, S>,
-            DuctAlignmentError<<I as Iterator>::Item, S>,
-        >,
-    > {
+    fn backward_result(duct: <I as Iterator>::Item) -> Option<AlignmentResult<I::Item, S>> {
         Some(Ok(DirectedDuct {
             direction: DuctDirection::Backward,
             duct,
@@ -98,17 +84,21 @@ where
     }
 }
 
+/// The ducts (boxed: an error shouldn't be larger than a result) that don't connect.
 #[derive(Debug)]
 pub enum DuctAlignmentError<Item: UnalignedDuct<S>, S: PartialEq> {
-    NoConnectionFoundOnPair { first: Item, second: Item },
-    NoConnectionFoundForSchacht { last_schacht: S, duct: Item },
+    NoConnectionFoundOnPair { first: Box<Item>, second: Box<Item> },
+    NoConnectionFoundForSchacht { last_schacht: S, duct: Box<Item> },
 }
+
+/// A duct turned to follow the one before, or why it can't.
+pub type AlignmentResult<Item, S> = Result<DirectedDuct<Item, S>, DuctAlignmentError<Item, S>>;
 
 impl<SI: Iterator, S: PartialEq> Iterator for AlignedDuctIterator<SI, S>
 where
     SI::Item: UnalignedDuct<S>,
 {
-    type Item = Result<DirectedDuct<SI::Item, S>, DuctAlignmentError<SI::Item, S>>;
+    type Item = AlignmentResult<SI::Item, S>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let duct = self.temp_entry.take().or_else(|| self.source.next())?;
@@ -124,7 +114,7 @@ where
             } else {
                 Some(Err(DuctAlignmentError::NoConnectionFoundForSchacht {
                     last_schacht,
-                    duct,
+                    duct: Box::new(duct),
                 }))
             }
         } else {
@@ -143,8 +133,8 @@ where
                     Self::forward_result(duct)
                 } else {
                     Some(Err(DuctAlignmentError::NoConnectionFoundOnPair {
-                        first: duct,
-                        second: second_entry,
+                        first: Box::new(duct),
+                        second: Box::new(second_entry),
                     }))
                 }
             } else {

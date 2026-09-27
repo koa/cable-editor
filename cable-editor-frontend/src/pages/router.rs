@@ -179,55 +179,22 @@ impl PlanView {
             PlanView::Map => ("Karte".into(), PlanView::Map),
         };
 
-        let mut entries = Vec::new();
-        entries.push(MenuEntry {
-            selected: false,
-            text: "Ändern".into(),
-            target: AppRoute::Plan {
-                plan_id,
-                view: PlanView::Edit,
-            },
-        });
-
-        entries.push(MenuEntry {
-            selected: false,
-            text: "Schacht".into(),
-            target: AppRoute::Plan {
-                plan_id,
-                view: PlanView::ListOfCabinets,
-            },
-        });
-
-        entries.push(MenuEntry {
-            selected: false,
-            text: "Kabel".into(),
-            target: AppRoute::Plan {
-                plan_id,
-                view: PlanView::ListOfCables,
-            },
-        });
-
-        entries.push(MenuEntry {
-            selected: false,
-            text: "Trasse".into(),
-            target: AppRoute::Plan {
-                plan_id,
-                view: PlanView::ListOfDucts,
-            },
-        });
-
-        entries.push(MenuEntry {
-            selected: false,
-            text: "Karte".into(),
-            target: AppRoute::Plan {
-                plan_id,
-                view: PlanView::Map,
-            },
-        });
-
-        for entry in &mut entries {
-            entry.selected = matches!(&entry.target, AppRoute::Plan { view, .. } if *view == area);
-        }
+        // The areas of the plan, each leading to its start page
+        let areas: [(&str, PlanView); 5] = [
+            ("Ändern", PlanView::Edit),
+            ("Schacht", PlanView::ListOfCabinets),
+            ("Kabel", PlanView::ListOfCables),
+            ("Trasse", PlanView::ListOfDucts),
+            ("Karte", PlanView::Map),
+        ];
+        let entries = areas
+            .into_iter()
+            .map(|(text, view)| MenuEntry {
+                selected: view == area,
+                text: text.into(),
+                target: AppRoute::Plan { plan_id, view },
+            })
+            .collect::<Vec<_>>();
         item_contents.push(html!(<MenuDropdown {title} {entries}/>));
 
         match self {
