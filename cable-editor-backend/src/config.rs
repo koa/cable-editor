@@ -88,6 +88,80 @@ impl NetboxSettings {
     }
 }
 
+/// Delivery to the Leitungskataster (SIA405 LKMap, see docs/leitungskataster.md); optional, only
+/// the export needs it.
+#[derive(Deserialize)]
+pub struct LkmapSettings {
+    datenlieferant_uid: String,
+    oid_prefix: String,
+    perimeter_puffer_m: Option<f64>,
+}
+
+impl LkmapSettings {
+    /// UID of whoever delivers the data (`Datenlieferant`), the same for all owners.
+    pub fn datenlieferant_uid(&self) -> &str {
+        &self.datenlieferant_uid
+    }
+    /// The first 8 characters of every `STANDARDOID`.
+    pub fn oid_prefix(&self) -> &str {
+        &self.oid_prefix
+    }
+    /// Metres around the convex hull of an owner's delivered ducts.
+    pub fn perimeter_puffer_m(&self) -> f64 {
+        self.perimeter_puffer_m.unwrap_or(10.0)
+    }
+
+    fn validated(self) -> Result<Self, ConfigError> {
+        if !is_uid(&self.datenlieferant_uid) {
+            return Err(ConfigError::Message(format!(
+                "lkmap.datenlieferant_uid {:?} is no UID like CHE-123.456.789",
+                self.datenlieferant_uid
+            )));
+        }
+        // STANDARDOID: 8 characters prefix + 8 characters, an XML id (starts with a letter)
+        let prefix = self.oid_prefix.as_bytes();
+        if prefix.len() != 8
+            || !prefix[0].is_ascii_alphabetic()
+            || !prefix.iter().all(u8::is_ascii_alphanumeric)
+        {
+            return Err(ConfigError::Message(format!(
+                "lkmap.oid_prefix {:?} must be 8 letters or digits, starting with a letter",
+                self.oid_prefix
+            )));
+        }
+        if self.perimeter_puffer_m().is_nan() || self.perimeter_puffer_m() <= 0.0 {
+            return Err(ConfigError::Message(
+                "lkmap.perimeter_puffer_m must be positive".into(),
+            ));
+        }
+        Ok(self)
+    }
+}
+
+/// A real (`CHE-`) or fictitious (`ZHE-`) UID like `CHE-123.456.789`, as the table eigentuemer
+/// checks it.
+pub fn is_uid(uid: &str) -> bool {
+    let Some(digits) = uid
+        .strip_prefix("CHE-")
+        .or_else(|| uid.strip_prefix("ZHE-"))
+    else {
+        return false;
+    };
+    let groups: Vec<&str> = digits.split('.').collect();
+    groups.len() == 3
+        && groups
+            .iter()
+            .all(|g| g.len() == 3 && g.bytes().all(|b| b.is_ascii_digit()))
+}
+
+fn create_lkmap_settings() -> Result<Option<LkmapSettings>, ConfigError> {
+    match read_cfg()?.get::<LkmapSettings>("lkmap") {
+        Ok(settings) => settings.validated().map(Some),
+        Err(ConfigError::NotFound(_)) => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
 fn create_netbox_settings() -> Result<NetboxSettings, ConfigError> {
     let cfg = read_cfg()?;
     cfg.get("netbox")
@@ -110,3 +184,21 @@ pub static CONFIG: LazyLock<Settings> =
     LazyLock::new(|| create_settings().expect("Cannot load config.yaml"));
 pub static NETBOX_CONFIG: LazyLock<NetboxSettings> =
     LazyLock::new(|| create_netbox_settings().expect("Cannot load config.yaml"));
+/// Missing without the section `lkmap`; an invalid one stops the start (`main.rs` reads it early).
+pub static LKMAP_CONFIG: LazyLock<Option<LkmapSettings>> =
+    LazyLock::new(|| create_lkmap_settings().expect("Invalid section lkmap in config.yaml"));
+
+#[cfg(test)]
+mod tests {
+    use super::is_uid;
+
+    #[test]
+    fn uids() {
+        assert!(is_uid("CHE-123.456.789"));
+        assert!(is_uid("ZHE-100.100.101"));
+        assert!(!is_uid("CHE-123.456.78"));
+        assert!(!is_uid("CHE-123456789"));
+        assert!(!is_uid("DE-123.456.789"));
+        assert!(!is_uid("CHE-12a.456.789"));
+    }
+}

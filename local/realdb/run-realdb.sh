@@ -68,6 +68,9 @@ netbox:
   token: none
   provider_id: 1
   type_id: 1
+lkmap:
+  datenlieferant_uid: "CHE-123.456.789"
+  oid_prefix: "ch4711ab"
 EOF
 # The backend reads the issuer's discovery at startup, so the mock must be up
 until curl -sf http://localhost:8099/realms/cable/.well-known/openid-configuration >/dev/null; do sleep 0.2; done

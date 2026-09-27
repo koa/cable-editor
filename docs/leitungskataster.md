@@ -172,6 +172,12 @@ lkmap:
 Datenherr und Eigentümer stehen nicht in der Konfiguration, sondern in der Tabelle
 `eigentuemer` (siehe 4.).
 
+Umgesetzt in `config.rs` (`LKMAP_CONFIG`): der Abschnitt ist optional (ohne ihn kein Export,
+beim Start ein Hinweis im Log), ein ungültiger (UID nicht im Format `CHE-`/`ZHE-123.456.789`,
+Präfix nicht 8 Buchstaben oder Ziffern mit einem Buchstaben vorne, Puffer nicht positiv)
+verhindert den Start. Helm: `config.lkmap` (`datenlieferantUid`, `oidPrefix`,
+`perimeterPufferM`), ohne `datenlieferantUid` kein Abschnitt.
+
 **OID / `OBJ_ID`** ohne eigene Spalte, stabil aus Präfix, Objektart und Datenbank-Id:
 Schacht 42 → `ch4711ab` + `s0000042`, Trasse 7 → `ch4711ab` + `t0000007`.
 
@@ -310,7 +316,7 @@ Im Export konstant, ohne Spalte:
 ## 7. Umsetzung (Reihenfolge)
 
 1. ~~Migration (`eigentuemer`, Enums, Spalten, Trigger, `lk_lieferung`), Diesel-Schema~~
-   (erledigt); Konfiguration `lkmap`, Backend-Felder.
+   (erledigt); ~~Konfiguration `lkmap`~~ (erledigt), Backend-Felder.
 2. UI: Eigentümerliste, Felder bei Trasse, Schacht (und Schachttyp bei Bedarf).
 3. LKMap-Export mit Validierungstest.
 4. Perimeter-Export.

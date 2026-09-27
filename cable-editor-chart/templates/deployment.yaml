@@ -85,6 +85,16 @@ spec:
               value: {{ .Values.config.netboxProviderId | quote }}
             - name: APP__NETBOX__TYPE_ID
               value: {{ .Values.config.netboxTypeId | quote }}
+            {{- with .Values.config.lkmap }}
+            {{- if .datenlieferantUid }}
+            - name: APP__LKMAP__DATENLIEFERANT_UID
+              value: {{ .datenlieferantUid | quote }}
+            - name: APP__LKMAP__OID_PREFIX
+              value: {{ required "Set config.lkmap.oidPrefix" .oidPrefix | quote }}
+            - name: APP__LKMAP__PERIMETER_PUFFER_M
+              value: {{ .perimeterPufferM | quote }}
+            {{- end }}
+            {{- end }}
             - name: LOG_LEVEL
               value: {{ .Values.config.logLevel | quote }}
             - name: DATABASE_URL

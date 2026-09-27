@@ -17,7 +17,7 @@ use async_graphql::{
 use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse};
 use cable_editor_backend::{
     RunQueryDsl,
-    config::CONFIG,
+    config::{CONFIG, LKMAP_CONFIG},
     db::{DB, connect, run_sync_migrations},
     graphql::{
         anonymous::{AnonymousGraphqlSchema, create_anonymous_schema},
@@ -287,6 +287,9 @@ async fn main() -> Result<(), BackendError> {
 
     if CONFIG.planner_groups().next().is_none() && CONFIG.admin_groups().next().is_none() {
         warn!("Neither planner_groups nor admin_groups configured, nobody can change anything");
+    }
+    if LKMAP_CONFIG.is_none() {
+        info!("No section lkmap configured, no delivery to the Leitungskataster");
     }
 
     let bind_addr = CONFIG.server_bind_address();

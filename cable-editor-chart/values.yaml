@@ -67,3 +67,11 @@ config:
   netboxProviderId: 1
   # Typ der Circuits
   netboxTypeId: 1
+  # Lieferung an den Leitungskataster (docs/leitungskataster.md); ohne datenlieferantUid keine
+  lkmap:
+    # UID der liefernden Stelle (Datenlieferant), z.B. "CHE-123.456.789"
+    datenlieferantUid: ""
+    # Präfix der OIDs (STANDARDOID), 8 Zeichen, beginnt mit einem Buchstaben
+    oidPrefix: ""
+    # Puffer in Metern um die konvexe Hülle der gelieferten Trassen (Zuständigkeitsperimeter)
+    perimeterPufferM: 10
