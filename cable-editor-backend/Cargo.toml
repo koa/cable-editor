@@ -20,6 +20,7 @@ thiserror = "2.0"
 log = "0.4"
 
 async-recursion = "1.1"
+itertools = "0.15"
 cynic = { version = "3", features = ["http-reqwest"] }
 #netbox = "0.8.0"
 reqwest = { version = "0.13", features = ["rustls"] }

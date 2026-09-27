@@ -9,8 +9,9 @@ use crate::{
     graphql::authorization::{Role, RoleGuard},
 };
 use async_graphql::{Context, InputObject, Object};
-use diesel::{ExpressionMethods, OptionalExtension, QueryDsl};
+use diesel::{ExpressionMethods, OptionalExtension, QueryDsl, dsl::count_star};
 use diesel_async::{AsyncConnection, RunQueryDsl};
+use itertools::Itertools;
 
 #[derive(Default)]
 pub struct CableMutation;
@@ -100,10 +101,29 @@ impl CableMutation {
 
         Ok(updated_db_cable)
     }
+    /// Refused while its fibers are attached to ports, in the current state or in a plan.
     #[graphql(guard = "RoleGuard(Role::Admin)")]
     async fn delete_cable(&self, ctx: &Context<'_>, cable_id: i32) -> async_graphql::Result<bool> {
-        authenticated::get_connection(ctx)
-            .await?
+        let mut connection = authenticated::get_connection(ctx).await?;
+        let usages: Vec<(String, i64)> = schema::port_usage::table
+            .inner_join(schema::plan::table)
+            .filter(schema::port_usage::cable.eq(cable_id))
+            .group_by(schema::plan::name)
+            .select((schema::plan::name, count_star()))
+            .order_by(schema::plan::name)
+            .load(&mut connection)
+            .await?;
+        if !usages.is_empty() {
+            let plans = usages
+                .iter()
+                .map(|(plan, count)| format!("{plan}: {count}"))
+                .join(", ");
+            return Err(format!(
+                "Das Kabel ist noch an Ports angeschlossen ({plans}), zuerst die Fasern lösen"
+            )
+            .into());
+        }
+        connection
             .transaction(async move |conn| {
                 diesel::delete(
                     schema::kabel_trasse::table.filter(schema::kabel_trasse::kabel.eq(cable_id)),

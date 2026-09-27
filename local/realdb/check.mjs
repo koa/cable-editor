@@ -188,6 +188,11 @@ await refused('deleteDuct with cables', 'mutation{ deleteDuct(ductId:4) }', {}, 
 await refused('deleteSchacht with ducts', 'mutation($id:Int!){ deleteSchacht(schachtId:$id) }', { id: schachtId }, /Trassen/);
 await refused('updateCable to an empty path', 'mutation($c:Int!){ updateCable(cableId:$c, path:[]) { id } }', { c: cables.K4 }, /Segment/);
 await refused('setPortUsage on the baseline', 'mutation($p:Int!){ setPortUsage(planId:0, changes:[{portId:$p, side:FRONT, fiber:{remove:true}}]) }', { p: ports[4][0] }, /Baseline|baseline/);
+await refused('deleteCable attached in the baseline', 'mutation($c:Int!){ deleteCable(cableId:$c) }', { c: cables.K1 }, /Baseline: 6/);
+await refused('deleteCable attached in a plan', 'mutation($c:Int!){ deleteCable(cableId:$c) }', { c: cables.K4 }, /Umbau Berg: 3/);
+const spare = (await gql('mutation{ createCable(name:"Reserve"){ id } }')).createCable.id;
+await gql('mutation($c:Int!){ updateCable(cableId:$c, path:[5]){ id } }', { c: spare });
+check('deleteCable without ports', (await gql('mutation($c:Int!){ deleteCable(cableId:$c) }', { c: spare })).deleteCable === true);
 await gql('mutation($d:Int!){ deleteDuct(ductId:$d) }', { d: duct.createDuct.id });
 await gql('mutation($id:Int!){ deleteSchacht(schachtId:$id) }', { id: schachtId });
 

@@ -834,6 +834,7 @@ dependencies = [
  "diesel-derive-enum",
  "diesel_migrations",
  "dotenvy",
+ "itertools 0.15.0",
  "log",
  "postgis_diesel",
  "reqwest 0.13.4",
