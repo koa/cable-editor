@@ -12,14 +12,34 @@ use async_graphql::{Context, SimpleObject};
 use diesel::{ExpressionMethods, HasQuery, QueryDsl};
 use diesel_async::RunQueryDsl;
 
-/// An owner's transfer file (SIA405 LKMap) and what couldn't go into it: a report, the UI says
-/// why (docs/fehlermeldungen.md).
+/// A transfer file of the delivery.
 #[derive(SimpleObject)]
-pub struct LkmapExport {
-    /// `<uid>-kommunikation-lkmap.xtf`
+pub struct TransferFile {
+    /// `<uid>-kommunikation-lkmap.xtf`, `<uid>-zustaendigkeit-peri.xtf`
     pub file_name: String,
     /// The XTF, UTF-8
     pub xtf: String,
+}
+
+impl TryFrom<lkmap::TransferFile> for TransferFile {
+    type Error = std::string::FromUtf8Error;
+
+    fn try_from(file: lkmap::TransferFile) -> Result<Self, Self::Error> {
+        Ok(TransferFile {
+            file_name: file.file_name,
+            xtf: String::from_utf8(file.xtf)?,
+        })
+    }
+}
+
+/// An owner's transfer files (SIA405 LKMap, Zuständigkeitsperimeter) and what couldn't go into
+/// them: a report, the UI says why (docs/fehlermeldungen.md).
+#[derive(SimpleObject)]
+pub struct LkmapExport {
+    /// The ducts and Schächte
+    pub lkmap: TransferFile,
+    /// The area they lie in
+    pub perimeter: TransferFile,
     pub schacht_count: i32,
     pub duct_count: i32,
     /// Schächte without position: neither they nor their ducts can be delivered
@@ -42,8 +62,8 @@ pub async fn export(ctx: &Context<'_>, owner_id: i32) -> async_graphql::Result<L
         .load(&mut connection)
         .await?;
     Ok(LkmapExport {
-        file_name: export.file_name,
-        xtf: String::from_utf8(export.xtf)?,
+        lkmap: export.lkmap.try_into()?,
+        perimeter: export.perimeter.try_into()?,
         schacht_count: i32::try_from(export.schacht_count)?,
         duct_count: i32::try_from(export.duct_count)?,
         schaechte_without_position,

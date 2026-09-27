@@ -59,8 +59,27 @@ pub struct LkLinie {
     pub line: Vec<(f64, f64)>,
 }
 
-/// The transfer file, UTF-8.
-pub fn write(delivery: &Delivery) -> io::Result<Vec<u8>> {
+/// A model of a transfer file.
+pub(super) struct Model {
+    pub name: &'static str,
+    pub version: &'static str,
+    pub uri: &'static str,
+}
+
+const LKMAP: Model = Model {
+    name: MODEL,
+    version: MODEL_VERSION,
+    uri: MODEL_URI,
+};
+
+/// An INTERLIS 2.3 transfer file (UTF-8) of one basket of `topic`, its objects written by
+/// `objects`.
+pub(super) fn transfer(
+    model: &Model,
+    topic: &str,
+    basket_id: &str,
+    objects: impl FnOnce(&mut Xtf) -> io::Result<()>,
+) -> io::Result<Vec<u8>> {
     let mut xtf = Xtf(Writer::new_with_indent(Vec::new(), b' ', 1));
     xtf.0
         .write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)))?;
@@ -76,15 +95,32 @@ pub fn write(delivery: &Delivery) -> io::Result<Vec<u8>> {
     xtf.empty(
         "MODEL",
         &[
-            ("NAME", MODEL),
-            ("VERSION", MODEL_VERSION),
-            ("URI", MODEL_URI),
+            ("NAME", model.name),
+            ("VERSION", model.version),
+            ("URI", model.uri),
         ],
     )?;
     xtf.end("MODELS")?;
     xtf.end("HEADERSECTION")?;
     xtf.start("DATASECTION", &[])?;
-    xtf.start(TOPIC, &[("BID", &delivery.basket_id)])?;
+    xtf.start(topic, &[("BID", basket_id)])?;
+    objects(&mut xtf)?;
+    xtf.end(topic)?;
+    xtf.end("DATASECTION")?;
+    xtf.end("TRANSFER")?;
+    let mut bytes = xtf.0.into_inner();
+    bytes.push(b'\n');
+    Ok(bytes)
+}
+
+/// The transfer file of the delivery.
+pub fn write(delivery: &Delivery) -> io::Result<Vec<u8>> {
+    transfer(&LKMAP, TOPIC, &delivery.basket_id, |xtf| {
+        write_objects(xtf, delivery)
+    })
+}
+
+fn write_objects(xtf: &mut Xtf, delivery: &Delivery) -> io::Result<()> {
     for schacht in &delivery.schaechte {
         let class = format!("{TOPIC}.LKPunkt");
         xtf.start(&class, &[("TID", &schacht.oid)])?;
@@ -128,41 +164,36 @@ pub fn write(delivery: &Delivery) -> io::Result<Vec<u8>> {
         xtf.text("Objektart", DUCT_OBJEKTART)?;
         xtf.end(&class)?;
     }
-    xtf.end(TOPIC)?;
-    xtf.end("DATASECTION")?;
-    xtf.end("TRANSFER")?;
-    let mut bytes = xtf.0.into_inner();
-    bytes.push(b'\n');
-    Ok(bytes)
+    Ok(())
 }
 
 /// `Letzte_Aenderung` (`INTERLIS_1_DATE`)
-fn interlis_date(date: NaiveDate) -> String {
+pub(super) fn interlis_date(date: NaiveDate) -> String {
     date.format("%Y%m%d").to_string()
 }
 
-struct Xtf(Writer<Vec<u8>>);
+pub(super) struct Xtf(Writer<Vec<u8>>);
 
 impl Xtf {
-    fn start(&mut self, name: &str, attributes: &[(&str, &str)]) -> io::Result<()> {
+    pub(super) fn start(&mut self, name: &str, attributes: &[(&str, &str)]) -> io::Result<()> {
         let start = BytesStart::new(name).with_attributes(attributes.iter().copied());
         self.0.write_event(Event::Start(start))
     }
-    fn empty(&mut self, name: &str, attributes: &[(&str, &str)]) -> io::Result<()> {
+    pub(super) fn empty(&mut self, name: &str, attributes: &[(&str, &str)]) -> io::Result<()> {
         let empty = BytesStart::new(name).with_attributes(attributes.iter().copied());
         self.0.write_event(Event::Empty(empty))
     }
-    fn end(&mut self, name: &str) -> io::Result<()> {
+    pub(super) fn end(&mut self, name: &str) -> io::Result<()> {
         self.0.write_event(Event::End(BytesEnd::new(name)))
     }
-    fn text(&mut self, name: &str, text: &str) -> io::Result<()> {
+    pub(super) fn text(&mut self, name: &str, text: &str) -> io::Result<()> {
         self.0
             .create_element(name)
             .write_text_content(BytesText::new(text))?;
         Ok(())
     }
     /// LV95 in metres, to the millimetre
-    fn coord(&mut self, (east, north): (f64, f64)) -> io::Result<()> {
+    pub(super) fn coord(&mut self, (east, north): (f64, f64)) -> io::Result<()> {
         self.start("COORD", &[])?;
         self.text("C1", &format!("{east:.3}"))?;
         self.text("C2", &format!("{north:.3}"))?;

@@ -2,7 +2,7 @@
 
 Stand: 27.09.2026 – Konzept; umgesetzt sind die Datenbank mit den Feldern in GraphQL (Abschnitt
 4), die Konfiguration (Abschnitt 3), die Felder in der UI (Abschnitt 6, ohne die Admin-Seite)
-und der LKMap-Export (Abschnitt 5, `cable-editor-backend/src/lkmap/`). Der heutige Export
+und der Export beider Dateien (Abschnitt 5, `cable-editor-backend/src/lkmap/`). Der heutige Export
 (`cable-editor-backend/src/export.rs`) ist ein Platzhalter und wird ersetzt.
 
 ## 1. Anforderungen
@@ -333,6 +333,10 @@ Im Export konstant, ohne Spalte:
   `ST_Buffer(ST_ConvexHull(ST_Collect(<Linien der gelieferten Trassen des Eigentümers>)), perimeter_puffer_m)`,
   Bögen als Geraden (`ST_Buffer` mit wenigen Segmenten pro Viertelkreis, z. B. `quad_segs=4`);
   `Letzte_Aenderung` = spätestes `geaendert_am` der gelieferten Trassen des Eigentümers.
+  Umgesetzt (`lkmap/perimeter.rs`, in `lkmapExport` als `perimeter`): die Hülle genau der
+  gelieferten Objekte (Linien der Trassen und Positionen der Schächte), `Letzte_Aenderung` das
+  späteste ihrer Daten, die Koordinaten auf mm gerundet ohne doppelte Punkte; BID
+  `<prefix>p<Eigentümer>`, TID `<prefix>z<Eigentümer>` (das Modell hat keine OID).
 - Paketierung: Dateinamen nach Konvention, je ein ZIP.
 - Prüfung: Unit-Tests für die Datei (`cargo test -p cable-editor-backend lkmap`) und
   `ilivalidator` gegen die Modelle mit `local/lkmap/validate.sh <datei.xtf>` (lädt ilivalidator
@@ -379,7 +383,7 @@ Was die Lieferung in der UI braucht; die Seiten für Eigentümer und Schachttype
       (erledigt).
    4. ~~Schächte: Felder in `SchachtInput`, Eigenschaften~~ (erledigt).
 3. ~~LKMap-Export mit Validierungstest~~ (erledigt).
-4. Perimeter-Export.
+4. ~~Perimeter-Export~~ (erledigt).
 5. Admin-Seite mit Download und Protokoll.
 6. Später: automatischer Upload zum Checkservice (infoGrips dokumentiert nur das Webformular;
    Schnittstelle abklären) und Hinweis per Mail vor Fristen.

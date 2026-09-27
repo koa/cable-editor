@@ -1,6 +1,7 @@
 //! The delivery to the Leitungskataster Kanton Zürich (see docs/leitungskataster.md): per owner
 //! with UID the delivered ducts and the Schächte where one ends, as SIA405 LKMap transfer file.
 
+pub mod perimeter;
 pub mod xtf;
 
 use crate::{
@@ -17,21 +18,31 @@ use cable_editor_common::{ObjectKind, UserError};
 use chrono::NaiveDate;
 use diesel::{
     ExpressionMethods, HasQuery, OptionalExtension, QueryDsl, QueryableByName, sql_query,
-    sql_types::{Bool, Date, Integer, Nullable},
+    sql_types::{Array, Bool, Date, Double, Integer, Nullable},
 };
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
+use perimeter::Perimeter;
 use postgis_diesel::{
     sql_types::Geometry,
-    types::{LineString, Point},
+    types::{LineString, Point, Polygon},
 };
 use xtf::{Delivery, LkLinie, LkPunkt};
 
-/// An owner's transfer file and what couldn't go into it.
+/// A transfer file of the delivery.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Export {
-    /// `<uid>-kommunikation-lkmap.xtf`, the UID in lower case with `-` for `.`
+pub struct TransferFile {
+    /// `<uid>-<content>.xtf`, the UID in lower case with `-` for `.`
     pub file_name: String,
     pub xtf: Vec<u8>,
+}
+
+/// An owner's transfer files and what couldn't go into them.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Export {
+    /// The ducts and Schächte (`SIA405_LKMap_2015_LV95`)
+    pub lkmap: TransferFile,
+    /// The Zuständigkeitsperimeter (`Perimeter_LK_ZH_V2_LV95`)
+    pub perimeter: TransferFile,
     pub schacht_count: usize,
     pub duct_count: usize,
     /// Schächte without position: neither they nor their ducts can be delivered
@@ -112,7 +123,21 @@ where s.eigentuemer_id = $1
                 and (t.schacht_a = s.id or t.schacht_z = s.id))
 order by s.id";
 
-/// The transfer file of the owner (with UID) and what it lacks.
+/// The area around an owner's delivered ducts and Schächte: their convex hull with a buffer,
+/// the arcs of the buffer as straight segments (4 per quarter circle).
+const PERIMETER: &str = "
+select st_buffer(st_convexhull(st_collect(o.geom)), $3, 'quad_segs=4') as area
+from (select v.geom from trassen_mit_endpunkten v where v.id = any($1)
+      union all
+      select s.geom from schacht s where s.id = any($2)) o";
+
+#[derive(QueryableByName)]
+struct PerimeterRow {
+    #[diesel(sql_type = Nullable<Geometry>)]
+    area: Option<Polygon<Point>>,
+}
+
+/// The transfer files of the owner (with UID) and what they lack.
 pub async fn export(
     connection: &mut AsyncPgConnection,
     owner_id: i32,
@@ -147,11 +172,12 @@ pub async fn export(
     let prefix = config.oid_prefix();
 
     let mut ducts = Vec::new();
+    let mut duct_ids = Vec::new();
     let mut ducts_without_line = Vec::new();
     for row in duct_rows {
         match row.line.filter(|_| row.ends_located) {
             Some(line) => ducts.push(LkLinie {
-                oid: oid(prefix, ObjectKind::Duct, row.id)?,
+                oid: oid(prefix, 't', row.id)?,
                 letzte_aenderung: row.geaendert,
                 // A straight line between the Schächte says nothing about the real course
                 lagebestimmung: if row.has_course {
@@ -162,15 +188,20 @@ pub async fn export(
                 breite_mm: row.breite_mm,
                 line: line.points.iter().map(|p| (p.x, p.y)).collect(),
             }),
-            None => ducts_without_line.push(row.id),
+            None => {
+                ducts_without_line.push(row.id);
+                continue;
+            }
         }
+        duct_ids.push(row.id);
     }
     let mut schaechte = Vec::new();
+    let mut schacht_ids = Vec::new();
     let mut schaechte_without_position = Vec::new();
     for row in schacht_rows {
         match row.geom {
             Some(position) => schaechte.push(LkPunkt {
-                oid: oid(prefix, ObjectKind::Schacht, row.id)?,
+                oid: oid(prefix, 's', row.id)?,
                 letzte_aenderung: row.geaendert,
                 lagebestimmung: row.lagebestimmung,
                 dimension1_mm: row.dimension1_mm,
@@ -178,23 +209,58 @@ pub async fn export(
                 objektart: row.objektart,
                 position: (position.x, position.y),
             }),
-            None => schaechte_without_position.push(row.id),
+            None => {
+                schaechte_without_position.push(row.id);
+                continue;
+            }
         }
+        schacht_ids.push(row.id);
     }
+    // All of them without position: there's no place to deliver
+    let Some(letzte_aenderung) = ducts
+        .iter()
+        .map(|d| d.letzte_aenderung)
+        .chain(schaechte.iter().map(|s| s.letzte_aenderung))
+        .max()
+    else {
+        return Err(UserError::NothingToDeliver { owner: owner.name }.into());
+    };
+    let area = sql_query(PERIMETER)
+        .bind::<Array<Integer>, _>(&duct_ids)
+        .bind::<Array<Integer>, _>(&schacht_ids)
+        .bind::<Double, _>(config.perimeter_puffer_m())
+        .get_result::<PerimeterRow>(connection)
+        .await?
+        .area
+        .ok_or("PostGIS returned no perimeter")?;
+    let outer = area.rings.into_iter().next().unwrap_or_default();
+    let perimeter = Perimeter {
+        basket_id: oid(prefix, 'p', owner.id)?,
+        tid: oid(prefix, 'z', owner.id)?,
+        datenherr: uid.clone(),
+        datenlieferant: config.datenlieferant_uid().to_string(),
+        letzte_aenderung,
+        boundary: perimeter::rounded_ring(outer.iter().map(|p| (p.x, p.y))),
+    };
     let delivery = Delivery {
-        basket_id: oid(prefix, ObjectKind::Owner, owner.id)?,
+        basket_id: oid(prefix, 'b', owner.id)?,
         datenherr: uid.clone(),
         datenlieferant: config.datenlieferant_uid().to_string(),
         eigentuemer: owner.delivered_name().to_string(),
         schaechte,
         ducts,
     };
+    let file_name =
+        |content: &str| format!("{}-{content}.xtf", uid.to_lowercase().replace('.', "-"));
     Ok(Export {
-        file_name: format!(
-            "{}-kommunikation-lkmap.xtf",
-            uid.to_lowercase().replace('.', "-")
-        ),
-        xtf: xtf::write(&delivery)?,
+        lkmap: TransferFile {
+            file_name: file_name("kommunikation-lkmap"),
+            xtf: xtf::write(&delivery)?,
+        },
+        perimeter: TransferFile {
+            file_name: file_name("zustaendigkeit-peri"),
+            xtf: perimeter::write(&perimeter)?,
+        },
         schacht_count: delivery.schaechte.len(),
         duct_count: delivery.ducts.len(),
         schaechte_without_position,
@@ -203,15 +269,15 @@ pub async fn export(
 }
 
 /// The STANDARDOID of an object: the configured prefix (8 characters), a letter for its kind
-/// and its id in 7 digits; also `OBJ_ID`. A basket (the delivery of an owner) is `b` + the
-/// owner's id.
-fn oid(prefix: &str, kind: ObjectKind, id: i32) -> Result<String, UserError> {
-    let letter = match kind {
-        ObjectKind::Schacht => 's',
-        ObjectKind::Duct => 't',
-        _ => 'b',
-    };
+/// and its id in 7 digits; also `OBJ_ID`. `s`: Schacht, `t`: duct, of an owner's delivery `b`:
+/// the LKMap basket, `p`: the perimeter's basket, `z`: the perimeter.
+fn oid(prefix: &str, letter: char, id: i32) -> Result<String, UserError> {
     if !(0..10_000_000).contains(&id) {
+        let kind = match letter {
+            's' => ObjectKind::Schacht,
+            't' => ObjectKind::Duct,
+            _ => ObjectKind::Owner,
+        };
         return Err(UserError::LkmapIdTooLarge { kind, id });
     }
     Ok(format!("{prefix}{letter}{id:07}"))
@@ -223,20 +289,14 @@ mod tests {
 
     #[test]
     fn oids() {
+        assert_eq!(oid("ch4711ab", 's', 42), Ok("ch4711abs0000042".into()));
         assert_eq!(
-            oid("ch4711ab", ObjectKind::Schacht, 42),
-            Ok("ch4711abs0000042".into())
-        );
-        assert_eq!(
-            oid("ch4711ab", ObjectKind::Duct, 9_999_999),
+            oid("ch4711ab", 't', 9_999_999),
             Ok("ch4711abt9999999".into())
         );
+        assert_eq!(oid("ch4711ab", 'b', 1), Ok("ch4711abb0000001".into()));
         assert_eq!(
-            oid("ch4711ab", ObjectKind::Owner, 1),
-            Ok("ch4711abb0000001".into())
-        );
-        assert_eq!(
-            oid("ch4711ab", ObjectKind::Duct, 10_000_000),
+            oid("ch4711ab", 't', 10_000_000),
             Err(UserError::LkmapIdTooLarge {
                 kind: ObjectKind::Duct,
                 id: 10_000_000

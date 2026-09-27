@@ -299,7 +299,7 @@ check('schachtTyp of a deleted type', (await gql('query($id:Int!){ schachtTyp(ty
 // ---------------------------------------------------------------- Leitungskataster
 // run-realdb.sh configures lkmap (Datenlieferant CHE-123.456.789, prefix ch4711ab); the default
 // owner has the UID CHE-123.456.789 since the owner checks
-const lkmapExport = 'query($o:Int!){ lkmapExport(ownerId:$o) { fileName xtf schachtCount ductCount schaechteWithoutPosition { id } ductsWithoutLine { id } } }';
+const lkmapExport = 'query($o:Int!){ lkmapExport(ownerId:$o) { lkmap { fileName xtf } perimeter { fileName xtf } schachtCount ductCount schaechteWithoutPosition { id } ductsWithoutLine { id } } }';
 const withoutUid = (await gql(createOwner, { o: { name: 'Ohne UID' } })).createOwner;
 await refused('lkmapExport of an owner without UID', lkmapExport, { o: withoutUid.id }, { code: 'OwnerWithoutUid', owner: 'Ohne UID' });
 await refused('lkmapExport with nothing delivered', lkmapExport, { o: standard.id }, { code: 'NothingToDeliver' });
@@ -312,24 +312,36 @@ const unlocatedDuct = (await gql('mutation($d:DuctInput!){ createDuct(duct:$d) {
 const exported = await gql(lkmapExport, { o: standard.id });
 const lk = exported.lkmapExport;
 console.log(`lkmapExport${statements(exported)}`);
-check('lkmapExport file name', lk.fileName === 'che-123-456-789-kommunikation-lkmap.xtf', lk.fileName);
+check('lkmapExport file names', lk.lkmap.fileName === 'che-123-456-789-kommunikation-lkmap.xtf'
+  && lk.perimeter.fileName === 'che-123-456-789-zustaendigkeit-peri.xtf', `${lk.lkmap.fileName}, ${lk.perimeter.fileName}`);
 check('lkmapExport delivers the located ducts and their Schächte', lk.ductCount === 2 && lk.schachtCount === 4, `${lk.ductCount} ducts, ${lk.schachtCount} Schächte`);
 check('lkmapExport reports what lacks a position', JSON.stringify(lk.schaechteWithoutPosition) === JSON.stringify([{ id: unlocated }])
   && JSON.stringify(lk.ductsWithoutLine) === JSON.stringify([{ id: unlocatedDuct }]), JSON.stringify([lk.schaechteWithoutPosition, lk.ductsWithoutLine]));
-const lagebestimmung = (oid) => lk.xtf.slice(lk.xtf.indexOf(`TID="${oid}"`)).match(/<Lagebestimmung>(\w+)</)?.[1];
+const lagebestimmung = (oid) => lk.lkmap.xtf.slice(lk.lkmap.xtf.indexOf(`TID="${oid}"`)).match(/<Lagebestimmung>(\w+)</)?.[1];
 check('a duct with course keeps its Lagebestimmung', lagebestimmung('ch4711abt0000005') === 'genau');
 check('a straight duct is unbekannt', lagebestimmung(`ch4711abt${String(straight).padStart(7, '0')}`) === 'unbekannt');
+// The perimeter: a closed ring around every delivered coordinate (the Checkservice warns about
+// objects outside of it; the bounding box of the ring is a rough check)
+const coords = (xtf) => [...xtf.matchAll(/<C1>([\d.]+)<\/C1>\s*<C2>([\d.]+)<\/C2>/g)].map((m) => [Number(m[1]), Number(m[2])]);
+const ring = coords(lk.perimeter.xtf);
+const [minE, maxE, minN, maxN] = [Math.min(...ring.map((c) => c[0])), Math.max(...ring.map((c) => c[0])), Math.min(...ring.map((c) => c[1])), Math.max(...ring.map((c) => c[1]))];
+check('the perimeter is a closed ring', ring.length > 4 && JSON.stringify(ring[0]) === JSON.stringify(ring.at(-1)), `${ring.length} points`);
+check('the perimeter lies around the delivered objects', coords(lk.lkmap.xtf).every(([e, n]) => e > minE + 9 && e < maxE - 9 && n > minN + 9 && n < maxN - 9));
 // ilivalidator against the models of the SIA, like the canton's Checkservice (needs Java or nix
 // and the network; SKIP_ILIVALIDATOR=1 leaves it out)
 if (process.env.SKIP_ILIVALIDATOR) {
   console.log('skip ilivalidator');
 } else {
-  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'lkmap-')), lk.fileName);
-  fs.writeFileSync(file, lk.xtf);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lkmap-'));
+  const files = [lk.lkmap, lk.perimeter].map((transfer) => {
+    const file = path.join(dir, transfer.fileName);
+    fs.writeFileSync(file, transfer.xtf);
+    return file;
+  });
   const validator = path.join(path.dirname(new URL(import.meta.url).pathname), '../lkmap/validate.sh');
-  const run = spawnSync(validator, [file], { encoding: 'utf8' });
+  const run = spawnSync(validator, files, { encoding: 'utf8' });
   const output = `${run.stdout}${run.stderr}`;
-  check('ilivalidator accepts the export', run.status === 0 && output.includes('...validation done'),
+  check('ilivalidator accepts both files', run.status === 0 && output.includes('...validation done'),
     output.split('\n').filter((line) => /^Error|failed/.test(line)).join('; ') || `exit ${run.status}`);
 }
 
