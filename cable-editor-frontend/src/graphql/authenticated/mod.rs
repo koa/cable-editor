@@ -20,7 +20,6 @@ pub mod panel_overview;
 pub mod plan_details;
 pub mod schacht_cables;
 pub mod schacht_properties;
-pub mod select_duct;
 
 #[cynic::schema("authenticated")]
 mod schema {}

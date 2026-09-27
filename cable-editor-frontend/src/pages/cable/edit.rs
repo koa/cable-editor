@@ -2,6 +2,7 @@ use crate::components::{
     cable_map::{CableMap, PathEdit, PathEnd},
     dialog::confirm_delete,
     page_layout::{PageLayout, object_title},
+    select_duct::SelectDuct,
 };
 use crate::{
     components::table::ListModel,
@@ -13,9 +14,9 @@ use crate::{
         },
         current_user::Role,
         list_cables::delete_cable,
-        select_duct::DuctListEntry,
+        list_ducts::DuctListEntry,
     },
-    pages::{duct::select_duct::SelectDuct, router::PlanView},
+    pages::router::PlanView,
     util::{get_backdrop, get_credentials, get_role, navigate, toast_error},
 };
 use patternfly_yew::prelude::{
@@ -627,13 +628,19 @@ impl EditCable {
                                 let backdrop=backdrop.clone();
                                 Callback::from(move |details: DuctListEntry|{
                                     scope.send_message(Msg::InitFirstSegment{
-                                        schacht_a: details.schacht_a,
+                                        schacht_a: CableSegmentEndSchacht {
+                                            id: details.schacht_a.id,
+                                            name: details.schacht_a.name,
+                                        },
                                         duct: CableDuct {
                                             id: details.id,
                                             description: details.description,
                                             length: details.length,
                                         },
-                                        schacht_z: details.schacht_z,
+                                        schacht_z: CableSegmentEndSchacht {
+                                            id: details.schacht_z.id,
+                                            name: details.schacht_z.name,
+                                        },
                                     });
                                     backdrop.close();
                                 })

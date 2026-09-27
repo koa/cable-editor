@@ -9,5 +9,6 @@ pub mod page_layout;
 pub mod panel;
 pub mod plan;
 pub mod plan_link;
+pub mod select_duct;
 pub mod table;
 pub mod user;

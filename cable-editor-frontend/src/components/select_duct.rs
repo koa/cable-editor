@@ -1,7 +1,8 @@
 use crate::{
     components::table::ListModel,
     error::FrontendError,
-    graphql::authenticated::select_duct::{DuctListEntry, list_all_ducts},
+    graphql::authenticated::list_ducts::{DuctListEntry, fetch_duct_list},
+    util::get_credentials,
 };
 use patternfly_yew::prelude::{
     Cell, CellContext, ExpansionState, MemoizedTableModel, Spinner, Table, TableColumn,
@@ -12,7 +13,6 @@ use yew::{
     Callback, Component, Context, Html, Properties, html, html::IntoPropValue, html_nested,
     platform::spawn_local,
 };
-use yew_oauth2::prelude::OAuth2Context;
 
 #[derive(Debug, Default)]
 pub struct SelectDuct {
@@ -102,14 +102,13 @@ impl Component for SelectDuct {
     fn rendered(&mut self, ctx: &Context<Self>, first_render: bool) {
         if first_render {
             let scope = ctx.link().clone();
-            if let Some((credentials, _)) = scope.context::<OAuth2Context>(Callback::noop()) {
-                spawn_local(async move {
-                    scope.send_message(match list_all_ducts(Some(&credentials)).await {
-                        Ok(data) => Msg::Data(data),
-                        Err(error) => Msg::Error(error),
-                    });
+            let credentials = get_credentials(&scope);
+            spawn_local(async move {
+                scope.send_message(match fetch_duct_list(credentials.as_ref()).await {
+                    Ok(data) => Msg::Data(data),
+                    Err(error) => Msg::Error(error),
                 });
-            }
+            });
         }
     }
 }
