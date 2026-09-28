@@ -593,7 +593,7 @@ const anonRoot = { authentication: { clientId: CLIENT_ID, issuerUrl: ISSUER, sco
 // ---------------------------------------------------------------- http
 const body = (req) => new Promise((ok) => { let b = ''; req.on('data', (c) => (b += c)); req.on('end', () => ok(b)); });
 const json = (res, obj, status = 200) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(obj)); };
-const types = { '.html': 'text/html', '.js': 'text/javascript', '.wasm': 'application/wasm', '.css': 'text/css', '.woff2': 'font/woff2', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json', '.mjs': 'text/javascript' };
+const types = { '.html': 'text/html', '.js': 'text/javascript', '.wasm': 'application/wasm', '.css': 'text/css', '.woff2': 'font/woff2', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.mjs': 'text/javascript' };
 
 http.createServer(async (req, res) => {
   const url = new URL(req.url, ORIGIN);

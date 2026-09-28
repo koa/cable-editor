@@ -19,6 +19,14 @@
     </script>
     <!-- resizes-content: the on-screen keyboard shrinks the layout, so dialogs stay above it -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
+    <title>Cable Editor</title>
+    <!-- Installable as an app (manifest only, no service worker: the app needs the server anyway) -->
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="icon" href="/icons/favicon.svg" type="image/svg+xml">
+    <link rel="icon" href="/icons/favicon-32.png" sizes="32x32" type="image/png">
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+    <link data-trunk rel="copy-file" href="assets/manifest.webmanifest">
+    <link data-trunk rel="copy-dir" href="assets/icons">
     <link data-trunk rel="scss" href="assets/style.scss">
     <!-- This path needs to be here, otherwise icons won't render correctly -->
     <link data-trunk rel="copy-dir" href="node/node_modules/@patternfly/patternfly/assets" data-target-path="assets/">
