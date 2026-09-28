@@ -20,6 +20,7 @@ use crate::{
         cable::edit::EditCable,
         duct::{list::ListOfDucts, properties::EditDuctProperties, show::ShowDuct},
         list_of_cables::ListOfCables,
+        lkmap::Leitungskataster,
         map::Map,
         owner::list::ListOfOwners,
         panel::EditPanel,
@@ -166,6 +167,8 @@ pub enum PlanView {
     CabinetType {
         id: i32,
     },
+    /// The delivery to the Leitungskataster (admins)
+    Leitungskataster,
     Panel {
         id: i32,
         #[target(nested)]
@@ -193,10 +196,11 @@ impl PlanView {
             PlanView::ListOfCabinetTypes
             | PlanView::NewCabinetType { .. }
             | PlanView::CabinetType { .. } => ("Schachttyp".into(), PlanView::ListOfCabinetTypes),
+            PlanView::Leitungskataster => ("Leitungskataster".into(), PlanView::Leitungskataster),
         };
 
         // The areas of the plan, each leading to its start page
-        let areas: [(&str, PlanView); 7] = [
+        let areas: [(&str, PlanView); 8] = [
             ("Ändern", PlanView::Edit),
             ("Schacht", PlanView::ListOfCabinets),
             ("Kabel", PlanView::ListOfCables),
@@ -204,6 +208,7 @@ impl PlanView {
             ("Karte", PlanView::Map),
             ("Eigentümer", PlanView::ListOfOwners),
             ("Schachttyp", PlanView::ListOfCabinetTypes),
+            ("Leitungskataster", PlanView::Leitungskataster),
         ];
         let entries = areas
             .into_iter()
@@ -314,7 +319,7 @@ impl PlanView {
                 view: PanelView::Edit | PanelView::Loop | PanelView::Attach,
                 ..
             } => Role::Planner,
-            PlanView::NewCabinetType { .. } => Role::Admin,
+            PlanView::NewCabinetType { .. } | PlanView::Leitungskataster => Role::Admin,
             _ => Role::Reader,
         }
     }
@@ -343,6 +348,7 @@ impl PlanView {
                 html!(<EditDuctProperties {plan_id} duct={IdOrNew::Temporary(id)}/>)
             }
             PlanView::Duct { id, view } => view.content(plan_id, id),
+            PlanView::Leitungskataster => html!(<Leitungskataster {plan_id}/>),
         }
     }
 }

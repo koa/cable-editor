@@ -13,6 +13,7 @@ pub mod list_cables;
 pub mod list_ducts;
 pub mod list_plans;
 pub mod list_schacht;
+pub mod lkmap;
 pub mod map;
 pub mod netbox_sync;
 pub mod owners;
@@ -143,15 +144,27 @@ pub struct DateTime(pub String);
 cynic::impl_scalar!(DateTime, schema::DateTime);
 
 impl DateTime {
+    /// Missing if the backend sent something that isn't a date.
+    pub fn date(&self) -> Option<js_sys::Date> {
+        let date = js_sys::Date::new(&self.0.as_str().into());
+        (!date.get_time().is_nan()).then_some(date)
+    }
+
     /// Date and time in the browser's time zone, e.g. "27.9.2026, 15:28:24".
     pub fn local(&self) -> String {
-        let date = js_sys::Date::new(&self.0.as_str().into());
-        if date.get_time().is_nan() {
-            return self.0.clone();
+        match self.date() {
+            Some(date) => date
+                .to_locale_string("de-CH", &wasm_bindgen::JsValue::UNDEFINED)
+                .into(),
+            None => self.0.clone(),
         }
-        date.to_locale_string("de-CH", &wasm_bindgen::JsValue::UNDEFINED)
-            .into()
     }
+}
+
+/// The day in the browser's time zone, e.g. "27.9.2026".
+pub fn local_day(date: &js_sys::Date) -> String {
+    date.to_locale_date_string("de-CH", &wasm_bindgen::JsValue::UNDEFINED)
+        .into()
 }
 
 // Das Enum für den Typ

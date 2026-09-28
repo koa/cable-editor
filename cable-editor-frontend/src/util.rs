@@ -1,9 +1,12 @@
 use crate::{
+    error::FrontendError,
     graphql::authenticated::current_user::Role,
     pages::router::{AppRoute, PlanView},
 };
 use patternfly_yew::prelude::{AlertType, Backdropper, Toast, Toaster};
 use std::{fmt::Display, time::Duration};
+use wasm_bindgen::{JsCast, JsValue};
+use web_sys::{Blob, BlobPropertyBag, HtmlAnchorElement, Url};
 use yew::html::Scope;
 use yew::{BaseComponent, Callback, html};
 use yew_nested_router::prelude::RouterContext;
@@ -73,4 +76,30 @@ pub fn is_wide_screen() -> bool {
         .ok()
         .and_then(|width| width.as_f64())
         .is_some_and(|width| width >= 768.0)
+}
+
+/// Saves a file the backend sent in base64, as the browser saves downloads.
+pub fn save_file(file_name: &str, base64: &str, mime_type: &str) -> Result<(), FrontendError> {
+    save_blob(file_name, base64, mime_type).map_err(FrontendError::SaveFile)
+}
+
+fn save_blob(file_name: &str, base64: &str, mime_type: &str) -> Result<(), JsValue> {
+    let window = gloo_utils::window();
+    // atob gives one character per byte
+    let bytes: Vec<u8> = window.atob(base64)?.chars().map(|c| c as u8).collect();
+    let parts = js_sys::Array::of1(&js_sys::Uint8Array::from(bytes.as_slice()));
+    let options = BlobPropertyBag::new();
+    options.set_type(mime_type);
+    let blob = Blob::new_with_u8_array_sequence_and_options(&parts, &options)?;
+    let url = Url::create_object_url_with_blob(&blob)?;
+    let link: HtmlAnchorElement = gloo_utils::document().create_element("a")?.dyn_into()?;
+    link.set_href(&url);
+    link.set_download(file_name);
+    link.click();
+    // Firefox may still read it after the click returned
+    gloo_timers::callback::Timeout::new(60_000, move || {
+        let _ = Url::revoke_object_url(&url);
+    })
+    .forget();
+    Ok(())
 }

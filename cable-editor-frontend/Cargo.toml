@@ -18,7 +18,7 @@ serde_json = "1.0"
 cable-editor-common = { path = "../cable-editor-common" }
 log = "0.4"
 wasm-logger = "0.2"
-web-sys = { version = "0.3", features = ["Blob", "CanvasRenderingContext2d", "Coordinates", "Document", "DomParser", "Element", "File", "FileList", "FontFaceSet", "Geolocation", "HtmlCanvasElement", "HtmlCollection", "HtmlInputElement", "Navigator", "Position", "PositionError", "PositionOptions", "Storage", "SupportedType", "TextMetrics", "Window"] }
+web-sys = { version = "0.3", features = ["Blob", "BlobPropertyBag", "CanvasRenderingContext2d", "Coordinates", "Document", "DomParser", "Element", "File", "FileList", "FontFaceSet", "Geolocation", "HtmlAnchorElement", "HtmlCanvasElement", "HtmlCollection", "HtmlInputElement", "Navigator", "Position", "PositionError", "PositionOptions", "Storage", "SupportedType", "TextMetrics", "Url", "Window"] }
 thiserror = "2.0"
 
 yew-oauth2 = { version = "0.14",features = ["openid"] }

@@ -996,3 +996,82 @@ body {
   grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
   gap: var(--pf-t--global--spacer--md);
 }
+
+// The delivery to the Leitungskataster (pages/lkmap.rs)
+.lkmap {
+  display: grid;
+  gap: var(--pf-t--global--spacer--md);
+}
+
+.lkmap__subtle {
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+.lkmap__details {
+  display: grid;
+  gap: var(--pf-t--global--spacer--md);
+}
+
+.lkmap__deliveries {
+  margin: 0;
+  padding-inline-start: 0;
+  list-style: none;
+}
+
+// Download, confirmation and its button side by side, stacked when narrow
+.lkmap__delivery {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--lg);
+  padding-block: var(--pf-t--global--spacer--sm);
+  border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+
+  > :first-child {
+    flex: 1 1 18rem;
+  }
+}
+
+.lkmap__links {
+  margin: 0;
+  padding-inline-start: 0;
+  list-style: none;
+}
+
+.lkmap__map {
+  // Keeps Leaflet's z-indexes inside the map, see .map-view
+  isolation: isolate;
+  height: 60vh;
+  min-height: 20rem;
+  border-radius: var(--pf-t--global--border--radius--small);
+}
+
+// Leaflet sets the colours as SVG attributes, which can't take tokens; CSS wins over them
+.lkmap__perimeter {
+  stroke: var(--pf-t--global--color--status--info--default);
+  stroke-width: 2;
+  stroke-dasharray: 8 4;
+  fill: var(--pf-t--global--color--status--info--default);
+  fill-opacity: 0.08;
+}
+
+.lkmap__undelivered {
+  stroke: var(--pf-t--global--color--status--warning--default);
+  stroke-dasharray: 10 6;
+}
+
+// On phones (the table's grid mode) the download button below the row's cells, not beside them
+@media screen and (max-width: 47.9375rem) {
+  .lkmap .pf-v6-c-table__tbody > .pf-v6-c-table__tr:not(.pf-v6-c-table__expandable-row) > td:last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+// The state's date must not be cut off
+.lkmap .pf-v6-c-label {
+  --pf-v6-c-label__content--MaxWidth: 100%;
+}
+
+.lkmap .pf-v6-c-label__text {
+  white-space: normal;
+}

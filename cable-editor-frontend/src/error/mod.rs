@@ -44,6 +44,9 @@ pub enum FrontendError {
     UnsupportedTape,
     #[error("Map error: {0:?}")]
     Map(JsValue),
+    /// The browser didn't save a downloaded file
+    #[error("Datei konnte nicht gespeichert werden: {}", js_message(.0))]
+    SaveFile(JsValue),
 }
 
 impl IntoPropValue<Html> for &FrontendError {
@@ -102,6 +105,9 @@ impl IntoPropValue<Html> for &FrontendError {
             }
             FrontendError::Map(e) => {
                 html!(<Alert inline=true title={format!("Karte konnte nicht angezeigt werden: {}", js_message(e))} r#type={AlertType::Danger} />)
+            }
+            FrontendError::SaveFile(e) => {
+                html!(<Alert inline=true title={format!("Datei konnte nicht gespeichert werden: {}", js_message(e))} r#type={AlertType::Danger} />)
             }
         }
     }
