@@ -7,3 +7,4 @@ Offene Punkte für später
 - Breadcrumbs besser Strukturieren (Ein Dropdown wählt entweder ein Element oder eine View)
 - Berechtigungskonzept überdenken/vertiefen (Welche Persona macht welche aktionen)
 - Netbox automatisch syncen
+- Leere Descriptions auf Trasse müssen null sein, sonst wird ein leerer Text angezeigt
