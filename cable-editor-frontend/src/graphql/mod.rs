@@ -2,7 +2,7 @@ use crate::error::FrontendError;
 use cable_editor_common::UserError;
 use cynic::{
     GraphQlResponse, MutationBuilder, Operation, QueryBuilder, QueryFragment, QueryVariables,
-    http::{CynicReqwestError, ReqwestExt},
+    http::CynicReqwestError,
 };
 use reqwest::header::{AUTHORIZATION, HeaderMap};
 use serde::{Deserialize, Serialize};
@@ -98,10 +98,28 @@ impl ErrorExtensions {
     }
 }
 
+/// The response to `operation`, its data as JSON (like cynic's `run_graphql`, which would
+/// decode the data as the query's type right away).
+async fn send<Q, V: Serialize>(
+    client: &reqwest::Client,
+    url: &str,
+    operation: &Operation<Q, V>,
+) -> Result<GraphQlResponse<serde_json::Value, ErrorExtensions>, CynicReqwestError> {
+    let response = client.post(url).json(operation).send().await?;
+    let status = response.status();
+    if status.is_success() {
+        return Ok(response.json().await?);
+    }
+    // An error status may still carry GraphQL errors
+    let text = response.text().await?;
+    serde_json::from_str(&text).map_err(|_| CynicReqwestError::ErrorResponse(status, text))
+}
+
 /// Sends `operation` to `url`, with the bearer token of `credentials` if logged in, and returns
 /// the data of the response. Its first error: `FrontendError::User` if the backend refused the
 /// request, else `FrontendError::Graphql` with the messages; a response with neither data nor
-/// errors: `FrontendError::NotFound`.
+/// errors: `FrontendError::NotFound`; data that doesn't fit the query:
+/// `FrontendError::InvalidResponse`.
 async fn run<Q, V>(
     url: &str,
     credentials: Option<&OAuth2Context>,
@@ -121,10 +139,9 @@ where
         .default_headers(headers)
         .build()
         .map_err(connect_error)?;
-    let response: GraphQlResponse<Q, ErrorExtensions> = client
-        .post(url)
-        .run_graphql(operation)
-        .retain_extensions::<ErrorExtensions>()
+    // The data only as JSON first: with errors it may lack fields the query requires (the
+    // backend leaves a failed field out), which must not hide the errors
+    let response = send(&client, url, &operation)
         .await
         .map_err(transfer_error)?;
     match response {
@@ -142,7 +159,7 @@ where
         ),
         GraphQlResponse {
             data: Some(data), ..
-        } => Ok(data),
+        } => serde_json::from_value(data).map_err(FrontendError::InvalidResponse),
         GraphQlResponse { data: None, .. } => Err(FrontendError::NotFound),
     }
 }

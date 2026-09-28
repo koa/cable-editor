@@ -1,6 +1,6 @@
 # Konzept: Fehlermeldungen
 
-Stand: 27.09.2026 – umgesetzt.
+Stand: 28.09.2026 – umgesetzt.
 
 ## Grundsatz
 
@@ -38,6 +38,9 @@ ohnehin GraphQL-Fehler. Für Weigerungen ist die Fehlerstruktur deshalb einfache
   nicht). Seiten setzen wie bisher nur den Titel („Trasse konnte nicht gespeichert werden“).
 - Technische Fehler (Datenbank, Netbox-HTTP, der Start der Transaktion) bleiben unstrukturiert;
   das Frontend zeigt sie mit eigenem Titel („Unerwarteter Fehler vom Server“) und der
-  Originalmeldung als Detail.
+  Originalmeldung als Detail. Eine Antwort mit Fehlern kann Teildaten enthalten, denen ein Feld
+  fehlt (async-graphql lässt ein fehlgeschlagenes Feld weg); das Frontend liest die Daten
+  deshalb erst als JSON und nur ohne Fehler als Typ der Abfrage, passen sie dann nicht, ist das
+  `FrontendError::InvalidResponse`.
 - Mock (`local/mock/server.mjs`) wirft dieselben `extensions`, `local/realdb/check.mjs` prüft
   Weigerungen über Code und Daten statt über Textteile.

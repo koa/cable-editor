@@ -27,6 +27,9 @@ pub enum FrontendError {
     /// A technical error of the backend (database, Netbox), its messages
     #[error("Unerwarteter Fehler vom Server: {}", .0.join("; "))]
     Graphql(Vec<String>),
+    /// The data of a response doesn't fit the query (e.g. a new version changed the schema)
+    #[error("Invalid response of the server: {0}")]
+    InvalidResponse(serde_json::Error),
     #[error("Plan not found: {0}")]
     PlanNotFound(i32),
     #[error("Expected data not found")]
@@ -69,6 +72,9 @@ impl FrontendError {
             FrontendError::InvalidHeader(e) => format!("Ungültiger Header: {e}"),
             FrontendError::User(error) => messages::user_error(error),
             FrontendError::Graphql(_) => "Unerwarteter Fehler vom Server".to_string(),
+            FrontendError::InvalidResponse(e) => {
+                format!("Antwort des Servers nicht lesbar: {e}")
+            }
             FrontendError::PlanNotFound(id) => format!("Plan {id} existiert nicht"),
             FrontendError::NotFound => "Daten nicht gefunden".to_string(),
             FrontendError::NoServerAddress => {
@@ -120,8 +126,12 @@ impl IntoPropValue<Html> for &FrontendError {
                 | FrontendError::ErrorQueryingAuthenticatedConnect(_)
                 | FrontendError::ErrorQueryingAuthenticatedTransfer(_)
                 | FrontendError::Graphql(_)
+                | FrontendError::InvalidResponse(_)
         );
-        let reload = matches!(self, FrontendError::Graphql(_));
+        let reload = matches!(
+            self,
+            FrontendError::Graphql(_) | FrontendError::InvalidResponse(_)
+        );
         if retry || reload {
             children.push(html!(<ErrorRecovery {retry} {reload}/>));
         }
