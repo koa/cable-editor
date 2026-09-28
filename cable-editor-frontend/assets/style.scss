@@ -838,6 +838,23 @@ body {
   stroke-width: 3;
 }
 
+// geo::map::TouchGestures: one finger moved across the map on a touch screen
+.map-touch-hint::after {
+  content: attr(data-touch-hint);
+  position: absolute;
+  inset: 0;
+  z-index: 1001; // above Leaflet's panes and controls
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--pf-t--global--spacer--md);
+  text-align: center;
+  font-size: var(--pf-t--global--font--size--lg);
+  color: var(--pf-t--global--text--color--inverse);
+  background: color-mix(in srgb, var(--pf-t--global--background--color--inverse--default) 60%, transparent);
+  pointer-events: none;
+}
+
 // A Schacht type's icon (geo::map::schacht_marker), set apart from the map by a shadow
 .map-view__schacht-icon img {
   display: block;

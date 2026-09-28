@@ -7,14 +7,16 @@ use crate::{
     error::FrontendError,
     graphql::authenticated::{GeoPoint, schacht_types::icon_src},
 };
+use gloo_timers::callback::Timeout;
 use js_sys::{Array, Function, Object, Reflect};
 use leaflet::{
     CircleMarker, CircleOptions, Icon, LatLng, LatLngBounds, Layer, Map, MapOptions, Marker,
     MarkerOptions, MouseEvent, MouseEvents, Polyline, PolylineOptions, TileLayer, TileLayerOptions,
     TileLayerWms, TileLayerWmsOptions, Tooltip, TooltipOptions,
 };
-use wasm_bindgen::{JsCast, JsValue};
-use web_sys::HtmlElement;
+use std::{cell::RefCell, rc::Rc};
+use wasm_bindgen::{JsCast, JsValue, closure::Closure};
+use web_sys::{AddEventListenerOptions, HtmlElement, TouchEvent};
 use yew::NodeRef;
 
 /// A component's map: its container, the map once created and the layers drawn for the
@@ -24,6 +26,7 @@ pub struct MapHolder {
     container: NodeRef,
     map: Option<Map>,
     layers: Vec<leaflet::Layer>,
+    touch: Option<TouchGestures>,
 }
 
 impl MapHolder {
@@ -36,7 +39,11 @@ impl MapHolder {
     /// Creates the map in the rendered container, on the component's first render.
     pub fn create(&mut self) -> Result<(), FrontendError> {
         if let Some(container) = self.container.cast::<HtmlElement>() {
-            self.map = Some(create_map(&container).map_err(FrontendError::Map)?);
+            let touch = is_touch_screen();
+            self.map = Some(create_map(&container, touch).map_err(FrontendError::Map)?);
+            if touch {
+                self.touch = Some(TouchGestures::new(container).map_err(FrontendError::Map)?);
+            }
         }
         Ok(())
     }
@@ -67,12 +74,84 @@ impl Drop for MapHolder {
     }
 }
 
+/// Whether the device's main pointer is a finger (phones, tablets; not a laptop with a touch
+/// screen, whose mouse drags the map as usual).
+fn is_touch_screen() -> bool {
+    web_sys::window()
+        .and_then(|window| window.match_media("(pointer: coarse)").ok().flatten())
+        .is_some_and(|query| query.matches())
+}
+
+/// Shown on the map while one finger moves across it
+const TOUCH_HINT: &str = "Mit zwei Fingern verschieben";
+
+/// How long the hint stays after the finger moved, in milliseconds
+const TOUCH_HINT_MS: u32 = 1500;
+
+/// On touch screens the map doesn't take one finger (`dragging` off), so it scrolls the page
+/// instead of catching it; two fingers move and zoom the map (Leaflet's touch zoom follows their
+/// centre). One finger moving across the map shows a hint how to move it (`.map-touch-hint`).
+struct TouchGestures {
+    container: HtmlElement,
+    touchmove: Closure<dyn Fn(TouchEvent)>,
+}
+
+impl TouchGestures {
+    fn new(container: HtmlElement) -> Result<Self, JsValue> {
+        container.set_attribute("data-touch-hint", TOUCH_HINT)?;
+        let hide: Rc<RefCell<Option<Timeout>>> = Rc::default();
+        let element = container.clone();
+        let touchmove = Closure::<dyn Fn(TouchEvent)>::new(move |event: TouchEvent| {
+            let class_list = element.class_list();
+            // Only fails for an invalid class name
+            if event.touches().length() == 1 {
+                let _ = class_list.add_1("map-touch-hint");
+                let element = element.clone();
+                // Replacing the timeout cancels the one before
+                *hide.borrow_mut() = Some(Timeout::new(TOUCH_HINT_MS, move || {
+                    let _ = element.class_list().remove_1("map-touch-hint");
+                }));
+            } else {
+                hide.borrow_mut().take();
+                let _ = class_list.remove_1("map-touch-hint");
+            }
+        });
+        // Passive: the page scrolls without waiting for the listener
+        let options = AddEventListenerOptions::new();
+        options.set_passive(true);
+        container.add_event_listener_with_callback_and_add_event_listener_options(
+            "touchmove",
+            touchmove.as_ref().unchecked_ref(),
+            &options,
+        )?;
+        Ok(Self {
+            container,
+            touchmove,
+        })
+    }
+}
+
+impl Drop for TouchGestures {
+    fn drop(&mut self) {
+        // The listener must not outlive its closure
+        let _ = self.container.remove_event_listener_with_callback(
+            "touchmove",
+            self.touchmove.as_ref().unchecked_ref(),
+        );
+    }
+}
+
 /// Center of Switzerland, shown while there is nothing to show.
 const SWITZERLAND: (f64, f64) = (46.8, 8.23);
 
-/// A map on the container with swisstopo's maps as background, showing Switzerland.
-fn create_map(container: &HtmlElement) -> Result<Map, JsValue> {
-    let map = Map::new_with_element(container, &MapOptions::default())?;
+/// A map on the container with swisstopo's maps as background, showing Switzerland. On a touch
+/// screen one finger doesn't move it (see `TouchGestures`).
+fn create_map(container: &HtmlElement, touch: bool) -> Result<Map, JsValue> {
+    let options = MapOptions::default();
+    if touch {
+        options.set_dragging(false);
+    }
+    let map = Map::new_with_element(container, &options)?;
     add_background(&map);
     map.set_view(&LatLng::new(SWITZERLAND.0, SWITZERLAND.1), 8.0);
     Ok(map)
