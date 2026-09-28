@@ -16,6 +16,7 @@ use crate::{
             fetch_lkmap_exports, set_lkmap_delivered,
         },
         local_day,
+        schacht_types::type_icon,
     },
     pages::router::{CabinetView, PlanView},
     util::{get_credentials, navigate, save_file, toast_error, toast_success},
@@ -497,9 +498,12 @@ impl Leitungskataster {
                 };
                 let id = schacht.id;
                 let scope = ctx.link().clone();
-                let marker = schacht_marker(&schacht.name, location, move || {
-                    scope.send_message(Msg::OpenSchacht(id))
-                });
+                let marker = schacht_marker(
+                    &schacht.name,
+                    location,
+                    type_icon(&schacht.typ),
+                    move || scope.send_message(Msg::OpenSchacht(id)),
+                );
                 layers.push(marker.unchecked_into());
                 points.push(location);
             }

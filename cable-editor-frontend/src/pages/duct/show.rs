@@ -9,6 +9,7 @@ use crate::{
     graphql::authenticated::{
         current_user::Role,
         duct_details::{DuctDetails, fetch_duct_details},
+        schacht_types::type_icon,
     },
     pages::router::{CabinetView, DuctView, PlanView},
     util::{get_credentials, get_role, navigate},
@@ -170,7 +171,7 @@ impl ShowDuct {
             };
             let id = end.id;
             let scope = ctx.link().clone();
-            let marker = schacht_marker(&end.name, location, move || {
+            let marker = schacht_marker(&end.name, location, type_icon(&end.typ), move || {
                 scope.send_message(Msg::OpenSchacht(id))
             });
             layers.push(marker.unchecked_into());

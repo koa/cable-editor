@@ -190,6 +190,18 @@ pub async fn delete_schacht_typ(
     Ok(())
 }
 
+/// A Schacht's type, for its icon on the map (`geo::map::schacht_marker`).
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
+#[cynic(graphql_type = "SchachtTyp")]
+pub struct SchachtTypIcon {
+    pub icon: String,
+}
+
+/// The icon of a Schacht's type, if it has one.
+pub fn type_icon(typ: &Option<SchachtTypIcon>) -> Option<&str> {
+    typ.as_ref().map(|typ| typ.icon.as_str())
+}
+
 /// The icon as `src` of an `<img>`: a script in the SVG doesn't run there, unlike inline.
 pub fn icon_src(svg: &str) -> String {
     format!(

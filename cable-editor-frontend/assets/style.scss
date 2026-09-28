@@ -838,6 +838,15 @@ body {
   stroke-width: 3;
 }
 
+// A Schacht type's icon (geo::map::schacht_marker), set apart from the map by a shadow
+.map-view__schacht-icon img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 0 1px var(--pf-t--global--background--color--primary--default));
+}
+
 .map-view__duct {
   stroke: var(--pf-t--global--color--brand--default);
   stroke-width: 4;

@@ -1,7 +1,7 @@
 use crate::{
     error::FrontendError,
     graphql::{
-        authenticated::{Genauigkeit, GeoPoint, schema},
+        authenticated::{Genauigkeit, GeoPoint, schacht_types::SchachtTypIcon, schema},
         mutate, query,
     },
 };
@@ -89,6 +89,8 @@ pub struct SchachtChoice {
     pub id: i32,
     pub name: String,
     pub location: Option<GeoPoint>,
+    /// Its icon on the map
+    pub typ: Option<SchachtTypIcon>,
 }
 
 /// The duct (missing if it doesn't exist; not asked for a new one) and the Schächte and owners

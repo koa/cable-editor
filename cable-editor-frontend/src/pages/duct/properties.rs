@@ -17,6 +17,7 @@ use crate::{
             set_duct_line, update_duct,
         },
         list_ducts::duct_title,
+        schacht_types::type_icon,
     },
     pages::router::{DuctView, PlanView},
     util::{get_credentials, get_role, navigate, toast_error, toast_success},
@@ -574,7 +575,7 @@ impl EditDuctProperties {
             let Some(location) = schacht.location else {
                 continue;
             };
-            let marker = schacht_marker(&schacht.name, location, || {});
+            let marker = schacht_marker(&schacht.name, location, type_icon(&schacht.typ), || {});
             layers.push(marker.unchecked_into());
             shown.push(location);
         }

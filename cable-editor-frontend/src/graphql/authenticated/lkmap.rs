@@ -4,7 +4,7 @@
 use crate::{
     error::FrontendError,
     graphql::{
-        authenticated::{DateTime, GeoPoint, schema},
+        authenticated::{DateTime, GeoPoint, schacht_types::SchachtTypIcon, schema},
         mutate, query,
     },
 };
@@ -47,6 +47,8 @@ pub struct LkmapSchacht {
     pub id: i32,
     pub name: String,
     pub location: Option<GeoPoint>,
+    /// Its icon on the map
+    pub typ: Option<SchachtTypIcon>,
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]

@@ -10,6 +10,7 @@ use crate::{
         GeoPoint,
         cable_details::{CableDuct, CablePath, CableSegmentEndSchacht},
         map::{MapData, MapDuct, MapDuctEnd, fetch_map_data},
+        schacht_types::type_icon,
     },
     util::get_credentials,
 };
@@ -153,7 +154,8 @@ impl CableMap {
             for schacht in &data.schaechte {
                 if let Some(location) = schacht.location {
                     // No navigation from the editor, it would drop unsaved changes
-                    schacht_marker(&schacht.name, location, || {}).add_to(&map);
+                    schacht_marker(&schacht.name, location, type_icon(&schacht.typ), || {})
+                        .add_to(&map);
                 }
             }
         }

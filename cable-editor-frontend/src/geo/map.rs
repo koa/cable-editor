@@ -3,12 +3,15 @@
 //! The page owns the map: it renders an empty `div` for it (Leaflet owns its children) and
 //! creates the map in `rendered`.
 
-use crate::{error::FrontendError, graphql::authenticated::GeoPoint};
+use crate::{
+    error::FrontendError,
+    graphql::authenticated::{GeoPoint, schacht_types::icon_src},
+};
 use js_sys::{Array, Function, Object, Reflect};
 use leaflet::{
-    CircleMarker, CircleOptions, Icon, LatLng, LatLngBounds, Map, MapOptions, MouseEvent,
-    MouseEvents, Polyline, PolylineOptions, TileLayer, TileLayerOptions, TileLayerWms,
-    TileLayerWmsOptions, Tooltip, TooltipOptions,
+    CircleMarker, CircleOptions, Icon, LatLng, LatLngBounds, Layer, Map, MapOptions, Marker,
+    MarkerOptions, MouseEvent, MouseEvents, Polyline, PolylineOptions, TileLayer, TileLayerOptions,
+    TileLayerWms, TileLayerWmsOptions, Tooltip, TooltipOptions,
 };
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::HtmlElement;
@@ -111,43 +114,79 @@ pub fn set_option(options: &Object, name: &str, value: &JsValue) {
 /// An icon drawn by CSS (the class) instead of an image. The crate's `DivIcon::new` creates an
 /// `L.Icon` (it binds the wrong constructor), so this calls `L.divIcon` itself.
 pub fn div_icon(class: &str, size: f64) -> Result<Icon, JsValue> {
+    div_icon_with(class, size, None)
+}
+
+/// `div_icon` with `html` inside (a string is parsed as HTML, an element is taken as it is).
+fn div_icon_with(class: &str, size: f64, html: Option<&JsValue>) -> Result<Icon, JsValue> {
     let leaflet = Reflect::get(&js_sys::global(), &JsValue::from_str("L"))?;
     let factory: Function = Reflect::get(&leaflet, &JsValue::from_str("divIcon"))?.dyn_into()?;
     let options = Object::new();
     set_option(&options, "className", &JsValue::from_str(class));
     let size_value = js_sys::Array::of2(&JsValue::from_f64(size), &JsValue::from_f64(size));
     set_option(&options, "iconSize", &size_value);
+    if let Some(html) = html {
+        set_option(&options, "html", html);
+    }
     Ok(factory.call1(&leaflet, &options)?.unchecked_into())
+}
+
+/// Size of a Schacht type's icon on the map, in pixels
+const SCHACHT_ICON_SIZE: f64 = 24.0;
+
+/// A Schacht type's icon as an `<img>` (never inline, so a script in the SVG doesn't run).
+fn schacht_icon(svg: &str) -> Result<Icon, JsValue> {
+    let document = web_sys::window()
+        .and_then(|window| window.document())
+        .ok_or_else(|| JsValue::from_str("no document"))?;
+    let img = document.create_element("img")?;
+    img.set_attribute("src", &icon_src(svg))?;
+    img.set_attribute("alt", "")?;
+    div_icon_with("map-view__schacht-icon", SCHACHT_ICON_SIZE, Some(&img))
 }
 
 /// Zoom at most when fitting the map to what it shows; the cadastral map starts at 17.
 const FIT_MAX_ZOOM: f64 = 18.0;
 
-/// A Schacht as a circle labelled with its name; a click on either calls `on_click`. The
-/// colours come from the CSS class (`.map-view__schacht`): Leaflet sets them as SVG attributes,
-/// which can't take tokens.
+/// A Schacht labelled with its name, as its type's icon (`svg`) or, without one, a circle; a
+/// click on either calls `on_click`. The circle's colours come from the CSS class
+/// (`.map-view__schacht`): Leaflet sets them as SVG attributes, which can't take tokens.
 pub fn schacht_marker(
     name: &str,
     location: GeoPoint,
+    icon: Option<&str>,
     on_click: impl Fn() + 'static,
-) -> CircleMarker {
-    let options = CircleOptions::default();
-    options.set_radius(7.0);
-    options.set_class_name("map-view__schacht".to_string());
-    let marker = CircleMarker::new_with_options(&lat_lng(location), &options);
+) -> Layer {
+    let on_click: Box<dyn Fn(MouseEvent)> = Box::new(move |_: MouseEvent| on_click());
+    // An icon that can't be created (no document) leaves the circle
+    let (marker, offset): (Layer, f64) = match icon.and_then(|svg| schacht_icon(svg).ok()) {
+        Some(icon) => {
+            let options = MarkerOptions::default();
+            options.set_icon(icon);
+            let marker = Marker::new_with_options(&lat_lng(location), &options);
+            marker.on_click(on_click);
+            (marker.unchecked_into(), SCHACHT_ICON_SIZE / 2.0)
+        }
+        None => {
+            let options = CircleOptions::default();
+            options.set_radius(7.0);
+            options.set_class_name("map-view__schacht".to_string());
+            let marker = CircleMarker::new_with_options(&lat_lng(location), &options);
+            marker.on_click(on_click);
+            (marker.unchecked_into(), 8.0)
+        }
+    };
 
     let tooltip = TooltipOptions::default();
     tooltip.set_permanent(true);
     tooltip.set_direction("right".to_string());
-    tooltip.set_offset(leaflet::Point::new(8.0, 0.0));
+    tooltip.set_offset(leaflet::Point::new(offset, 0.0));
     // Lets a click on the name open the Schacht too, easier to hit on a phone
     set_option(&tooltip, "interactive", &JsValue::TRUE);
     // The crate's bind_tooltip_with_content calls a method Leaflet doesn't have
     let tooltip = Tooltip::new(&tooltip, None);
     tooltip.set_content(&JsValue::from_str(name));
     marker.bind_tooltip(&tooltip);
-
-    marker.on_click(Box::new(move |_: MouseEvent| on_click()));
     marker
 }
 

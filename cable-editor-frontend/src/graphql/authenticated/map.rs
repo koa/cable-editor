@@ -1,7 +1,7 @@
 use crate::{
     error::FrontendError,
     graphql::{
-        authenticated::{GeoPoint, schema},
+        authenticated::{GeoPoint, schacht_types::SchachtTypIcon, schema},
         query,
     },
 };
@@ -24,6 +24,8 @@ pub struct MapSchacht {
     pub name: String,
     /// Missing without geometry
     pub location: Option<GeoPoint>,
+    /// Its icon on the map
+    pub typ: Option<SchachtTypIcon>,
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]

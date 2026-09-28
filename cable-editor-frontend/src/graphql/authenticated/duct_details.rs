@@ -1,7 +1,10 @@
 use crate::{
     error::FrontendError,
     graphql::{
-        authenticated::{DateTime, Genauigkeit, GeoPoint, list_ducts::duct_title, schema},
+        authenticated::{
+            DateTime, Genauigkeit, GeoPoint, list_ducts::duct_title, schacht_types::SchachtTypIcon,
+            schema,
+        },
         query,
     },
 };
@@ -63,6 +66,8 @@ pub struct DuctEnd {
     pub id: i32,
     pub name: String,
     pub location: Option<GeoPoint>,
+    /// Its icon on the map
+    pub typ: Option<SchachtTypIcon>,
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]

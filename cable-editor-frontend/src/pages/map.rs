@@ -8,6 +8,7 @@ use crate::{
     graphql::authenticated::{
         list_ducts::duct_title,
         map::{MapData, MapDuct, fetch_map_data},
+        schacht_types::type_icon,
     },
     pages::router::{CabinetView, PlanView},
     util::{get_credentials, navigate},
@@ -226,9 +227,12 @@ fn show_data(ctx: &Context<Map>, map: &leaflet::Map, data: &MapData) {
         };
         let id = schacht.id;
         let scope = ctx.link().clone();
-        schacht_marker(&schacht.name, location, move || {
-            scope.send_message(Msg::OpenSchacht(id))
-        })
+        schacht_marker(
+            &schacht.name,
+            location,
+            type_icon(&schacht.typ),
+            move || scope.send_message(Msg::OpenSchacht(id)),
+        )
         .add_to(map);
     }
     let duct_points = data
