@@ -8,6 +8,7 @@ use crate::components::menu::{MenuDropdown, MenuEntry};
 use crate::{
     components::{
         panel::{attach_fiber::AttachFiber, loop_editor::LoopPortEditor, show::ShowPanel},
+        recovery::RetryScope,
         user::{RequireRole, UserMenu},
     },
     graphql::authenticated::{IdOrNew, current_user::Role},
@@ -251,7 +252,8 @@ impl AppRoute {
     /// Renders the page in PatternFly's page layout: the breadcrumb in a `PageSection` inside
     /// `<main>`, followed by the page, which adds its title and content sections with
     /// `PageLayout`. There is no masthead or sidebar, and unlike PatternFly's `Page` the document
-    /// scrolls instead of the main container (`.app-page` in `style.scss`).
+    /// scrolls instead of the main container (`.app-page` in `style.scss`). `RetryScope` lets
+    /// an error build it all anew, as the installed app has no reload (`components/recovery.rs`).
     pub fn content(self) -> Html {
         let breadcrumb = self.breadcrumb();
         let role = self.required_role();
@@ -259,17 +261,20 @@ impl AppRoute {
             AppRoute::ListOfPlans => html!(<ListOfPlannings/>),
             AppRoute::Plan { plan_id, view } => view.content(plan_id),
         };
+        // After a failed request its error offers to build breadcrumb and page anew
         html! {
-            <div class="pf-v6-c-page pf-m-no-sidebar app-page">
-                <div class="pf-v6-c-page__main-container">
-                    <main class="pf-v6-c-page__main" id="main-content" tabindex="-1">
-                        <PageSection r#type={PageSectionType::Breadcrumbs}>
-                            <div class="breadcrumb-bar">{breadcrumb}<UserMenu/></div>
-                        </PageSection>
-                        <RequireRole {role}>{content}</RequireRole>
-                    </main>
+            <RetryScope>
+                <div class="pf-v6-c-page pf-m-no-sidebar app-page">
+                    <div class="pf-v6-c-page__main-container">
+                        <main class="pf-v6-c-page__main" id="main-content" tabindex="-1">
+                            <PageSection r#type={PageSectionType::Breadcrumbs}>
+                                <div class="breadcrumb-bar">{breadcrumb}<UserMenu/></div>
+                            </PageSection>
+                            <RequireRole {role}>{content}</RequireRole>
+                        </main>
+                    </div>
                 </div>
-            </div>
+            </RetryScope>
         }
     }
     /// Role needed for the page: the editors of a Schacht's panels and of a panel need

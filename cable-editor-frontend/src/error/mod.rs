@@ -1,5 +1,6 @@
 pub mod messages;
 
+use crate::components::recovery::ErrorRecovery;
 use cable_editor_common::UserError;
 use cynic::http::CynicReqwestError;
 use patternfly_yew::prelude::{Alert, AlertType};
@@ -49,66 +50,86 @@ pub enum FrontendError {
     SaveFile(JsValue),
 }
 
-impl IntoPropValue<Html> for &FrontendError {
-    fn into_prop_value(self) -> Html {
+impl FrontendError {
+    /// The message, with the technical cause where there is one.
+    pub fn title(&self) -> String {
         match self {
             FrontendError::ErrorQueryingAnonymousConnect(e) => {
-                html!(<Alert inline=true title={format!("Fehler beim anyonymen Verbindungsaufbau: {e}")} r#type={AlertType::Danger} />)
+                format!("Fehler beim anyonymen Verbindungsaufbau: {e}")
             }
             FrontendError::ErrorQueryingAnonymousTransfer(e) => {
-                html!(<Alert inline=true title={format!("Fehler bei einer anonymen Abfrage: {e}")} r#type={AlertType::Danger} />)
+                format!("Fehler bei einer anonymen Abfrage: {e}")
             }
             FrontendError::ErrorQueryingAuthenticatedConnect(e) => {
-                html!(<Alert inline=true title={format!("Fehler beim authentisierten Verbindungsaufbau: {e}")} r#type={AlertType::Danger} />)
+                format!("Fehler beim authentisierten Verbindungsaufbau: {e}")
             }
             FrontendError::ErrorQueryingAuthenticatedTransfer(e) => {
-                html!(<Alert inline=true title={format!("Fehler bei einer authentisierten Abfrage: {e}")} r#type={AlertType::Danger} />)
+                format!("Fehler bei einer authentisierten Abfrage: {e}")
             }
-            FrontendError::InvalidHeader(e) => {
-                html!(<Alert inline=true title={format!("Ungültiger Header: {e}")} r#type={AlertType::Danger} />)
-            }
-            FrontendError::User(error) => {
-                html!(<Alert inline=true title={messages::user_error(error)} r#type={AlertType::Danger} />)
-            }
-            FrontendError::Graphql(details) => {
-                html! {
-                    <Alert inline=true title="Unerwarteter Fehler vom Server" r#type={AlertType::Danger}>
-                        <ul>
-                            {for details.iter().map(|detail| html!(<li>{detail.as_str()}</li>))}
-                        </ul>
-                    </Alert>
-                }
-            }
-            FrontendError::PlanNotFound(id) => {
-                html!(<Alert inline=true title={format!("Plan {id} existiert nicht")} r#type={AlertType::Danger} />)
-            }
-            FrontendError::NotFound => {
-                html!(<Alert inline=true title={"Daten nicht gefunden".to_string()} r#type={AlertType::Danger} />)
-            }
+            FrontendError::InvalidHeader(e) => format!("Ungültiger Header: {e}"),
+            FrontendError::User(error) => messages::user_error(error),
+            FrontendError::Graphql(_) => "Unerwarteter Fehler vom Server".to_string(),
+            FrontendError::PlanNotFound(id) => format!("Plan {id} existiert nicht"),
+            FrontendError::NotFound => "Daten nicht gefunden".to_string(),
             FrontendError::NoServerAddress => {
-                html!(<Alert inline=true title={"Adresse des Servers konnte nicht bestimmt werden".to_string()} r#type={AlertType::Danger} />)
+                "Adresse des Servers konnte nicht bestimmt werden".to_string()
             }
             FrontendError::InvalidPanelTree => {
-                html!(<Alert inline=true title={"Die Panels des Schachts bilden keinen gültigen Baum".to_string()} r#type={AlertType::Danger} />)
+                "Die Panels des Schachts bilden keinen gültigen Baum".to_string()
             }
-            FrontendError::Printer(e) => {
-                html!(<Alert inline=true title={format!("Druckfehler: {e}")} r#type={AlertType::Danger} />)
-            }
-            FrontendError::PrinterDisconnected => {
-                html!(<Alert inline=true title={"Drucker nicht verbunden".to_string()} r#type={AlertType::Danger} />)
-            }
-            FrontendError::PrinterNoSupply => {
-                html!(<Alert inline=true title={"Drucker hat kein Etikett gemeldet".to_string()} r#type={AlertType::Danger} />)
-            }
+            FrontendError::Printer(e) => format!("Druckfehler: {e}"),
+            FrontendError::PrinterDisconnected => "Drucker nicht verbunden".to_string(),
+            FrontendError::PrinterNoSupply => "Drucker hat kein Etikett gemeldet".to_string(),
             FrontendError::UnsupportedTape => {
-                html!(<Alert inline=true title={"Etikettentyp wird nicht unterstützt (nur Endlosband)".to_string()} r#type={AlertType::Danger} />)
+                "Etikettentyp wird nicht unterstützt (nur Endlosband)".to_string()
             }
             FrontendError::Map(e) => {
-                html!(<Alert inline=true title={format!("Karte konnte nicht angezeigt werden: {}", js_message(e))} r#type={AlertType::Danger} />)
+                format!("Karte konnte nicht angezeigt werden: {}", js_message(e))
             }
             FrontendError::SaveFile(e) => {
-                html!(<Alert inline=true title={format!("Datei konnte nicht gespeichert werden: {}", js_message(e))} r#type={AlertType::Danger} />)
+                format!("Datei konnte nicht gespeichert werden: {}", js_message(e))
             }
+        }
+    }
+
+    /// Further details, the messages of an unexpected server error.
+    pub fn details(&self) -> &[String] {
+        match self {
+            FrontendError::Graphql(details) => details,
+            _ => &[],
+        }
+    }
+}
+
+impl IntoPropValue<Html> for &FrontendError {
+    fn into_prop_value(self) -> Html {
+        let title = self.title();
+        let mut children = Vec::new();
+        if !self.details().is_empty() {
+            children.push(html! {
+                <ul>
+                    {for self.details().iter().map(|detail| html!(<li>{detail.as_str()}</li>))}
+                </ul>
+            });
+        }
+        // The connection failed, or the server did (possibly a new version with another schema)
+        let retry = matches!(
+            self,
+            FrontendError::ErrorQueryingAnonymousConnect(_)
+                | FrontendError::ErrorQueryingAnonymousTransfer(_)
+                | FrontendError::ErrorQueryingAuthenticatedConnect(_)
+                | FrontendError::ErrorQueryingAuthenticatedTransfer(_)
+                | FrontendError::Graphql(_)
+        );
+        let reload = matches!(self, FrontendError::Graphql(_));
+        if retry || reload {
+            children.push(html!(<ErrorRecovery {retry} {reload}/>));
+        }
+        // Any child, even an empty one, adds the space of a description
+        if children.is_empty() {
+            html!(<Alert inline=true {title} r#type={AlertType::Danger}/>)
+        } else {
+            html!(<Alert inline=true {title} r#type={AlertType::Danger}>{for children}</Alert>)
         }
     }
 }

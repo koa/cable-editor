@@ -716,6 +716,38 @@ body {
 }
 
 // Breadcrumb and user menu (components/user.rs) in one row, the user menu at the end
+/* Buttons of an error alert to recover from a failed request (components/recovery.rs) */
+.error-recovery {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pf-t--global--spacer--sm);
+  margin-block-start: var(--pf-t--global--spacer--sm);
+}
+
+/* An error before the router (no page layout around it) */
+.app-error {
+  padding: var(--pf-t--global--spacer--md);
+}
+
+/* Breadcrumb menu that couldn't be loaded (menu::MenuError) */
+.menu-error__icon {
+  color: var(--pf-t--global--icon--color--status--danger--default);
+}
+
+.menu-error__message {
+  padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
+  max-width: 24rem;
+  overflow-wrap: anywhere;
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--pf-t--global--text--color--status--danger--default);
+
+  ul {
+    margin-block-start: var(--pf-t--global--spacer--xs);
+    padding-inline-start: var(--pf-t--global--spacer--md);
+    list-style: disc;
+  }
+}
+
 .breadcrumb-bar {
   display: flex;
   align-items: flex-start;

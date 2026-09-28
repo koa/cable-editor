@@ -1,8 +1,11 @@
-use crate::{graphql::authenticated::current_user::Role, pages::router::AppRoute};
-use patternfly_yew::prelude::MenuToggleVariant;
-use popup::{MenuGroup, MenuLinkItem, PopupMenu};
+use crate::{
+    components::recovery::Recovery, graphql::authenticated::current_user::Role,
+    pages::router::AppRoute,
+};
+use patternfly_yew::prelude::{Icon, MenuToggleVariant};
+use popup::{MenuActionItem, MenuGroup, MenuLinkItem, PopupMenu};
 use std::borrow::Cow;
-use yew::{Html, Properties, function_component, html, use_context};
+use yew::{AttrValue, Html, Properties, function_component, html, use_context};
 
 pub mod list_cabinet;
 pub mod list_cabinet_type;
@@ -90,5 +93,53 @@ pub fn MenuDropdown(props: &MenuDropdownProps) -> Html {
             }
             {for groups}
         </PopupMenu>
+    }
+}
+
+#[derive(Properties, PartialEq)]
+pub struct MenuErrorProps {
+    /// `FrontendError::title`
+    pub title: AttrValue,
+    /// `FrontendError::details`
+    #[prop_or_default]
+    pub details: Vec<String>,
+}
+
+/// Breadcrumb item whose menu couldn't be loaded: instead of an alert, which doesn't fit into
+/// the breadcrumb, a menu with the error and an entry to load breadcrumb and page anew, so the
+/// way on isn't lost.
+#[function_component]
+pub fn MenuError(props: &MenuErrorProps) -> Html {
+    let retry = match use_context::<Recovery>() {
+        Some(Recovery::Retry(retry)) => Some(retry),
+        _ => None,
+    };
+    html! {
+        <PopupMenu
+            variant={MenuToggleVariant::Plain}
+            icon={html!(<span class="menu-error__icon">{Icon::ExclamationCircle}</span>)}
+            text={html!("Nicht geladen")}
+        >
+            <div class="menu-error__message">
+                <p>{props.title.clone()}</p>
+                if !props.details.is_empty() {
+                    <ul>{for props.details.iter().map(|detail| html!(<li>{detail}</li>))}</ul>
+                }
+            </div>
+            if let Some(retry) = retry {
+                <MenuGroup divider=true>
+                    <MenuActionItem onclick={retry}>{"Erneut laden"}</MenuActionItem>
+                </MenuGroup>
+            }
+        </PopupMenu>
+    }
+}
+
+impl MenuErrorProps {
+    pub fn from_error(error: &crate::error::FrontendError) -> Self {
+        Self {
+            title: error.title().into(),
+            details: error.details().to_vec(),
+        }
     }
 }

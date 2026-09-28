@@ -10,7 +10,7 @@ pub mod panel;
 pub mod planning;
 pub mod router;
 
-use crate::components::{label_printer::PrinterStatusBar, user::UserProvider};
+use crate::components::{label_printer::PrinterStatusBar, recovery::Recovery, user::UserProvider};
 use crate::{
     error::FrontendError,
     graphql::{
@@ -24,8 +24,8 @@ use patternfly_yew::prelude::{
     Alert, AlertType, BackdropViewer, Bullseye, Button, ButtonVariant, Spinner, ToastViewer,
 };
 use yew::{
-    Callback, Component, Context, ContextHandle, Html, Properties, function_component, html,
-    html::IntoPropValue, platform::spawn_local,
+    Callback, Component, Context, ContextHandle, ContextProvider, Html, Properties,
+    function_component, html, html::IntoPropValue, platform::spawn_local,
 };
 use yew_nested_router::{Router, Switch};
 use yew_oauth2::{
@@ -72,7 +72,11 @@ impl yew::Component for App {
     fn view(&self, _ctx: &Context<Self>) -> Html {
         if let Some(error) = &self.error {
             let error: Html = error.into_prop_value();
-            html!(<Bullseye>{error}</Bullseye>)
+            html! {
+                <ContextProvider<Recovery> context={Recovery::Reload}>
+                    <Bullseye><div class="app-error">{error}</div></Bullseye>
+                </ContextProvider<Recovery>>
+            }
         } else if let Some(config) = self.oauth2_config.clone() {
             html! {
                 <MainOAuth2 {config}/>

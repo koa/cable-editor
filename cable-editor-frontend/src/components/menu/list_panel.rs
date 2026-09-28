@@ -1,5 +1,7 @@
 use crate::components::menu::list_cabinet::ListCabinet;
-use crate::components::menu::{BreadcrumbDivider, MenuDropdown, MenuEntry, MenuEntryGroup};
+use crate::components::menu::{
+    BreadcrumbDivider, MenuDropdown, MenuEntry, MenuEntryGroup, MenuError, MenuErrorProps,
+};
 use crate::error::FrontendError;
 use crate::graphql::authenticated::list_plans::BASELINE_PLAN_ID;
 use crate::graphql::authenticated::panel_navigation::{ChildPanelNav, PanelHierarchy};
@@ -7,7 +9,6 @@ use crate::pages::router::{AppRoute, PanelView, PlanView};
 use crate::util::get_credentials;
 use patternfly_yew::prelude::Spinner;
 use std::borrow::Cow;
-use yew::html::IntoPropValue;
 use yew::platform::spawn_local;
 use yew::{Component, Context, Html, Properties, html};
 
@@ -84,7 +85,7 @@ impl Component for ListPanel {
         let divider = html!(<BreadcrumbDivider/>);
 
         if let Some(error) = &self.error {
-            html!(<span>{divider} {<&FrontendError as IntoPropValue<Html>>::into_prop_value(error)}</span>)
+            html!(<span>{divider} <MenuError ..MenuErrorProps::from_error(error)/></span>)
         } else {
             match &self.loaded_panel {
                 None => html!(<span>{divider} <Spinner/></span>),

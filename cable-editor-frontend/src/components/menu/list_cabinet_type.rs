@@ -1,11 +1,10 @@
-use crate::components::menu::{MenuDropdown, MenuEntry};
+use crate::components::menu::{MenuDropdown, MenuEntry, MenuError, MenuErrorProps};
 use crate::error::FrontendError;
 use crate::graphql::authenticated::schacht_types::{SchachtTypEntry, fetch_schacht_typ_list};
 use crate::pages::router::{AppRoute, PlanView};
 use crate::util::get_credentials;
 use patternfly_yew::prelude::Spinner;
 use std::borrow::Cow;
-use yew::html::IntoPropValue;
 use yew::platform::spawn_local;
 use yew::{Component, Context, Html, Properties, html};
 
@@ -50,7 +49,7 @@ impl Component for ListCabinetType {
     fn view(&self, ctx: &Context<Self>) -> Html {
         let types = match &self.types {
             None => return html!(<Spinner/>),
-            Some(Err(error)) => return error.into_prop_value(),
+            Some(Err(error)) => return html!(<MenuError ..MenuErrorProps::from_error(error)/>),
             Some(Ok(types)) => types,
         };
         let ListCabinetTypeProps { plan_id, typ_id } = *ctx.props();

@@ -1,6 +1,7 @@
 use crate::{
     components::menu::popup::{MenuGroup, PopupMenu},
     components::page_layout::PageLayout,
+    components::recovery::Recovery,
     error::FrontendError,
     graphql::authenticated::current_user::{CurrentUser, Role},
     util::get_credentials,
@@ -55,8 +56,13 @@ impl Component for UserProvider {
         match &self.user {
             None => html!(<Bullseye><Spinner/></Bullseye>),
             Some(Err(error)) => {
+                // Before the router, so there is no page to build anew
                 let error: Html = error.into_prop_value();
-                html!(<Bullseye>{error}</Bullseye>)
+                html! {
+                    <ContextProvider<Recovery> context={Recovery::Reload}>
+                        <Bullseye><div class="app-error">{error}</div></Bullseye>
+                    </ContextProvider<Recovery>>
+                }
             }
             Some(Ok(user)) => html! {
                 <ContextProvider<CurrentUser> context={user.clone()}>

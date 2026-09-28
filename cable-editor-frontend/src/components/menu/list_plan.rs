@@ -1,11 +1,10 @@
-use crate::components::menu::{MenuDropdown, MenuEntry};
+use crate::components::menu::{MenuDropdown, MenuEntry, MenuError, MenuErrorProps};
 use crate::error::FrontendError;
 use crate::graphql::authenticated::list_plans::PlanListEntry;
 use crate::pages::router::{AppRoute, PlanView};
 use crate::util::get_credentials;
 use patternfly_yew::prelude::Spinner;
 use std::borrow::Cow;
-use yew::html::IntoPropValue;
 use yew::platform::spawn_local;
 use yew::{Component, Context, Html, Properties, html};
 
@@ -67,7 +66,7 @@ impl Component for ListPlan {
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         if let Some(error) = &self.error {
-            error.into_prop_value()
+            html!(<MenuError ..MenuErrorProps::from_error(error)/>)
         } else {
             match &self.loaded_plans {
                 None => {
