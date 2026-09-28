@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Fiber-optic cable / duct / patch-panel planning tool. Single deployable binary: a Rust (actix-web) backend serving a GraphQL API plus an embedded Yew (WASM) SPA. Data lives in PostgreSQL + PostGIS; planned panel/port changes can be synced to NetBox. Domain names are partly German (`kabel` = cable, `schacht` = manhole/cabinet, `trasse` = duct route, `sequenz`); code comments and log messages are mixed German/English.
 
-Concepts for work not yet done live in `docs/`, one file per topic: `docs/leitungskataster.md` (the quarterly INTERLIS delivery to the Leitungskataster Kanton Zürich, SIA405 LKMap; implemented up to the manual upload to the Checkservice: per owner both transfer files as ZIPs and the log of deliveries in `backend/src/lkmap/`, the admin page `pages/lkmap.rs`), `docs/stammdaten.md` (pages for owners and Schacht types), `docs/navigation.md` (every page under the plan's path), `docs/fehlermeldungen.md` (how errors reach the user; implemented).
+Concepts for work not yet done live in `docs/`, one file per topic: `docs/leitungskataster.md` (the quarterly INTERLIS delivery to the Leitungskataster Kanton Zürich, SIA405 LKMap; implemented up to the manual upload to the Checkservice: per owner both transfer files as ZIPs and the log of deliveries in `backend/src/lkmap/`, the admin page `pages/lkmap.rs`), `docs/stammdaten.md` (pages for owners and Schacht types), `docs/navigation.md` (every page under the plan's path), `docs/netbox-sync.md` (syncing the circuits of the plan active in Netbox after every change and every few hours, the issues stored for admins), `docs/fehlermeldungen.md` (how errors reach the user; implemented).
 
 ## Workspace layout
 
