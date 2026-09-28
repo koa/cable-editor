@@ -12,7 +12,8 @@ use crate::{
         plan_details::{PlanDetails, PortUsage},
     },
     icons::{IconLink, IconUnlink},
-    util::{get_backdrop, get_credentials, get_role},
+    pages::router::AppRoute,
+    util::{get_backdrop, get_credentials, get_role, toast_success},
 };
 use patternfly_yew::prelude::{
     ActionGroup, Alert, AlertType, Backdrop, Bullseye, Button, ButtonVariant, Cell, CellContext,
@@ -25,6 +26,7 @@ use yew::{
     Callback, Component, Context, Html, Properties, html, html::IntoPropValue, html_nested,
     platform::spawn_local,
 };
+use yew_nested_router::prelude::RouterContext;
 
 #[derive(Properties, PartialEq, Clone)]
 pub struct EditPlanProps {
@@ -122,6 +124,8 @@ pub enum Msg {
     Saved(PlanDetails),
     AskImplement,
     ImplementPlan,
+    /// The plan is merged into the baseline and deleted
+    Implemented,
     Error(FrontendError),
     SyncNetbox,
 }
@@ -231,7 +235,7 @@ impl Component for EditPlan {
                     scope.send_message(
                         PlanDetails::implement(credentials.as_ref(), plan_id)
                             .await
-                            .map_or_else(Msg::Error, Msg::Saved),
+                            .map_or_else(Msg::Error, |_| Msg::Implemented),
                     );
                 });
                 true
@@ -242,6 +246,18 @@ impl Component for EditPlan {
                 self.edit_name = data.name.clone();
                 self.details = Some(data);
                 true
+            }
+            Msg::Implemented => {
+                self.saving = false;
+                toast_success(ctx.link(), "Planung abgeschlossen");
+                // Replaced, so going back doesn't lead to the deleted plan
+                if let Some((router, _)) = ctx
+                    .link()
+                    .context::<RouterContext<AppRoute>>(Callback::noop())
+                {
+                    router.replace(AppRoute::ListOfPlans);
+                }
+                false
             }
             Msg::Error(error) => {
                 self.error = Some(error);
