@@ -1,5 +1,6 @@
 //! The delivery to the Leitungskataster Kanton Zürich (see docs/leitungskataster.md): per owner
-//! with UID the delivered ducts and the Schächte where one ends, as SIA405 LKMap transfer file.
+//! with UID the delivered ducts and the Schächte where one ends, as SIA405 LKMap transfer file,
+//! and the Zuständigkeitsperimeter around them, each in a ZIP.
 
 pub mod perimeter;
 pub mod xtf;
@@ -26,7 +27,10 @@ use postgis_diesel::{
     sql_types::Geometry,
     types::{LineString, Point, Polygon},
 };
+use sha2::{Digest, Sha256};
+use std::io::{Cursor, Write};
 use xtf::{Delivery, LkLinie, LkPunkt};
+use zip::{CompressionMethod, ZipWriter, write::SimpleFileOptions};
 
 /// A transfer file of the delivery.
 #[derive(Debug, Clone, PartialEq)]
@@ -36,19 +40,71 @@ pub struct TransferFile {
     pub xtf: Vec<u8>,
 }
 
-/// An owner's transfer files and what couldn't go into them.
+impl TransferFile {
+    /// The ZIP of the same name holding the file, how the Checkservice takes it.
+    pub fn zip_name(&self) -> String {
+        let name = self
+            .file_name
+            .strip_suffix(".xtf")
+            .unwrap_or(&self.file_name);
+        format!("{name}.zip")
+    }
+
+    /// The file in a ZIP (see `zip_name`).
+    pub fn zip(&self) -> zip::result::ZipResult<Vec<u8>> {
+        let mut zip = ZipWriter::new(Cursor::new(Vec::new()));
+        zip.start_file(
+            self.file_name.as_str(),
+            SimpleFileOptions::default().compression_method(CompressionMethod::Deflated),
+        )?;
+        zip.write_all(&self.xtf)?;
+        Ok(zip.finish()?.into_inner())
+    }
+}
+
+/// An owner's delivery: what goes into it and what can't.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Export {
-    /// The ducts and Schächte (`SIA405_LKMap_2015_LV95`)
-    pub lkmap: TransferFile,
-    /// The Zuständigkeitsperimeter (`Perimeter_LK_ZH_V2_LV95`)
-    pub perimeter: TransferFile,
-    pub schacht_count: usize,
-    pub duct_count: usize,
+    pub owner: Eigentuemer,
+    /// Missing without UID and when nothing to deliver has a position
+    pub files: Option<Files>,
+    /// The delivered Schächte and ducts
+    pub schaechte: Vec<i32>,
+    pub ducts: Vec<i32>,
     /// Schächte without position: neither they nor their ducts can be delivered
     pub schaechte_without_position: Vec<i32>,
     /// Delivered ducts ending at a Schacht without position
     pub ducts_without_line: Vec<i32>,
+}
+
+/// The transfer files of an owner's delivery.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Files {
+    /// The ducts and Schächte (`SIA405_LKMap_2015_LV95`)
+    pub lkmap: TransferFile,
+    /// The Zuständigkeitsperimeter (`Perimeter_LK_ZH_V2_LV95`)
+    pub perimeter: TransferFile,
+    /// The perimeter's outline in WGS84 (lat, lng), for the map
+    pub perimeter_wgs84: Vec<(f64, f64)>,
+    /// SHA-256 of both files in hex: the same data give the same files (no export date in
+    /// them), so a different checksum means a change since a delivery, deleted objects too.
+    pub checksum: String,
+}
+
+impl Export {
+    /// The files to deliver, or why there are none.
+    pub fn deliverable(&self) -> Result<&Files, UserError> {
+        if self.owner.uid.is_none() {
+            return Err(UserError::OwnerWithoutUid {
+                owner: self.owner.name.clone(),
+            });
+        }
+        self.files
+            .as_ref()
+            .ok_or_else(|| UserError::NothingToDeliver {
+                owner: self.owner.name.clone(),
+            })
+    }
 }
 
 #[derive(QueryableByName)]
@@ -126,18 +182,22 @@ order by s.id";
 /// The area around an owner's delivered ducts and Schächte: their convex hull with a buffer,
 /// the arcs of the buffer as straight segments (4 per quarter circle).
 const PERIMETER: &str = "
-select st_buffer(st_convexhull(st_collect(o.geom)), $3, 'quad_segs=4') as area
+select a.area, st_transform(a.area, 4326) as area_wgs84
+from (select st_buffer(st_convexhull(st_collect(o.geom)), $3, 'quad_segs=4') as area
 from (select v.geom from trassen_mit_endpunkten v where v.id = any($1)
       union all
-      select s.geom from schacht s where s.id = any($2)) o";
+      select s.geom from schacht s where s.id = any($2)) o) a";
 
 #[derive(QueryableByName)]
 struct PerimeterRow {
     #[diesel(sql_type = Nullable<Geometry>)]
     area: Option<Polygon<Point>>,
+    #[diesel(sql_type = Nullable<Geometry>)]
+    area_wgs84: Option<Polygon<Point>>,
 }
 
-/// The transfer files of the owner (with UID) and what they lack.
+/// The owner's delivery: the transfer files (with UID) and what they lack. Owners without
+/// anything to deliver get an empty one.
 pub async fn export(
     connection: &mut AsyncPgConnection,
     owner_id: i32,
@@ -152,12 +212,6 @@ pub async fn export(
             kind: ObjectKind::Owner,
             id: owner_id.into(),
         })?;
-    let uid = owner
-        .uid
-        .clone()
-        .ok_or_else(|| UserError::OwnerWithoutUid {
-            owner: owner.name.clone(),
-        })?;
     let duct_rows: Vec<DuctRow> = sql_query(DUCTS)
         .bind::<Integer, _>(owner_id)
         .load(connection)
@@ -166,9 +220,6 @@ pub async fn export(
         .bind::<Integer, _>(owner_id)
         .load(connection)
         .await?;
-    if duct_rows.is_empty() && schacht_rows.is_empty() {
-        return Err(UserError::NothingToDeliver { owner: owner.name }.into());
-    }
     let prefix = config.oid_prefix();
 
     let mut ducts = Vec::new();
@@ -216,56 +267,87 @@ pub async fn export(
         }
         schacht_ids.push(row.id);
     }
-    // All of them without position: there's no place to deliver
-    let Some(letzte_aenderung) = ducts
+    // Nothing with position: there's no place to deliver
+    let letzte_aenderung = ducts
         .iter()
         .map(|d| d.letzte_aenderung)
         .chain(schaechte.iter().map(|s| s.letzte_aenderung))
-        .max()
-    else {
-        return Err(UserError::NothingToDeliver { owner: owner.name }.into());
+        .max();
+    let files = match (&owner.uid, letzte_aenderung) {
+        (Some(uid), Some(letzte_aenderung)) => {
+            let area = sql_query(PERIMETER)
+                .bind::<Array<Integer>, _>(&duct_ids)
+                .bind::<Array<Integer>, _>(&schacht_ids)
+                .bind::<Double, _>(config.perimeter_puffer_m())
+                .get_result::<PerimeterRow>(connection)
+                .await?;
+            let (Some(outline), Some(outline_wgs84)) = (area.area, area.area_wgs84) else {
+                return Err("PostGIS returned no perimeter".into());
+            };
+            let outer = outline.rings.into_iter().next().unwrap_or_default();
+            let perimeter = Perimeter {
+                basket_id: oid(prefix, 'p', owner.id)?,
+                tid: oid(prefix, 'z', owner.id)?,
+                datenherr: uid.clone(),
+                datenlieferant: config.datenlieferant_uid().to_string(),
+                letzte_aenderung,
+                boundary: perimeter::rounded_ring(outer.iter().map(|p| (p.x, p.y))),
+            };
+            let delivery = Delivery {
+                basket_id: oid(prefix, 'b', owner.id)?,
+                datenherr: uid.clone(),
+                datenlieferant: config.datenlieferant_uid().to_string(),
+                eigentuemer: owner.delivered_name().to_string(),
+                schaechte,
+                ducts,
+            };
+            let file_name =
+                |content: &str| format!("{}-{content}.xtf", uid.to_lowercase().replace('.', "-"));
+            let lkmap = TransferFile {
+                file_name: file_name("kommunikation-lkmap"),
+                xtf: xtf::write(&delivery)?,
+            };
+            let perimeter = TransferFile {
+                file_name: file_name("zustaendigkeit-peri"),
+                xtf: perimeter::write(&perimeter)?,
+            };
+            let checksum = checksum(&[&lkmap, &perimeter]);
+            Some(Files {
+                lkmap,
+                perimeter,
+                // PostGIS keeps the longitude in x
+                perimeter_wgs84: outline_wgs84
+                    .rings
+                    .into_iter()
+                    .next()
+                    .map(|ring| ring.iter().map(|p| (p.y, p.x)).collect())
+                    .unwrap_or_default(),
+                checksum,
+            })
+        }
+        _ => None,
     };
-    let area = sql_query(PERIMETER)
-        .bind::<Array<Integer>, _>(&duct_ids)
-        .bind::<Array<Integer>, _>(&schacht_ids)
-        .bind::<Double, _>(config.perimeter_puffer_m())
-        .get_result::<PerimeterRow>(connection)
-        .await?
-        .area
-        .ok_or("PostGIS returned no perimeter")?;
-    let outer = area.rings.into_iter().next().unwrap_or_default();
-    let perimeter = Perimeter {
-        basket_id: oid(prefix, 'p', owner.id)?,
-        tid: oid(prefix, 'z', owner.id)?,
-        datenherr: uid.clone(),
-        datenlieferant: config.datenlieferant_uid().to_string(),
-        letzte_aenderung,
-        boundary: perimeter::rounded_ring(outer.iter().map(|p| (p.x, p.y))),
-    };
-    let delivery = Delivery {
-        basket_id: oid(prefix, 'b', owner.id)?,
-        datenherr: uid.clone(),
-        datenlieferant: config.datenlieferant_uid().to_string(),
-        eigentuemer: owner.delivered_name().to_string(),
-        schaechte,
-        ducts,
-    };
-    let file_name =
-        |content: &str| format!("{}-{content}.xtf", uid.to_lowercase().replace('.', "-"));
     Ok(Export {
-        lkmap: TransferFile {
-            file_name: file_name("kommunikation-lkmap"),
-            xtf: xtf::write(&delivery)?,
-        },
-        perimeter: TransferFile {
-            file_name: file_name("zustaendigkeit-peri"),
-            xtf: perimeter::write(&perimeter)?,
-        },
-        schacht_count: delivery.schaechte.len(),
-        duct_count: delivery.ducts.len(),
+        owner,
+        files,
+        schaechte: schacht_ids,
+        ducts: duct_ids,
         schaechte_without_position,
         ducts_without_line,
     })
+}
+
+/// SHA-256 over the files in hex.
+fn checksum(files: &[&TransferFile]) -> String {
+    let mut hasher = Sha256::new();
+    for file in files {
+        hasher.update(&file.xtf);
+    }
+    hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 /// The STANDARDOID of an object: the configured prefix (8 characters), a letter for its kind
@@ -301,6 +383,38 @@ mod tests {
                 kind: ObjectKind::Duct,
                 id: 10_000_000
             })
+        );
+    }
+
+    #[test]
+    fn zipped() {
+        let file = TransferFile {
+            file_name: "che-123-456-789-kommunikation-lkmap.xtf".into(),
+            xtf: b"<TRANSFER/>".repeat(100),
+        };
+        assert_eq!(file.zip_name(), "che-123-456-789-kommunikation-lkmap.zip");
+        let mut archive = zip::ZipArchive::new(Cursor::new(file.zip().unwrap())).unwrap();
+        let mut entry = archive.by_index(0).unwrap();
+        assert_eq!(entry.name(), file.file_name);
+        let mut xtf = Vec::new();
+        std::io::Read::read_to_end(&mut entry, &mut xtf).unwrap();
+        assert_eq!(xtf, file.xtf);
+    }
+
+    #[test]
+    fn checksums() {
+        let file = |xtf: &str| TransferFile {
+            file_name: String::new(),
+            xtf: xtf.into(),
+        };
+        assert_eq!(
+            checksum(&[&file("a"), &file("b")]),
+            // sha256("ab")
+            "fb8e20fc2e4c3f248c60c39bd652f3c1347298bb977b8b4d5903b85055620603"
+        );
+        assert_ne!(
+            checksum(&[&file("a"), &file("b")]),
+            checksum(&[&file("a"), &file("c")])
         );
     }
 }

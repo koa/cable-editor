@@ -4,6 +4,7 @@
 mod cable;
 mod duct;
 pub mod implement;
+mod lkmap;
 mod owner;
 mod panel;
 mod plan;
@@ -22,4 +23,5 @@ pub struct Mutation(
     plan::PlanMutation,
     owner::OwnerMutation,
     schacht_typ::SchachtTypMutation,
+    lkmap::LkmapMutation,
 );

@@ -171,6 +171,7 @@ fn object(kind: ObjectKind) -> &'static str {
         ObjectKind::Port => "Port",
         ObjectKind::NetboxDevice => "Netbox-Gerät",
         ObjectKind::NetboxRearPort => "Netbox-RearPort",
+        ObjectKind::LkmapDelivery => "Lieferung",
     }
 }
 

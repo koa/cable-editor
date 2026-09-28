@@ -17,6 +17,7 @@ pub enum ObjectKind {
     Port,
     NetboxDevice,
     NetboxRearPort,
+    LkmapDelivery,
 }
 
 /// A plan and how many ports in it a cable is attached to.

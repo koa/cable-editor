@@ -10,6 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildSchema, graphql, GraphQLError } from 'graphql';
 import { generateKeyPair, exportJWK, SignJWT } from 'jose';
+import { createHash } from 'node:crypto';
 
 const FRONTEND = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../cable-editor-frontend');
 const PORT = Number(process.env.MOCK_PORT ?? 8099);
@@ -233,6 +234,39 @@ const duct = (row) => ({
   widthMm: row.widthMm ?? null,
   changedAt: row.changedAt ?? '2026-09-27T08:15:00+00:00',
 });
+// The delivery to the Leitungskataster like lkmap/mod.rs: an owner's delivered ducts and the
+// Schächte where one ends; the perimeter a box around them, the checksum over their data
+const lkmapExport = (ownerId) => {
+  const rows = ductRows.filter((r) => deliveredDucts.has(r.id));
+  const own = rows.filter((r) => ownerOfDuct(r.id) === ownerId);
+  const ends = [...new Set(rows.flatMap((r) => [r.a, r.z]))].filter((id) => ownerOfSchacht(id) === ownerId).sort((a, b) => a - b);
+  const ducts = own.filter((r) => ductLine(r)).map(duct);
+  const schaechte = ends.map(schacht).filter((s) => s.location);
+  const points = [...ducts.flatMap((d) => d.line), ...schaechte.map((s) => s.location)];
+  const row = ownerRows.find((o) => o.id === ownerId);
+  const files = row.uid && points.length > 0;
+  const [lats, lngs] = [points.map((p) => p.lat), points.map((p) => p.lng)];
+  const [s0, n0, w0, e0] = [Math.min(...lats) - 0.0001, Math.max(...lats) + 0.0001, Math.min(...lngs) - 0.00015, Math.max(...lngs) + 0.00015];
+  const uid = row.uid?.toLowerCase().replaceAll('.', '-');
+  const checksum = files ? createHash('sha256').update(JSON.stringify([row, ducts.map((d) => [d.id, d.line, d.changedAt]), schaechte.map((s) => [s.id, s.location])])).digest('hex') : null;
+  return {
+    owner: owner(ownerId),
+    lkmap: files ? { fileName: `${uid}-kommunikation-lkmap.xtf`, xtf: '<TRANSFER/>' } : null,
+    perimeter: files ? { fileName: `${uid}-zustaendigkeit-peri.xtf`, xtf: '<TRANSFER/>' } : null,
+    perimeterArea: files ? [[s0, w0], [s0, e0], [n0, e0], [n0, w0], [s0, w0]].map(([lat, lng]) => ({ lat, lng })) : null,
+    checksum,
+    schaechte, ducts,
+    schaechteWithoutPosition: ends.map(schacht).filter((s) => !s.location),
+    ductsWithoutLine: own.filter((r) => !ductLine(r)).map(duct),
+    deliveries: lkmapDeliveries.filter((d) => d.ownerId === ownerId).sort((a, b) => b.id - a.id),
+    // The mock's objects all changed on 25.09. (after the delivery in July)
+    firstChangeSinceDelivery: lkmapDeliveries.some((d) => d.ownerId === ownerId && d.deliveredAt && d.checksum !== checksum) ? '2026-09-25T09:30:00+00:00' : null,
+  };
+};
+// The owner with UID delivered in July, the data changed since; a download not confirmed yet
+const lkmapDeliveries = [
+  { id: 1, ownerId: 1, createdAt: '2026-07-14T13:05:00+00:00', createdBy: 'monteur', schachtCount: 3, ductCount: 1, checksum: '5f1c0a7e'.repeat(8), deliveredAt: '2026-07-14T13:20:00+00:00' },
+];
 const ductOfCable = (c) => duct(ductRows.find((r) => r.id === 700 + c[0]));
 // checkDuctLine's fitting, like graphql/duct_line.rs (distances in LV95)
 const fitLine = (aId, zId, { system, points }) => {
@@ -425,6 +459,30 @@ const root = {
   listDuct: () => ductRows.map(duct),
   duct: ({ ductId }) => { const row = ductRows.find((r) => r.id === ductId); return row ? duct(row) : null; },
   checkDuctLine: ({ schachtA, schachtZ, line }) => fitLine(schachtA, schachtZ, line),
+  lkmapExport: ({ ownerId }) => lkmapExport(ownerId),
+  lkmapExports: () => ownerRows.map((o) => lkmapExport(o.id))
+    .filter((e) => e.ducts.length || e.schaechte.length || e.ductsWithoutLine.length || e.schaechteWithoutPosition.length || e.deliveries.length)
+    .sort((a, b) => a.owner.name.localeCompare(b.owner.name)),
+  downloadLkmap: ({ ownerId }) => {
+    const exported = lkmapExport(ownerId);
+    if (!exported.owner.uid) refuse('OwnerWithoutUid', { owner: exported.owner.name });
+    if (!exported.checksum) refuse('NothingToDeliver', { owner: exported.owner.name });
+    let delivery = lkmapDeliveries.find((d) => d.ownerId === ownerId && !d.deliveredAt && d.checksum === exported.checksum);
+    if (!delivery) {
+      delivery = { id: Math.max(0, ...lkmapDeliveries.map((d) => d.id)) + 1, ownerId, createdAt: new Date().toISOString(), createdBy: 'monteur',
+        schachtCount: exported.schaechte.length, ductCount: exported.ducts.length, checksum: exported.checksum, deliveredAt: null };
+      lkmapDeliveries.push(delivery);
+    }
+    // Not a real ZIP, the mock has no files to pack
+    const zip = (file) => ({ fileName: file.fileName.replace(/\.xtf$/, '.zip'), content: Buffer.from(file.xtf).toString('base64') });
+    return { delivery, files: [zip(exported.lkmap), zip(exported.perimeter)] };
+  },
+  setLkmapDelivered: ({ deliveryId, delivered }) => {
+    const delivery = lkmapDeliveries.find((d) => d.id === deliveryId);
+    if (!delivery) refuse('NotFound', { kind: 'LkmapDelivery', id: deliveryId });
+    delivery.deliveredAt = delivered ? (delivery.deliveredAt ?? new Date().toISOString()) : null;
+    return delivery;
+  },
   listOwner: () => ownerRows.map((o) => owner(o.id)).sort((a, b) => a.name.localeCompare(b.name)),
   listPlan: () => plans.map((p) => plan(p.id)),
   plan: ({ planId }) => plan(planId),

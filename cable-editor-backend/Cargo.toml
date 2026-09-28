@@ -29,6 +29,9 @@ tokio = { version = "1.53.1", features = ["sync"] }
 serde_json = "1.0.151"
 cable-editor-common = { path = "../cable-editor-common", features = ["async-graphql"] }
 quick-xml = "0.42.0"
+zip = { version = "8.6.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+sha2 = "0.10"
+base64 = "0.22"
 
 
 [build-dependencies]
