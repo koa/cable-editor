@@ -1,6 +1,7 @@
 //! Owners of Schächte and ducts; the Leitungskataster is delivered per owner (see
 //! docs/leitungskataster.md).
 
+use crate::graphql::error::ApiResult;
 use crate::{
     db::schema,
     graphql::loader::{EigentuemerCounts, OwnedCounts, get_loader},
@@ -48,20 +49,20 @@ impl Eigentuemer {
     async fn is_default(&self) -> bool {
         self.standard
     }
-    async fn schacht_count(&self, ctx: &Context<'_>) -> async_graphql::Result<i32> {
+    async fn schacht_count(&self, ctx: &Context<'_>) -> ApiResult<i32> {
         Ok(self.counts(ctx).await?.schaechte)
     }
-    async fn duct_count(&self, ctx: &Context<'_>) -> async_graphql::Result<i32> {
+    async fn duct_count(&self, ctx: &Context<'_>) -> ApiResult<i32> {
         Ok(self.counts(ctx).await?.ducts)
     }
     /// Ducts delivered to the Leitungskataster
-    async fn delivered_duct_count(&self, ctx: &Context<'_>) -> async_graphql::Result<i32> {
+    async fn delivered_duct_count(&self, ctx: &Context<'_>) -> ApiResult<i32> {
         Ok(self.counts(ctx).await?.delivered_ducts)
     }
 }
 
 impl Eigentuemer {
-    async fn counts(&self, ctx: &Context<'_>) -> async_graphql::Result<OwnedCounts> {
+    async fn counts(&self, ctx: &Context<'_>) -> ApiResult<OwnedCounts> {
         Ok(get_loader(ctx)?
             .load_one(EigentuemerCounts(self.id))
             .await?

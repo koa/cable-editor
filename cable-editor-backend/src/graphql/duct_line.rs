@@ -2,6 +2,7 @@
 //! and trimmed where its ends repeat the Schächte. The stored line holds only the points
 //! between the Schächte; the view trassen_mit_endpunkten puts the Schächte around them.
 
+use crate::graphql::error::ApiResult;
 use crate::{
     db::{entity::st_transform, schema},
     graphql::{geo::LV95, model::GeoPoint},
@@ -125,7 +126,7 @@ pub fn fit(mut points: Vec<Point>, a: &Point, z: &Point) -> Result<FittedLine, U
 pub async fn to_lv95(
     connection: &mut AsyncPgConnection,
     line: &LineInput,
-) -> async_graphql::Result<Vec<Point>> {
+) -> ApiResult<Vec<Point>> {
     if line.points.is_empty() {
         return Err(UserError::LineWithoutPoints.into());
     }
@@ -165,7 +166,7 @@ pub async fn to_lv95(
 pub async fn schacht_position(
     connection: &mut AsyncPgConnection,
     schacht_id: i32,
-) -> async_graphql::Result<Point> {
+) -> ApiResult<Point> {
     let (name, geom): (Option<String>, Option<Point>) = schema::schacht::table
         .filter(schema::schacht::id.eq(schacht_id))
         .select((schema::schacht::name, schema::schacht::geom))
@@ -185,7 +186,7 @@ pub async fn fit_line(
     schacht_a: i32,
     schacht_z: i32,
     line: &LineInput,
-) -> async_graphql::Result<(FittedLine, Point, Point)> {
+) -> ApiResult<(FittedLine, Point, Point)> {
     let a = schacht_position(connection, schacht_a).await?;
     let z = schacht_position(connection, schacht_z).await?;
     let points = to_lv95(connection, line).await?;
@@ -222,7 +223,7 @@ pub async fn check(
     schacht_a: i32,
     schacht_z: i32,
     line: &LineInput,
-) -> async_graphql::Result<DuctLineCheck> {
+) -> ApiResult<DuctLineCheck> {
     let (fitted, a, z) = fit_line(connection, schacht_a, schacht_z, line).await?;
     let mut course = vec![a];
     course.extend(fitted.points.iter().copied());

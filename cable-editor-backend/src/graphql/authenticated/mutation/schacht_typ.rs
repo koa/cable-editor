@@ -1,6 +1,7 @@
 //! Types of Schächte (see docs/stammdaten.md); Admin only, as the type gives the Objektart of
 //! its Schächte in the delivery to the Leitungskataster.
 
+use crate::graphql::error::ApiResult;
 use crate::{
     db::{
         entity::{XmlDocument, lkmap::LkmapPunktObjektart, schacht::SchachtTyp},
@@ -31,7 +32,7 @@ impl SchachtTypMutation {
         &self,
         ctx: &Context<'_>,
         typ: SchachtTypInput,
-    ) -> async_graphql::Result<SchachtTyp> {
+    ) -> ApiResult<SchachtTyp> {
         let mut connection = authenticated::get_connection(ctx).await?;
         let typ = typ.checked(&mut connection, None).await?;
         let icon = typ.icon.unwrap_or_else(|| DEFAULT_ICON.to_string());
@@ -55,7 +56,7 @@ impl SchachtTypMutation {
         ctx: &Context<'_>,
         typ_id: i32,
         typ: SchachtTypInput,
-    ) -> async_graphql::Result<SchachtTyp> {
+    ) -> ApiResult<SchachtTyp> {
         let mut connection = authenticated::get_connection(ctx).await?;
         let typ = typ.checked(&mut connection, Some(typ_id)).await?;
         let values = (
@@ -94,11 +95,7 @@ impl SchachtTypMutation {
     }
     /// Only a type without Schächte.
     #[graphql(guard = "RoleGuard(Role::Admin)")]
-    async fn delete_schacht_typ(
-        &self,
-        ctx: &Context<'_>,
-        typ_id: i32,
-    ) -> async_graphql::Result<bool> {
+    async fn delete_schacht_typ(&self, ctx: &Context<'_>, typ_id: i32) -> ApiResult<bool> {
         let mut connection = authenticated::get_connection(ctx).await?;
         let schaechte: i64 = schema::schacht::table
             .filter(schema::schacht::typ.eq(typ_id))
@@ -145,7 +142,7 @@ impl SchachtTypInput {
         mut self,
         connection: &mut AsyncPgConnection,
         typ_id: Option<i32>,
-    ) -> async_graphql::Result<SchachtTypInput> {
+    ) -> ApiResult<SchachtTypInput> {
         self.name = self.name.trim().to_string();
         if self.name.is_empty() {
             return Err(UserError::NameMissing.into());

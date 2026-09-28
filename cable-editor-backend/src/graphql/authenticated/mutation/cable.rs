@@ -1,5 +1,6 @@
 //! Cables.
 
+use crate::graphql::error::ApiResult;
 use crate::{
     db::{
         entity::cable::{Cable, UpdateCableChangeset},
@@ -19,7 +20,7 @@ pub struct CableMutation;
 #[Object]
 impl CableMutation {
     #[graphql(guard = "RoleGuard(Role::Planner)")]
-    async fn create_cable(&self, ctx: &Context<'_>, name: String) -> async_graphql::Result<Cable> {
+    async fn create_cable(&self, ctx: &Context<'_>, name: String) -> ApiResult<Cable> {
         let mut connection = authenticated::get_connection(ctx).await?;
         Ok(diesel::insert_into(schema::kabel::table)
             .values((
@@ -38,7 +39,7 @@ impl CableMutation {
         name: Option<String>,
         fibers: Option<UpdateCableStructure>,
         path: Option<Vec<i32>>,
-    ) -> async_graphql::Result<Option<Cable>> {
+    ) -> ApiResult<Option<Cable>> {
         if path.as_ref().is_some_and(Vec::is_empty) {
             return Err(UserError::CableWithoutSegment.into());
         }
@@ -103,7 +104,7 @@ impl CableMutation {
     }
     /// Refused while its fibers are attached to ports, in the current state or in a plan.
     #[graphql(guard = "RoleGuard(Role::Admin)")]
-    async fn delete_cable(&self, ctx: &Context<'_>, cable_id: i32) -> async_graphql::Result<bool> {
+    async fn delete_cable(&self, ctx: &Context<'_>, cable_id: i32) -> ApiResult<bool> {
         let mut connection = authenticated::get_connection(ctx).await?;
         let usages: Vec<(String, i64)> = schema::port_usage::table
             .inner_join(schema::plan::table)

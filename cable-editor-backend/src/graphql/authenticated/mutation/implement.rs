@@ -5,6 +5,7 @@ use crate::db::{
     },
     schema,
 };
+use crate::graphql::error::{ApiError, ApiResult};
 use cable_editor_common::UserError;
 use diesel::{ExpressionMethods, HasQuery, QueryDsl, associations::HasTable};
 use diesel_async::{
@@ -15,9 +16,9 @@ use tokio::sync::MutexGuard;
 pub async fn implement_plan(
     plan_id: i32,
     mut connection: MutexGuard<'_, Object<AsyncPgConnection>>,
-) -> Result<Plan, async_graphql::Error> {
+) -> ApiResult<Plan> {
     connection
-        .transaction::<_, async_graphql::Error, _>(async move |conn| {
+        .transaction::<_, ApiError, _>(async move |conn| {
             let plan = Plan::query()
                 .for_update()
                 .filter(schema::plan::id.eq(plan_id))

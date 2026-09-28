@@ -36,11 +36,23 @@ ohnehin GraphQL-Fehler. Für Weigerungen ist die Fehlerstruktur deshalb einfache
   (`GraphQlResponse<T, ErrorExtensions>`); ein `UserError` wird `FrontendError::User`, der Text
   kommt aus `error/messages.rs` (vollständiges `match`: ein neuer Variant ohne Text kompiliert
   nicht). Seiten setzen wie bisher nur den Titel („Trasse konnte nicht gespeichert werden“).
-- Technische Fehler (Datenbank, Netbox-HTTP, der Start der Transaktion) bleiben unstrukturiert;
-  das Frontend zeigt sie mit eigenem Titel („Unerwarteter Fehler vom Server“) und der
-  Originalmeldung als Detail. Eine Antwort mit Fehlern kann Teildaten enthalten, denen ein Feld
-  fehlt (async-graphql lässt ein fehlgeschlagenes Feld weg); das Frontend liest die Daten
-  deshalb erst als JSON und nur ohne Fehler als Typ der Abfrage, passen sie dann nicht, ist das
-  `FrontendError::InvalidResponse`.
+- Technische Fehler (Datenbank, Netbox-HTTP, Dateien) haben keinen Text für Benutzer; das
+  Frontend zeigt sie mit eigenem Titel („Unerwarteter Fehler vom Server“) und der
+  Originalmeldung als Detail, dazu ihre Herkunft für alle, die damit etwas anfangen können:
+  - Die Resolver geben `ApiResult` zurück (`backend/src/graphql/error.rs`). `?` macht aus dem
+    Fehler einer Library (Trait `Origin`: diesel, reqwest, Netbox über cynic, …) einen
+    `ApiError::Failed` mit der Library und der Zeile des `?` (`#[track_caller]`); eine Library
+    ohne `Origin` kompiliert mit `?` nicht, sie wird also bewusst eingetragen. `UserError` und
+    Fehler von async-graphql selbst (Guards, fehlende Kontextdaten) gehen unverändert durch.
+  - Beim Umwandeln in den GraphQL-Fehler bekommt er eine Id und wird mit ihr geloggt; die
+    Herkunft steht strukturiert in `extensions.origin` (`ErrorOrigin` im gemeinsamen Crate:
+    `library`, `location`, `id`).
+  - Das Frontend zeigt sie hinter der Meldung: „… (diesel,
+    cable-editor-backend/src/graphql/loader.rs:212, Fehler-ID 1a0e8c917ee0a)“; mit der Id
+    findet man den Eintrag im Server-Log.
+  - Eine Antwort mit Fehlern kann Teildaten enthalten, denen ein Feld fehlt (async-graphql
+    lässt ein fehlgeschlagenes Feld weg). Das Frontend liest die Daten deshalb erst als JSON und
+    nur ohne Fehler als Typ der Abfrage; passen sie dann nicht, ist das
+    `FrontendError::InvalidResponse`.
 - Mock (`local/mock/server.mjs`) wirft dieselben `extensions`, `local/realdb/check.mjs` prüft
   Weigerungen über Code und Daten statt über Textteile.

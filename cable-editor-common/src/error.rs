@@ -192,6 +192,18 @@ pub enum UserError {
     },
 }
 
+/// Where an unexpected error of the backend (not a `UserError`) came from, in
+/// `extensions.origin` of its GraphQL error: the frontend shows it for those who can tell what
+/// it means, `id` finds it in the server's log.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct ErrorOrigin {
+    /// The crate whose error it is, e.g. `diesel`
+    pub library: String,
+    /// `file:line` of the code that got it
+    pub location: String,
+    pub id: String,
+}
+
 #[cfg(feature = "async-graphql")]
 impl From<UserError> for async_graphql::Error {
     /// The message is only the code (for debugging), the variant goes to

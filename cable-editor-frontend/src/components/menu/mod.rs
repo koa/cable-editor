@@ -139,7 +139,7 @@ impl MenuErrorProps {
     pub fn from_error(error: &crate::error::FrontendError) -> Self {
         Self {
             title: error.title().into(),
-            details: error.details().to_vec(),
+            details: error.details(),
         }
     }
 }

@@ -1,3 +1,4 @@
+use crate::graphql::error::{ApiError, ApiResult};
 use crate::{
     config::NETBOX_CONFIG,
     db::{
@@ -147,9 +148,9 @@ impl PlannedCircuit {
 pub async fn sync_plan_to_netbox(
     plan_id: i32,
     mut connection: MutexGuard<'_, Object<AsyncPgConnection>>,
-) -> Result<Vec<SyncIssue>, async_graphql::Error> {
+) -> ApiResult<Vec<SyncIssue>> {
     let issues = connection
-        .transaction::<_, async_graphql::Error, _>(async move |conn| {
+        .transaction::<_, ApiError, _>(async move |conn| {
             let mut issues = Vec::new();
 
             // calculate length of all cables
@@ -355,8 +356,7 @@ pub async fn sync_plan_to_netbox(
             info!("Circuits to create: {}", to_create.len());
             info!("Circuits to delete: {}", to_delete.len());
 
-            let client = get_reqwest_client()
-                .map_err(|e| async_graphql::Error::new(e.to_string()))?;
+            let client = get_reqwest_client()?;
             let rest_base_url = format!("{}api", NETBOX_CONFIG
                 .url()
             );
@@ -367,8 +367,7 @@ pub async fn sync_plan_to_netbox(
 
                 let res = client.delete(format!("{}/circuits/circuits/{}/", rest_base_url, id))
                     .send()
-                    .await
-                    .map_err(|e| async_graphql::Error::new(e.to_string()))?;
+                    .await?;
 
                 if !res.status().is_success() {
                     return Err(netbox_failed(NetboxStep::DeleteCircuit, id.to_string(), res).await);
@@ -395,15 +394,13 @@ pub async fn sync_plan_to_netbox(
                 let res = client.post(format!("{}/circuits/circuits/", rest_base_url))
                     .json(&circuit_payload)
                     .send()
-                    .await
-                    .map_err(|e| async_graphql::Error::new(e.to_string()))?;
+                    .await?;
 
                 if !res.status().is_success() {
                     return Err(netbox_failed(NetboxStep::CreateCircuit, circuit.cid(), res).await);
                 }
 
-                let created_circuit: serde_json::Value = res.json().await
-                    .map_err(|e| async_graphql::Error::new(e.to_string()))?;
+                let created_circuit: serde_json::Value = res.json().await?;
                 let new_circuit_id = created_circuit["id"].as_i64().ok_or_else(|| {
                     UserError::NetboxWithoutId {
                         step: NetboxStep::CreateCircuit,
@@ -434,16 +431,14 @@ pub async fn sync_plan_to_netbox(
                     let term_res = client.post(format!("{}/circuits/circuit-terminations/", rest_base_url))
                         .json(&term_payload)
                         .send()
-                        .await
-                        .map_err(|e| async_graphql::Error::new(e.to_string()))?;
+                        .await?;
 
                     if !term_res.status().is_success() {
                         let object = format!("{} {side}", circuit.cid());
                         return Err(netbox_failed(NetboxStep::CreateTermination, object, term_res).await);
                     }
 
-                    let created_term: serde_json::Value = term_res.json().await
-                        .map_err(|e| async_graphql::Error::new(e.to_string()))?;
+                    let created_term: serde_json::Value = term_res.json().await?;
                     let term_id = created_term["id"].as_i64().ok_or_else(|| {
                         UserError::NetboxWithoutId {
                             step: NetboxStep::CreateTermination,
@@ -471,8 +466,7 @@ pub async fn sync_plan_to_netbox(
                     let cable_res = client.post(format!("{}/dcim/cables/", rest_base_url))
                         .json(&cable_payload)
                         .send()
-                        .await
-                        .map_err(|e| async_graphql::Error::new(e.to_string()))?;
+                        .await?;
 
                     if !cable_res.status().is_success() {
                         let object = format!("{} {side}", circuit.cid());
@@ -494,8 +488,7 @@ pub async fn sync_plan_to_netbox(
                 let res = client.patch(format!("{}/circuits/circuits/{}/", rest_base_url, netbox_id))
                     .json(&update_payload)
                     .send()
-                    .await
-                    .map_err(|e| async_graphql::Error::new(e.to_string()))?;
+                    .await?;
 
                 if !res.status().is_success() {
                     return Err(netbox_failed(NetboxStep::UpdateCircuit, circuit.cid(), res).await);
@@ -508,11 +501,7 @@ pub async fn sync_plan_to_netbox(
 }
 
 /// Netbox refused `step`; its answer goes along for support.
-async fn netbox_failed(
-    step: NetboxStep,
-    object: String,
-    response: reqwest::Response,
-) -> async_graphql::Error {
+async fn netbox_failed(step: NetboxStep, object: String, response: reqwest::Response) -> ApiError {
     UserError::NetboxFailed {
         step,
         object,
@@ -531,7 +520,7 @@ fn rear_port_not_found(id: i32) -> UserError {
 async fn create_asymetric_duplex_error(
     start_netbox_id: i32,
     r1: HashMap<i32, Vec<(PanelPort, PanelPort, f64)>>,
-) -> async_graphql::Result<SyncIssue> {
+) -> ApiResult<SyncIssue> {
     let start_netbox_port = RearPort::fetch_by_id((start_netbox_id as u32).into())
         .await?
         .ok_or_else(|| rear_port_not_found(start_netbox_id))?;

@@ -1,5 +1,6 @@
 use crate::db::entity::panel::PanelPort;
 use crate::error::BackendError;
+use crate::graphql::error::ApiResult;
 use crate::netbox::id::NumberId;
 use crate::netbox::{fetch_device_with_ports, query, schema};
 use async_graphql::{Context, Object};
@@ -127,10 +128,10 @@ impl RearPort {
     async fn name(&self) -> &str {
         self.name.as_str()
     }
-    async fn fiber_ports(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<PanelPort>> {
+    async fn fiber_ports(&self, ctx: &Context<'_>) -> ApiResult<Vec<PanelPort>> {
         PanelPort::rear_port_from_netbox(self.id, ctx).await
     }
-    async fn device(&self) -> async_graphql::Result<DeviceWithRearPorts> {
+    async fn device(&self) -> ApiResult<DeviceWithRearPorts> {
         let id = self.device.id;
         fetch_device_with_ports(id).await?.ok_or_else(|| {
             UserError::NotFound {

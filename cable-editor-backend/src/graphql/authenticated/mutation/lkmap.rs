@@ -1,6 +1,7 @@
 //! The delivery to the Leitungskataster (see docs/leitungskataster.md): downloading an owner's
 //! files logs a delivery, which is marked once they reached the Checkservice. Admin only.
 
+use crate::graphql::error::ApiResult;
 use crate::{
     db::{entity::lkmap::LkLieferung, schema},
     graphql::{
@@ -45,11 +46,7 @@ impl LkmapMutation {
     /// The owner's transfer files; logs them as a delivery, or reuses the one logged for the
     /// same files that isn't marked yet.
     #[graphql(guard = "RoleGuard(Role::Admin)")]
-    async fn download_lkmap(
-        &self,
-        ctx: &Context<'_>,
-        owner_id: i32,
-    ) -> async_graphql::Result<LkmapDownload> {
+    async fn download_lkmap(&self, ctx: &Context<'_>, owner_id: i32) -> ApiResult<LkmapDownload> {
         let user = ctx.data::<UserInfo>()?.preferred_username.to_string();
         let mut connection = authenticated::get_connection(ctx).await?;
         let export = lkmap::export(&mut connection, owner_id).await?;
@@ -87,7 +84,7 @@ impl LkmapMutation {
                     content: STANDARD.encode(file.zip()?),
                 })
             })
-            .collect::<async_graphql::Result<_>>()?;
+            .collect::<ApiResult<_>>()?;
         Ok(LkmapDownload { delivery, files })
     }
 
@@ -99,7 +96,7 @@ impl LkmapMutation {
         ctx: &Context<'_>,
         delivery_id: i32,
         delivered: bool,
-    ) -> async_graphql::Result<LkLieferung> {
+    ) -> ApiResult<LkLieferung> {
         let mut connection = authenticated::get_connection(ctx).await?;
         let delivery = schema::lk_lieferung::table.find(delivery_id);
         if delivered {

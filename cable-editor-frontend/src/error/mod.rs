@@ -1,13 +1,35 @@
 pub mod messages;
 
 use crate::components::recovery::ErrorRecovery;
-use cable_editor_common::UserError;
+use cable_editor_common::{ErrorOrigin, UserError};
 use cynic::http::CynicReqwestError;
 use patternfly_yew::prelude::{Alert, AlertType};
 use reqwest::header::InvalidHeaderValue;
 use thiserror::Error;
 use wasm_bindgen::{JsCast, JsValue};
 use yew::{Html, html, html::IntoPropValue};
+
+/// An error of a GraphQL response that isn't a refusal.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ServerError {
+    pub message: String,
+    /// Where it came from, if the backend knows (errors of its resolvers)
+    pub origin: Option<ErrorOrigin>,
+}
+
+impl ServerError {
+    /// The message with its origin, for those who can tell what it means.
+    pub fn detail(&self) -> String {
+        match &self.origin {
+            Some(ErrorOrigin {
+                library,
+                location,
+                id,
+            }) => format!("{} ({library}, {location}, Fehler-ID {id})", self.message),
+            None => self.message.clone(),
+        }
+    }
+}
 
 #[derive(Error, Debug)]
 pub enum FrontendError {
@@ -25,8 +47,8 @@ pub enum FrontendError {
     #[error("{}", messages::user_error(.0))]
     User(UserError),
     /// A technical error of the backend (database, Netbox), its messages
-    #[error("Unerwarteter Fehler vom Server: {}", .0.join("; "))]
-    Graphql(Vec<String>),
+    #[error("Unerwarteter Fehler vom Server: {}", .0.iter().map(ServerError::detail).collect::<Vec<_>>().join("; "))]
+    Graphql(Vec<ServerError>),
     /// The data of a response doesn't fit the query (e.g. a new version changed the schema)
     #[error("Invalid response of the server: {0}")]
     InvalidResponse(serde_json::Error),
@@ -98,11 +120,11 @@ impl FrontendError {
         }
     }
 
-    /// Further details, the messages of an unexpected server error.
-    pub fn details(&self) -> &[String] {
+    /// Further details, the messages of an unexpected server error with where they came from.
+    pub fn details(&self) -> Vec<String> {
         match self {
-            FrontendError::Graphql(details) => details,
-            _ => &[],
+            FrontendError::Graphql(errors) => errors.iter().map(ServerError::detail).collect(),
+            _ => Vec::new(),
         }
     }
 }
@@ -110,11 +132,12 @@ impl FrontendError {
 impl IntoPropValue<Html> for &FrontendError {
     fn into_prop_value(self) -> Html {
         let title = self.title();
+        let details = self.details();
         let mut children = Vec::new();
-        if !self.details().is_empty() {
+        if !details.is_empty() {
             children.push(html! {
                 <ul>
-                    {for self.details().iter().map(|detail| html!(<li>{detail.as_str()}</li>))}
+                    {for details.into_iter().map(|detail| html!(<li>{detail}</li>))}
                 </ul>
             });
         }

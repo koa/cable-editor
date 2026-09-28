@@ -1,3 +1,4 @@
+use crate::graphql::error::ApiResult;
 use async_graphql::{Context, Object};
 use cable_editor_common::{ObjectKind, UserError};
 use diesel::{
@@ -63,13 +64,13 @@ impl Schacht {
     async fn id(&self) -> i32 {
         self.id
     }
-    async fn typ(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<SchachtTyp>> {
+    async fn typ(&self, ctx: &Context<'_>) -> ApiResult<Option<SchachtTyp>> {
         match self.typ {
             Some(typ) => Ok(Some(load_one(ctx, SchachtTypId(typ)).await?)),
             None => Ok(None),
         }
     }
-    async fn owner(&self, ctx: &Context<'_>) -> async_graphql::Result<Eigentuemer> {
+    async fn owner(&self, ctx: &Context<'_>) -> ApiResult<Eigentuemer> {
         load_one(ctx, EigentuemerId(self.eigentuemer_id)).await
     }
     /// Accuracy of the position
@@ -85,13 +86,10 @@ impl Schacht {
         self.geom.map(Point::into)
     }
     /// Position in WGS84 for the map (`position` is LV95)
-    async fn location(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<GeoPoint>> {
+    async fn location(&self, ctx: &Context<'_>) -> ApiResult<Option<GeoPoint>> {
         get_loader(ctx)?.load_one(SchachtLocation(self.id)).await
     }
-    async fn connecting_duct(
-        &self,
-        ctx: &Context<'_>,
-    ) -> async_graphql::Result<Vec<PotentialPathSegment>> {
+    async fn connecting_duct(&self, ctx: &Context<'_>) -> ApiResult<Vec<PotentialPathSegment>> {
         let ducts: Vec<Duct> = {
             let mut connection = get_connection(ctx).await?;
             Duct::query()
@@ -125,17 +123,13 @@ impl Schacht {
             })
             .collect()
     }
-    async fn root_panels(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Panel>> {
+    async fn root_panels(&self, ctx: &Context<'_>) -> ApiResult<Vec<Panel>> {
         Ok(get_loader(ctx)?
             .load_one(SchachtRootPanels(self.id))
             .await?
             .unwrap_or_default())
     }
-    async fn cable(
-        &self,
-        ctx: &Context<'_>,
-        cable_id: i32,
-    ) -> async_graphql::Result<Option<CableEnd>> {
+    async fn cable(&self, ctx: &Context<'_>, cable_id: i32) -> ApiResult<Option<CableEnd>> {
         let mut connection = get_connection(ctx).await?;
         Ok(schema::kabel::table
             .find(cable_id)
@@ -147,7 +141,7 @@ impl Schacht {
                 schacht: self.clone(),
             }))
     }
-    async fn cables(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<CableEnd>> {
+    async fn cables(&self, ctx: &Context<'_>) -> ApiResult<Vec<CableEnd>> {
         let mut connection = get_connection(ctx).await?;
         Ok(schema::kabel::table
             // 1. Die Relationen joinen (Kabel -> KabelTrasse -> Trasse)
@@ -203,13 +197,13 @@ impl SchachtTyp {
         self.dimension2_mm
     }
     /// How many Schächte have this type
-    async fn schacht_count(&self, ctx: &Context<'_>) -> async_graphql::Result<i32> {
+    async fn schacht_count(&self, ctx: &Context<'_>) -> ApiResult<i32> {
         Ok(get_loader(ctx)?
             .load_one(SchachtTypCount(self.id))
             .await?
             .unwrap_or_default())
     }
-    async fn list_schacht(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Schacht>> {
+    async fn list_schacht(&self, ctx: &Context<'_>) -> ApiResult<Vec<Schacht>> {
         let mut connection = get_connection(ctx).await?;
         Ok(Schacht::query()
             .filter(schema::schacht::typ.eq(self.id))

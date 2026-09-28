@@ -1,4 +1,5 @@
 use crate::db::entity::plan::BASELINE_PLAN_ID;
+use crate::graphql::error::ApiResult;
 use crate::{
     db::{
         entity::{cable::Fiber, plan::Plan, schacht::Schacht},
@@ -170,13 +171,13 @@ impl PortUsage {
             None
         }
     }
-    async fn port(&self, ctx: &Context<'_>) -> async_graphql::Result<PanelPort> {
+    async fn port(&self, ctx: &Context<'_>) -> ApiResult<PanelPort> {
         load_one(ctx, PanelPortId(self.port_id)).await
     }
-    async fn plan(&self, ctx: &Context<'_>) -> async_graphql::Result<Plan> {
+    async fn plan(&self, ctx: &Context<'_>) -> ApiResult<Plan> {
         load_one(ctx, PlanId(self.plan_id)).await
     }
-    async fn other_side(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<PortUsage>> {
+    async fn other_side(&self, ctx: &Context<'_>) -> ApiResult<Option<PortUsage>> {
         let mut connection = get_connection(ctx).await?;
         Ok(PortUsage::query()
             .filter(
@@ -198,7 +199,7 @@ impl PortUsage {
         &self,
         ctx: &Context<'_>,
         plan_id: i32,
-    ) -> async_graphql::Result<Option<PortUsage>> {
+    ) -> ApiResult<Option<PortUsage>> {
         let mut connection = get_connection(ctx).await?;
 
         // Helper function to trace fiber through port usages recursively
@@ -208,7 +209,7 @@ impl PortUsage {
             usage: &PortUsage,
             plan_id: i32,
             visited: &mut HashSet<(i32, PortSide)>,
-        ) -> async_graphql::Result<Option<PortUsage>> {
+        ) -> ApiResult<Option<PortUsage>> {
             // Avoid infinite loops
             if !visited.insert((usage.port_id, usage.side)) {
                 error!("Loop detected");
@@ -244,7 +245,7 @@ impl PortUsage {
         &self,
         ctx: &Context<'_>,
         plan_id: i32,
-    ) -> async_graphql::Result<Option<PortUsage>> {
+    ) -> ApiResult<Option<PortUsage>> {
         let mut connection = get_connection(ctx).await?;
 
         // Helper function to trace fiber through port usages recursively
@@ -254,7 +255,7 @@ impl PortUsage {
             usage: &PortUsage,
             plan_id: i32,
             visited: &mut HashSet<(i32, PortSide)>,
-        ) -> async_graphql::Result<Option<PortUsage>> {
+        ) -> ApiResult<Option<PortUsage>> {
             // Avoid infinite loops
             if !visited.insert((usage.port_id, usage.side)) {
                 error!("Loop detected");
@@ -329,7 +330,7 @@ impl Panel {
     async fn name(&self) -> Option<&str> {
         self.name.as_deref()
     }
-    async fn schacht(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
+    async fn schacht(&self, ctx: &Context<'_>) -> ApiResult<Schacht> {
         load_one(ctx, SchachtId(self.schacht_id)).await
     }
     async fn parent_id(&self) -> Option<i32> {
@@ -338,7 +339,7 @@ impl Panel {
     async fn parent_order(&self) -> Option<i32> {
         self.parent_order
     }
-    async fn parent(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<Panel>> {
+    async fn parent(&self, ctx: &Context<'_>) -> ApiResult<Option<Panel>> {
         if let Some(parent_panel_id) = self.parent_panel {
             let mut connection = get_connection(ctx).await?;
             Ok(Some(
@@ -351,7 +352,7 @@ impl Panel {
             Ok(None)
         }
     }
-    async fn parent_chain(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Panel>> {
+    async fn parent_chain(&self, ctx: &Context<'_>) -> ApiResult<Vec<Panel>> {
         #[async_recursion]
         async fn fetch_parent_chain(
             transaction: &mut deadpool::Object<AsyncPgConnection>,
@@ -381,7 +382,7 @@ impl Panel {
             Ok(Vec::default())
         }
     }
-    async fn children(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Panel>> {
+    async fn children(&self, ctx: &Context<'_>) -> ApiResult<Vec<Panel>> {
         let mut connection = get_connection(ctx).await?;
         Ok(Panel::query()
             .filter(schema::panel::parent_panel.eq(self.id))
@@ -389,7 +390,7 @@ impl Panel {
             .load(&mut connection)
             .await?)
     }
-    async fn siblings(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Panel>> {
+    async fn siblings(&self, ctx: &Context<'_>) -> ApiResult<Vec<Panel>> {
         let mut connection = get_connection(ctx).await?;
         Ok(if let Some(parent_id) = self.parent_panel {
             Panel::query()
@@ -408,7 +409,7 @@ impl Panel {
                 .await?
         })
     }
-    async fn all_children_recursive(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Panel>> {
+    async fn all_children_recursive(&self, ctx: &Context<'_>) -> ApiResult<Vec<Panel>> {
         let mut connection = get_connection(ctx).await?;
         Ok(Panel::load_all_children_recursive(self.id, &mut connection).await?)
     }
@@ -416,7 +417,7 @@ impl Panel {
         &self,
         ctx: &Context<'_>,
         port_type: Option<PanelPortType>,
-    ) -> async_graphql::Result<Vec<PanelPort>> {
+    ) -> ApiResult<Vec<PanelPort>> {
         let mut connection = get_connection(ctx).await?;
         let filter = schema::panel_port::panel_id.eq(self.id);
         Ok(if let Some(pt) = port_type {
@@ -437,7 +438,7 @@ impl Panel {
         &self,
         ctx: &Context<'_>,
         port_type: Option<PanelPortType>,
-    ) -> async_graphql::Result<i64> {
+    ) -> ApiResult<i64> {
         let mut connection = get_connection(ctx).await?;
         let statement =
             <PanelPort as HasQuery<Pg>>::query().filter(schema::panel_port::panel_id.eq(self.id));
@@ -451,7 +452,7 @@ impl Panel {
             statement.count().get_result(&mut connection).await?
         })
     }
-    async fn netbox_device(&self) -> async_graphql::Result<Option<DeviceWithRearPorts>> {
+    async fn netbox_device(&self) -> ApiResult<Option<DeviceWithRearPorts>> {
         Ok(if let Some(device_id) = self.netbox_device_id {
             fetch_device_with_ports((device_id as u32).into())
                 .await
@@ -474,7 +475,7 @@ impl PanelPort {
     pub async fn rear_port_from_netbox(
         id: NumberId,
         ctx: &Context<'_>,
-    ) -> async_graphql::Result<Vec<PanelPort>> {
+    ) -> ApiResult<Vec<PanelPort>> {
         let mut connection = get_connection(ctx).await?;
         let id: u32 = id.into();
         let filter = schema::panel_port::netbox_port_id.eq(id as i32);
@@ -493,7 +494,7 @@ impl PanelPort {
     async fn order_number(&self) -> i32 {
         self.port_order
     }
-    async fn panel(&self, ctx: &Context<'_>) -> async_graphql::Result<Panel> {
+    async fn panel(&self, ctx: &Context<'_>) -> ApiResult<Panel> {
         load_one(ctx, PanelId(self.panel_id)).await
     }
     async fn label(&self) -> Option<&str> {
@@ -502,7 +503,7 @@ impl PanelPort {
     /*async fn connected_fibers(
         &self,
         ctx: &Context<'_>,
-    ) -> async_graphql::Result<Vec<FiberPathSegment>> {
+    ) -> ApiResult<Vec<FiberPathSegment>> {
         let mut connection = get_connection(ctx).await?;
         connection
             .transaction(async move |conn| {
@@ -536,7 +537,7 @@ impl PanelPort {
         self.port_type
     }
 
-    async fn netbox_port(&self) -> async_graphql::Result<Option<RearPort>> {
+    async fn netbox_port(&self) -> ApiResult<Option<RearPort>> {
         if let Some(netbox_port_id) = self.netbox_port_id {
             Ok(RearPort::fetch_by_id((netbox_port_id as u32).into())
                 .await

@@ -7,6 +7,7 @@ pub mod plan;
 pub mod schacht;
 pub mod trasse;
 
+use crate::graphql::error::ApiResult;
 use crate::{
     db::{
         entity::path::{DirectedDuct, DuctDirection, UnalignedDuct},
@@ -57,10 +58,10 @@ pub struct Duct {
 
 #[Object]
 impl DirectedDuct<Duct, i32> {
-    async fn begin_schacht(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
+    async fn begin_schacht(&self, ctx: &Context<'_>) -> ApiResult<Schacht> {
         load_one(ctx, SchachtId(self.schacht_a())).await
     }
-    async fn end_schacht(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
+    async fn end_schacht(&self, ctx: &Context<'_>) -> ApiResult<Schacht> {
         load_one(ctx, SchachtId(self.schacht_z())).await
     }
     async fn begin_schacht_id(&self) -> i32 {
@@ -85,24 +86,24 @@ impl Duct {
     async fn description(&self) -> Option<&str> {
         self.description.as_deref()
     }
-    async fn cables(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Cable>> {
+    async fn cables(&self, ctx: &Context<'_>) -> ApiResult<Vec<Cable>> {
         Ok(get_loader(ctx)?
             .load_one(DuctCables(self.id))
             .await?
             .unwrap_or_default())
     }
     /// Line in WGS84 for the map, from Schacht A to Schacht Z
-    async fn line(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<Vec<GeoPoint>>> {
+    async fn line(&self, ctx: &Context<'_>) -> ApiResult<Option<Vec<GeoPoint>>> {
         get_loader(ctx)?.load_one(DuctLine(self.id)).await
     }
-    async fn schacht_a(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
+    async fn schacht_a(&self, ctx: &Context<'_>) -> ApiResult<Schacht> {
         load_one(ctx, SchachtId(self.schacht_a)).await
     }
 
-    async fn schacht_z(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
+    async fn schacht_z(&self, ctx: &Context<'_>) -> ApiResult<Schacht> {
         load_one(ctx, SchachtId(self.schacht_z)).await
     }
-    async fn owner(&self, ctx: &Context<'_>) -> async_graphql::Result<Eigentuemer> {
+    async fn owner(&self, ctx: &Context<'_>) -> ApiResult<Eigentuemer> {
         load_one(ctx, EigentuemerId(self.eigentuemer_id)).await
     }
     /// Delivered to the Leitungskataster (crosses property boundaries)
@@ -122,7 +123,7 @@ impl Duct {
         self.geaendert_am
     }
     /// Metres, missing without geometry
-    async fn length(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<f64>> {
+    async fn length(&self, ctx: &Context<'_>) -> ApiResult<Option<f64>> {
         get_loader(ctx)?.load_one(DuctLength(self.id)).await
     }
 }

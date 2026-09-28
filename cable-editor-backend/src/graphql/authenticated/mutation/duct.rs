@@ -1,6 +1,7 @@
 //! Ducts (their course: graphql/duct_line.rs).
 
 use super::owner::ensure_owner_exists;
+use crate::graphql::error::ApiResult;
 use crate::{
     db::{
         entity::{Duct, lkmap::Genauigkeit},
@@ -32,7 +33,7 @@ impl DuctMutation {
         duct: DuctInput,
         line: Option<LineInput>,
         #[graphql(default)] confirmed: bool,
-    ) -> async_graphql::Result<Duct> {
+    ) -> ApiResult<Duct> {
         let mut connection = authenticated::get_connection(ctx).await?;
         let description = duct.checked_description()?;
         duct.check_delivery(&mut connection).await?;
@@ -72,7 +73,7 @@ impl DuctMutation {
         ctx: &Context<'_>,
         duct_id: i32,
         duct: DuctInput,
-    ) -> async_graphql::Result<Duct> {
+    ) -> ApiResult<Duct> {
         let mut connection = authenticated::get_connection(ctx).await?;
         let description = duct.checked_description()?;
         duct.check_delivery(&mut connection).await?;
@@ -115,7 +116,7 @@ impl DuctMutation {
         duct_id: i32,
         line: Option<LineInput>,
         #[graphql(default)] confirmed: bool,
-    ) -> async_graphql::Result<Duct> {
+    ) -> ApiResult<Duct> {
         let mut connection = authenticated::get_connection(ctx).await?;
         let stored: Duct = Duct::query()
             .filter(schema::trasse::id.eq(duct_id))
@@ -142,7 +143,7 @@ impl DuctMutation {
     }
     /// Only a duct without cables.
     #[graphql(guard = "RoleGuard(Role::Admin)")]
-    async fn delete_duct(&self, ctx: &Context<'_>, duct_id: i32) -> async_graphql::Result<bool> {
+    async fn delete_duct(&self, ctx: &Context<'_>, duct_id: i32) -> ApiResult<bool> {
         let mut connection = authenticated::get_connection(ctx).await?;
         let cables = duct_cable_count(&mut connection, duct_id).await?;
         if cables > 0 {
@@ -172,7 +173,7 @@ struct DuctInput {
 
 impl DuctInput {
     /// Trimmed, `None` if empty; the Schächte must differ.
-    fn checked_description(&self) -> async_graphql::Result<Option<String>> {
+    fn checked_description(&self) -> ApiResult<Option<String>> {
         if self.schacht_a == self.schacht_z {
             return Err(UserError::SameSchachtAtBothEnds.into());
         }
@@ -191,10 +192,7 @@ impl DuctInput {
     }
 
     /// The owner exists, the width fits the Leitungskataster.
-    async fn check_delivery(
-        &self,
-        connection: &mut AsyncPgConnection,
-    ) -> async_graphql::Result<()> {
+    async fn check_delivery(&self, connection: &mut AsyncPgConnection) -> ApiResult<()> {
         if let Some(width) = self.width_mm
             && !(0..=MAX_MILLIMETRES).contains(&width)
         {
@@ -215,7 +213,7 @@ async fn checked_line(
     schacht_z: i32,
     line: &LineInput,
     confirmed: bool,
-) -> async_graphql::Result<Option<LineString<Point>>> {
+) -> ApiResult<Option<LineString<Point>>> {
     let (fitted, _, _) = duct_line::fit_line(connection, schacht_a, schacht_z, line).await?;
     if fitted.needs_confirmation() && !confirmed {
         return Err(UserError::LineNeedsConfirmation {
@@ -235,10 +233,7 @@ fn stored_line_of(duct: &Duct) -> Option<LineString<Point>> {
     }
 }
 
-async fn duct_cable_count(
-    connection: &mut AsyncPgConnection,
-    duct_id: i32,
-) -> async_graphql::Result<i64> {
+async fn duct_cable_count(connection: &mut AsyncPgConnection, duct_id: i32) -> ApiResult<i64> {
     Ok(schema::kabel_trasse::table
         .filter(schema::kabel_trasse::trasse.eq(duct_id))
         .count()

@@ -1,5 +1,6 @@
 //! Plans: creating, renaming, implementing (implement.rs) and syncing them to NetBox (sync.rs).
 
+use crate::graphql::error::{ApiError, ApiResult};
 use crate::{
     db::{
         entity::plan::{InsertPlan, Plan},
@@ -22,11 +23,7 @@ pub struct PlanMutation;
 #[Object]
 impl PlanMutation {
     #[graphql(guard = "RoleGuard(Role::Planner)")]
-    async fn create_plan(
-        &self,
-        ctx: &Context<'_>,
-        plan: CreatePlan,
-    ) -> async_graphql::Result<bool> {
+    async fn create_plan(&self, ctx: &Context<'_>, plan: CreatePlan) -> ApiResult<bool> {
         let mut connection = authenticated::get_connection(ctx).await?;
         let new_plan = InsertPlan { name: plan.name };
         diesel::insert_into(schema::plan::table)
@@ -36,15 +33,10 @@ impl PlanMutation {
         Ok(true)
     }
     #[graphql(guard = "RoleGuard(Role::Planner)")]
-    async fn update_plan(
-        &self,
-        ctx: &Context<'_>,
-        plan_id: i32,
-        name: String,
-    ) -> async_graphql::Result<Plan> {
+    async fn update_plan(&self, ctx: &Context<'_>, plan_id: i32, name: String) -> ApiResult<Plan> {
         let mut connection = authenticated::get_connection(ctx).await?;
         connection
-            .transaction::<_, async_graphql::Error, _>(async move |conn| {
+            .transaction::<_, ApiError, _>(async move |conn| {
                 let mut plan = Plan::query()
                     .for_update()
                     .filter(schema::plan::id.eq(plan_id))
@@ -60,7 +52,7 @@ impl PlanMutation {
             .await
     }
     #[graphql(guard = "RoleGuard(Role::Admin)")]
-    async fn implement_plan(&self, ctx: &Context<'_>, plan_id: i32) -> async_graphql::Result<Plan> {
+    async fn implement_plan(&self, ctx: &Context<'_>, plan_id: i32) -> ApiResult<Plan> {
         super::implement::implement_plan(plan_id, authenticated::get_connection(ctx).await?).await
     }
     #[graphql(guard = "RoleGuard(Role::Admin)")]
@@ -68,7 +60,7 @@ impl PlanMutation {
         &self,
         ctx: &Context<'_>,
         plan_id: i32,
-    ) -> async_graphql::Result<Vec<SyncIssue>> {
+    ) -> ApiResult<Vec<SyncIssue>> {
         sync_plan_to_netbox(plan_id, authenticated::get_connection(ctx).await?).await
     }
 }

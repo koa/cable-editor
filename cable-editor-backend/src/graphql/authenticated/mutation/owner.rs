@@ -1,6 +1,7 @@
 //! Owners of Schächte and ducts (see docs/stammdaten.md); Admin only, as the owner is the
 //! Datenherr of the delivery to the Leitungskataster.
 
+use crate::graphql::error::{ApiError, ApiResult};
 use crate::{
     db::{entity::eigentuemer::Eigentuemer, schema},
     graphql::authenticated,
@@ -20,11 +21,7 @@ pub struct OwnerMutation;
 #[Object]
 impl OwnerMutation {
     #[graphql(guard = "RoleGuard(Role::Admin)")]
-    async fn create_owner(
-        &self,
-        ctx: &Context<'_>,
-        owner: OwnerInput,
-    ) -> async_graphql::Result<Eigentuemer> {
+    async fn create_owner(&self, ctx: &Context<'_>, owner: OwnerInput) -> ApiResult<Eigentuemer> {
         let mut connection = authenticated::get_connection(ctx).await?;
         let owner = owner.checked(&mut connection, None).await?;
         Ok(diesel::insert_into(schema::eigentuemer::table)
@@ -45,7 +42,7 @@ impl OwnerMutation {
         ctx: &Context<'_>,
         owner_id: i32,
         owner: OwnerInput,
-    ) -> async_graphql::Result<Eigentuemer> {
+    ) -> ApiResult<Eigentuemer> {
         let mut connection = authenticated::get_connection(ctx).await?;
         let owner = owner.checked(&mut connection, Some(owner_id)).await?;
         diesel::update(schema::eigentuemer::table.find(owner_id))
@@ -62,11 +59,7 @@ impl OwnerMutation {
     }
     /// The owner new Schächte and ducts get; there is always exactly one.
     #[graphql(guard = "RoleGuard(Role::Admin)")]
-    async fn set_default_owner(
-        &self,
-        ctx: &Context<'_>,
-        owner_id: i32,
-    ) -> async_graphql::Result<Eigentuemer> {
+    async fn set_default_owner(&self, ctx: &Context<'_>, owner_id: i32) -> ApiResult<Eigentuemer> {
         let mut connection = authenticated::get_connection(ctx).await?;
         let owner = find_owner(&mut connection, owner_id).await?;
         if owner.standard {
@@ -85,7 +78,7 @@ impl OwnerMutation {
     }
     /// Only an owner without Schächte, ducts and deliveries, and not the default one.
     #[graphql(guard = "RoleGuard(Role::Admin)")]
-    async fn delete_owner(&self, ctx: &Context<'_>, owner_id: i32) -> async_graphql::Result<bool> {
+    async fn delete_owner(&self, ctx: &Context<'_>, owner_id: i32) -> ApiResult<bool> {
         let mut connection = authenticated::get_connection(ctx).await?;
         let owner = find_owner(&mut connection, owner_id).await?;
         if owner.standard {
@@ -119,10 +112,7 @@ impl OwnerMutation {
     }
 }
 
-async fn find_owner(
-    connection: &mut AsyncPgConnection,
-    owner_id: i32,
-) -> async_graphql::Result<Eigentuemer> {
+async fn find_owner(connection: &mut AsyncPgConnection, owner_id: i32) -> ApiResult<Eigentuemer> {
     Eigentuemer::query()
         .filter(schema::eigentuemer::id.eq(owner_id))
         .first(connection)
@@ -156,7 +146,7 @@ impl OwnerInput {
         self,
         connection: &mut AsyncPgConnection,
         owner_id: Option<i32>,
-    ) -> async_graphql::Result<CheckedOwner> {
+    ) -> ApiResult<CheckedOwner> {
         let name = self.name.trim().to_string();
         if name.is_empty() {
             return Err(UserError::NameMissing.into());
@@ -215,7 +205,7 @@ impl OwnerInput {
 pub(super) async fn ensure_owner_exists(
     connection: &mut AsyncPgConnection,
     owner_id: i32,
-) -> async_graphql::Result<()> {
+) -> ApiResult<()> {
     let owners: i64 = schema::eigentuemer::table
         .find(owner_id)
         .count()
@@ -227,7 +217,7 @@ pub(super) async fn ensure_owner_exists(
     Ok(())
 }
 
-fn owner_not_found(owner_id: i32) -> async_graphql::Error {
+fn owner_not_found(owner_id: i32) -> ApiError {
     UserError::NotFound {
         kind: ObjectKind::Owner,
         id: owner_id.into(),

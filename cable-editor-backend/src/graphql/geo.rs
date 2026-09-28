@@ -1,6 +1,7 @@
 //! Positions entered by users, in LV95 or WGS84. The database stores LV95 (EPSG:2056); PostGIS
 //! does every conversion, so there is only one.
 
+use crate::graphql::error::ApiResult;
 use crate::{
     db::entity::{WGS84, st_transform},
     graphql::model::{GeoPoint, Lv95Point},
@@ -46,7 +47,7 @@ pub struct ConvertedPoint {
 pub async fn to_lv95(
     connection: &mut AsyncPgConnection,
     position: PositionInput,
-) -> async_graphql::Result<Point> {
+) -> ApiResult<Point> {
     let point = match position {
         PositionInput::Lv95(Lv95Input { e, n }) => Point::new(e, n, Some(LV95)),
         PositionInput::Wgs84(GeoPointInput { lat, lng }) => {
@@ -69,10 +70,7 @@ pub async fn to_lv95(
 }
 
 /// An LV95 point in WGS84.
-pub async fn to_wgs84(
-    connection: &mut AsyncPgConnection,
-    point: Point,
-) -> async_graphql::Result<GeoPoint> {
+pub async fn to_wgs84(connection: &mut AsyncPgConnection, point: Point) -> ApiResult<GeoPoint> {
     Ok(diesel::select(st_transform(point, WGS84))
         .get_result::<Option<Point>>(connection)
         .await?
@@ -83,7 +81,7 @@ pub async fn to_wgs84(
 pub async fn convert(
     connection: &mut AsyncPgConnection,
     position: PositionInput,
-) -> async_graphql::Result<ConvertedPoint> {
+) -> ApiResult<ConvertedPoint> {
     let lv95 = to_lv95(connection, position).await?;
     Ok(ConvertedPoint {
         lv95: lv95.into(),

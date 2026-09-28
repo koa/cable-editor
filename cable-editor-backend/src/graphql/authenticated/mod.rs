@@ -2,6 +2,7 @@ pub mod lkmap;
 pub mod mutation;
 pub mod planned;
 
+use crate::graphql::error::ApiResult;
 use crate::{
     db::{
         entity::{
@@ -40,24 +41,17 @@ pub struct Query;
 
 #[Object]
 impl Query {
-    async fn current_user<'a>(
-        &self,
-        ctx: &Context<'a>,
-    ) -> Result<&'a UserInfo, async_graphql::Error> {
-        ctx.data::<UserInfo>()
+    async fn current_user<'a>(&self, ctx: &Context<'a>) -> ApiResult<&'a UserInfo> {
+        Ok(ctx.data::<UserInfo>()?)
     }
-    async fn list_schacht(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Schacht>> {
+    async fn list_schacht(&self, ctx: &Context<'_>) -> ApiResult<Vec<Schacht>> {
         //let mut connection = pool.get().await?;
         let mut connection = get_connection(ctx).await?;
         let query = Schacht::query();
         let list = query.load(&mut connection).await?;
         Ok(list)
     }
-    async fn schacht(
-        &self,
-        ctx: &Context<'_>,
-        schacht_id: i32,
-    ) -> async_graphql::Result<Option<Schacht>> {
+    async fn schacht(&self, ctx: &Context<'_>, schacht_id: i32) -> ApiResult<Option<Schacht>> {
         let mut connection = get_connection(ctx).await?;
 
         let schacht = Schacht::query()
@@ -67,25 +61,21 @@ impl Query {
             .optional()?;
         Ok(schacht)
     }
-    async fn list_schacht_typ(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<SchachtTyp>> {
+    async fn list_schacht_typ(&self, ctx: &Context<'_>) -> ApiResult<Vec<SchachtTyp>> {
         let mut connection = get_connection(ctx).await?;
         let query = SchachtTyp::query();
         let list = query.load(&mut connection).await?;
         Ok(list)
     }
     /// Owners of Schächte and ducts, by name
-    async fn list_owner(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Eigentuemer>> {
+    async fn list_owner(&self, ctx: &Context<'_>) -> ApiResult<Vec<Eigentuemer>> {
         let mut connection = get_connection(ctx).await?;
         Ok(Eigentuemer::query()
             .order_by(eigentuemer::name)
             .load(&mut connection)
             .await?)
     }
-    async fn schacht_typ(
-        &self,
-        ctx: &Context<'_>,
-        typ_id: i32,
-    ) -> async_graphql::Result<Option<SchachtTyp>> {
+    async fn schacht_typ(&self, ctx: &Context<'_>, typ_id: i32) -> ApiResult<Option<SchachtTyp>> {
         let mut connection = get_connection(ctx).await?;
         Ok(SchachtTyp::query()
             .filter(schacht_typ::id.eq(typ_id))
@@ -93,16 +83,12 @@ impl Query {
             .await
             .optional()?)
     }
-    async fn list_cable(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Cable>> {
+    async fn list_cable(&self, ctx: &Context<'_>) -> ApiResult<Vec<Cable>> {
         let mut connection = get_connection(ctx).await?;
         let query = Cable::query();
         Ok(query.load(&mut connection).await?)
     }
-    async fn cable(
-        &self,
-        ctx: &Context<'_>,
-        cable_id: u32,
-    ) -> async_graphql::Result<Option<Cable>> {
+    async fn cable(&self, ctx: &Context<'_>, cable_id: u32) -> ApiResult<Option<Cable>> {
         let mut connection = get_connection(ctx).await?;
         Ok(kabel::table
             .find(cable_id as i32)
@@ -110,12 +96,12 @@ impl Query {
             .await
             .optional()?)
     }
-    async fn list_duct(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Duct>> {
+    async fn list_duct(&self, ctx: &Context<'_>) -> ApiResult<Vec<Duct>> {
         let mut connection = get_connection(ctx).await?;
         let query = Duct::query();
         Ok(query.load(&mut connection).await?)
     }
-    async fn duct(&self, ctx: &Context<'_>, duct_id: i32) -> async_graphql::Result<Option<Duct>> {
+    async fn duct(&self, ctx: &Context<'_>, duct_id: i32) -> ApiResult<Option<Duct>> {
         let mut connection = get_connection(ctx).await?;
         Ok(Duct::query()
             .filter(trasse::id.eq(duct_id))
@@ -123,12 +109,12 @@ impl Query {
             .await
             .optional()?)
     }
-    async fn list_plan(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Plan>> {
+    async fn list_plan(&self, ctx: &Context<'_>) -> ApiResult<Vec<Plan>> {
         let mut connection = get_connection(ctx).await?;
         let query = Plan::query();
         Ok(query.load(&mut connection).await?)
     }
-    async fn plan(&self, ctx: &Context<'_>, plan_id: i32) -> async_graphql::Result<Option<Plan>> {
+    async fn plan(&self, ctx: &Context<'_>, plan_id: i32) -> ApiResult<Option<Plan>> {
         let mut connection = get_connection(ctx).await?;
         Ok(plan::table
             .find(plan_id)
@@ -136,11 +122,7 @@ impl Query {
             .await
             .optional()?)
     }
-    async fn panel(
-        &self,
-        ctx: &Context<'_>,
-        panel_id: i32,
-    ) -> async_graphql::Result<Option<Panel>> {
+    async fn panel(&self, ctx: &Context<'_>, panel_id: i32) -> ApiResult<Option<Panel>> {
         let mut connection = get_connection(ctx).await?;
         Ok(panel::table
             .find(panel_id)
@@ -153,7 +135,7 @@ impl Query {
         &self,
         ctx: &Context<'_>,
         position: PositionInput,
-    ) -> async_graphql::Result<ConvertedPoint> {
+    ) -> ApiResult<ConvertedPoint> {
         let mut connection = get_connection(ctx).await?;
         geo::convert(&mut connection, position).await
     }
@@ -165,7 +147,7 @@ impl Query {
         schacht_a: i32,
         schacht_z: i32,
         line: LineInput,
-    ) -> async_graphql::Result<DuctLineCheck> {
+    ) -> ApiResult<DuctLineCheck> {
         let mut connection = get_connection(ctx).await?;
         duct_line::check(&mut connection, schacht_a, schacht_z, &line).await
     }
@@ -175,25 +157,19 @@ impl Query {
         &self,
         ctx: &Context<'_>,
         owner_id: i32,
-    ) -> async_graphql::Result<lkmap::LkmapExport> {
+    ) -> ApiResult<lkmap::LkmapExport> {
         lkmap::export(ctx, owner_id).await
     }
     /// The deliveries to the Leitungskataster of all owners with something to deliver or
     /// delivered before, by name
     #[graphql(guard = "RoleGuard(Role::Admin)")]
-    async fn lkmap_exports(
-        &self,
-        ctx: &Context<'_>,
-    ) -> async_graphql::Result<Vec<lkmap::LkmapExport>> {
+    async fn lkmap_exports(&self, ctx: &Context<'_>) -> ApiResult<Vec<lkmap::LkmapExport>> {
         lkmap::exports(ctx).await
     }
-    async fn netbox_devices(&self) -> async_graphql::Result<Vec<DeviceWithRearPorts>> {
+    async fn netbox_devices(&self) -> ApiResult<Vec<DeviceWithRearPorts>> {
         Ok(fetch_devices_and_ports().await?)
     }
-    async fn netbox_device(
-        &self,
-        netbox_device_id: u32,
-    ) -> async_graphql::Result<Option<DeviceWithRearPorts>> {
+    async fn netbox_device(&self, netbox_device_id: u32) -> ApiResult<Option<DeviceWithRearPorts>> {
         Ok(fetch_device_with_ports(netbox_device_id.into()).await?)
     }
 }
@@ -204,7 +180,7 @@ pub fn create_authenticated_schema() -> AuthenticatedGraphqlSchema {
 
 pub async fn get_connection<'a>(
     ctx: &'a Context<'_>,
-) -> async_graphql::Result<MutexGuard<'a, DpObject<AsyncPgConnection>>> {
+) -> ApiResult<MutexGuard<'a, DpObject<AsyncPgConnection>>> {
     let shared_conn = ctx.data::<SharedConnection>()?;
     Ok(shared_conn.lock().await)
 }

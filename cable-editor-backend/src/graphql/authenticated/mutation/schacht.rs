@@ -1,6 +1,7 @@
 //! Schächte.
 
 use super::owner::ensure_owner_exists;
+use crate::graphql::error::ApiResult;
 use crate::{
     db::{
         entity::{lkmap::Genauigkeit, schacht::Schacht},
@@ -22,11 +23,7 @@ pub struct SchachtMutation;
 #[Object]
 impl SchachtMutation {
     #[graphql(guard = "RoleGuard(Role::Planner)")]
-    async fn create_schacht(
-        &self,
-        ctx: &Context<'_>,
-        schacht: SchachtInput,
-    ) -> async_graphql::Result<Schacht> {
+    async fn create_schacht(&self, ctx: &Context<'_>, schacht: SchachtInput) -> ApiResult<Schacht> {
         let mut connection = authenticated::get_connection(ctx).await?;
         let values = schacht.values(&mut connection).await?;
         Ok(diesel::insert_into(schema::schacht::table)
@@ -49,7 +46,7 @@ impl SchachtMutation {
         ctx: &Context<'_>,
         schacht_id: i32,
         schacht: SchachtInput,
-    ) -> async_graphql::Result<Schacht> {
+    ) -> ApiResult<Schacht> {
         let mut connection = authenticated::get_connection(ctx).await?;
         let values = schacht.values(&mut connection).await?;
         Ok(diesel::update(schema::schacht::table.find(schacht_id))
@@ -66,11 +63,7 @@ impl SchachtMutation {
     }
     /// Only a Schacht without panels and ducts.
     #[graphql(guard = "RoleGuard(Role::Admin)")]
-    async fn delete_schacht(
-        &self,
-        ctx: &Context<'_>,
-        schacht_id: i32,
-    ) -> async_graphql::Result<bool> {
+    async fn delete_schacht(&self, ctx: &Context<'_>, schacht_id: i32) -> ApiResult<bool> {
         let mut connection = authenticated::get_connection(ctx).await?;
         let panels: i64 = schema::panel::table
             .filter(schema::panel::schacht_id.eq(schacht_id))
@@ -120,10 +113,7 @@ struct SchachtValues {
 
 impl SchachtInput {
     /// The column values: the name checked, the position in LV95, the owner existing.
-    async fn values(
-        self,
-        connection: &mut AsyncPgConnection,
-    ) -> async_graphql::Result<SchachtValues> {
+    async fn values(self, connection: &mut AsyncPgConnection) -> ApiResult<SchachtValues> {
         let name = self.name.trim().to_string();
         if name.is_empty() {
             return Err(UserError::NameMissing.into());

@@ -1,5 +1,5 @@
-use crate::error::FrontendError;
-use cable_editor_common::UserError;
+use crate::error::{FrontendError, ServerError};
+use cable_editor_common::{ErrorOrigin, UserError};
 use cynic::{
     GraphQlResponse, MutationBuilder, Operation, QueryBuilder, QueryFragment, QueryVariables,
     http::CynicReqwestError,
@@ -82,19 +82,25 @@ where
     .await
 }
 
-/// What the backend adds to a GraphQL error: why it refused the request (see
-/// docs/fehlermeldungen.md). Read leniently, so an unknown reason (a newer backend) is a
-/// technical error instead of an unreadable response.
+/// What the backend adds to a GraphQL error: why it refused the request, or where an
+/// unexpected error came from (see docs/fehlermeldungen.md). Read leniently, so an unknown
+/// reason (a newer backend) is a technical error instead of an unreadable response.
 #[derive(Deserialize, Debug, Default)]
 #[serde(rename_all = "camelCase")]
 struct ErrorExtensions {
     #[serde(default)]
     user_error: Option<serde_json::Value>,
+    #[serde(default)]
+    origin: Option<serde_json::Value>,
 }
 
 impl ErrorExtensions {
     fn user_error(&self) -> Option<UserError> {
         serde_json::from_value(self.user_error.clone()?).ok()
+    }
+
+    fn origin(&self) -> Option<ErrorOrigin> {
+        serde_json::from_value(self.origin.clone()?).ok()
     }
 }
 
@@ -117,8 +123,8 @@ async fn send<Q, V: Serialize>(
 
 /// Sends `operation` to `url`, with the bearer token of `credentials` if logged in, and returns
 /// the data of the response. Its first error: `FrontendError::User` if the backend refused the
-/// request, else `FrontendError::Graphql` with the messages; a response with neither data nor
-/// errors: `FrontendError::NotFound`; data that doesn't fit the query:
+/// request, else `FrontendError::Graphql` with the messages and their origins; a response with
+/// neither data nor errors: `FrontendError::NotFound`; data that doesn't fit the query:
 /// `FrontendError::InvalidResponse`.
 async fn run<Q, V>(
     url: &str,
@@ -154,7 +160,15 @@ where
                 .find_map(|e| e.extensions.as_ref()?.user_error())
             {
                 Some(user_error) => FrontendError::User(user_error),
-                None => FrontendError::Graphql(errors.into_iter().map(|e| e.message).collect()),
+                None => FrontendError::Graphql(
+                    errors
+                        .into_iter()
+                        .map(|e| ServerError {
+                            origin: e.extensions.as_ref().and_then(ErrorExtensions::origin),
+                            message: e.message,
+                        })
+                        .collect(),
+                ),
             },
         ),
         GraphQlResponse {

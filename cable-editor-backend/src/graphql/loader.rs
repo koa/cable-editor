@@ -4,6 +4,7 @@
 //! The loader uses the request's connection, so it sees the request's transaction. Resolvers
 //! must not hold `get_connection`'s guard while waiting for the loader, that would deadlock.
 
+use crate::graphql::error::{ApiError, ApiResult};
 use crate::{
     db::{
         entity::{
@@ -43,15 +44,15 @@ impl DbLoader {
     }
 }
 
-pub fn get_loader<'a>(ctx: &'a Context<'_>) -> async_graphql::Result<&'a DataLoader<DbLoader>> {
-    ctx.data::<DataLoader<DbLoader>>()
+pub fn get_loader<'a>(ctx: &'a Context<'_>) -> ApiResult<&'a DataLoader<DbLoader>> {
+    Ok(ctx.data::<DataLoader<DbLoader>>()?)
 }
 
 /// Loads one referenced object, which must exist (foreign key).
-pub async fn load_one<K>(ctx: &Context<'_>, key: K) -> async_graphql::Result<DbValue<K>>
+pub async fn load_one<K>(ctx: &Context<'_>, key: K) -> ApiResult<DbValue<K>>
 where
     K: ObjectKey + Send + Sync + std::hash::Hash + Eq + Clone + std::fmt::Debug + 'static,
-    DbLoader: Loader<K, Error = async_graphql::Error>,
+    DbLoader: Loader<K, Error = ApiError>,
 {
     let id = key.id();
     get_loader(ctx)?.load_one(key).await?.ok_or_else(|| {
@@ -170,7 +171,7 @@ fn ids<K>(keys: &[K], id: impl Fn(&K) -> i32) -> Vec<i32> {
 
 impl Loader<SchachtId> for DbLoader {
     type Value = Schacht;
-    type Error = async_graphql::Error;
+    type Error = ApiError;
 
     async fn load(&self, keys: &[SchachtId]) -> Result<HashMap<SchachtId, Schacht>, Self::Error> {
         let mut connection = self.connection.lock().await;
@@ -184,7 +185,7 @@ impl Loader<SchachtId> for DbLoader {
 
 impl Loader<SchachtTypId> for DbLoader {
     type Value = SchachtTyp;
-    type Error = async_graphql::Error;
+    type Error = ApiError;
 
     async fn load(
         &self,
@@ -201,7 +202,7 @@ impl Loader<SchachtTypId> for DbLoader {
 
 impl Loader<EigentuemerId> for DbLoader {
     type Value = Eigentuemer;
-    type Error = async_graphql::Error;
+    type Error = ApiError;
 
     async fn load(
         &self,
@@ -218,7 +219,7 @@ impl Loader<EigentuemerId> for DbLoader {
 
 impl Loader<SchachtTypCount> for DbLoader {
     type Value = i32;
-    type Error = async_graphql::Error;
+    type Error = ApiError;
 
     async fn load(
         &self,
@@ -241,7 +242,7 @@ impl Loader<SchachtTypCount> for DbLoader {
 
 impl Loader<EigentuemerCounts> for DbLoader {
     type Value = OwnedCounts;
-    type Error = async_graphql::Error;
+    type Error = ApiError;
 
     async fn load(
         &self,
@@ -289,7 +290,7 @@ impl Loader<EigentuemerCounts> for DbLoader {
 
 impl Loader<CableId> for DbLoader {
     type Value = Cable;
-    type Error = async_graphql::Error;
+    type Error = ApiError;
 
     async fn load(&self, keys: &[CableId]) -> Result<HashMap<CableId, Cable>, Self::Error> {
         let mut connection = self.connection.lock().await;
@@ -303,7 +304,7 @@ impl Loader<CableId> for DbLoader {
 
 impl Loader<SchachtLocation> for DbLoader {
     type Value = GeoPoint;
-    type Error = async_graphql::Error;
+    type Error = ApiError;
 
     async fn load(
         &self,
@@ -327,7 +328,7 @@ impl Loader<SchachtLocation> for DbLoader {
 
 impl Loader<DuctLine> for DbLoader {
     type Value = Vec<GeoPoint>;
-    type Error = async_graphql::Error;
+    type Error = ApiError;
 
     async fn load(
         &self,
@@ -354,7 +355,7 @@ impl Loader<DuctLine> for DbLoader {
 
 impl Loader<DuctCables> for DbLoader {
     type Value = Vec<Cable>;
-    type Error = async_graphql::Error;
+    type Error = ApiError;
 
     async fn load(
         &self,
@@ -378,7 +379,7 @@ impl Loader<DuctCables> for DbLoader {
 
 impl Loader<DuctLength> for DbLoader {
     type Value = f64;
-    type Error = async_graphql::Error;
+    type Error = ApiError;
 
     async fn load(&self, keys: &[DuctLength]) -> Result<HashMap<DuctLength, f64>, Self::Error> {
         let mut connection = self.connection.lock().await;
@@ -399,7 +400,7 @@ impl Loader<DuctLength> for DbLoader {
 
 impl Loader<SchachtRootPanels> for DbLoader {
     type Value = Vec<Panel>;
-    type Error = async_graphql::Error;
+    type Error = ApiError;
 
     async fn load(
         &self,
@@ -425,7 +426,7 @@ impl Loader<SchachtRootPanels> for DbLoader {
 
 impl Loader<CableLength> for DbLoader {
     type Value = f64;
-    type Error = async_graphql::Error;
+    type Error = ApiError;
 
     async fn load(&self, keys: &[CableLength]) -> Result<HashMap<CableLength, f64>, Self::Error> {
         let mut connection = self.connection.lock().await;
@@ -448,7 +449,7 @@ impl Loader<CableLength> for DbLoader {
 
 impl Loader<CableDucts> for DbLoader {
     type Value = Vec<(Duct, i32)>;
-    type Error = async_graphql::Error;
+    type Error = ApiError;
 
     async fn load(
         &self,
@@ -482,7 +483,7 @@ impl Loader<CableDucts> for DbLoader {
 
 impl Loader<CableEndUsages> for DbLoader {
     type Value = Vec<PortUsage>;
-    type Error = async_graphql::Error;
+    type Error = ApiError;
 
     /// One query per cable end (instead of per fiber); a page shows few cable ends.
     async fn load(
@@ -501,7 +502,7 @@ impl Loader<CableEndUsages> for DbLoader {
 
 impl Loader<PanelId> for DbLoader {
     type Value = Panel;
-    type Error = async_graphql::Error;
+    type Error = ApiError;
 
     async fn load(&self, keys: &[PanelId]) -> Result<HashMap<PanelId, Panel>, Self::Error> {
         let mut connection = self.connection.lock().await;
@@ -515,7 +516,7 @@ impl Loader<PanelId> for DbLoader {
 
 impl Loader<PanelPortId> for DbLoader {
     type Value = PanelPort;
-    type Error = async_graphql::Error;
+    type Error = ApiError;
 
     async fn load(
         &self,
@@ -532,7 +533,7 @@ impl Loader<PanelPortId> for DbLoader {
 
 impl Loader<PlanId> for DbLoader {
     type Value = Plan;
-    type Error = async_graphql::Error;
+    type Error = ApiError;
 
     async fn load(&self, keys: &[PlanId]) -> Result<HashMap<PlanId, Plan>, Self::Error> {
         let mut connection = self.connection.lock().await;

@@ -4,4 +4,4 @@
 pub mod error;
 pub mod limits;
 
-pub use error::{ObjectKind, UserError};
+pub use error::{ErrorOrigin, ObjectKind, UserError};

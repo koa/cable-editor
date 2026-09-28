@@ -1,3 +1,4 @@
+use crate::graphql::error::ApiResult;
 use crate::{
     db::{
         entity::panel::{Panel, PortUsage},
@@ -53,7 +54,7 @@ impl Plan {
         self.is_baseline()
     }
 
-    async fn root_panels(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<PlannedPanel>> {
+    async fn root_panels(&self, ctx: &Context<'_>) -> ApiResult<Vec<PlannedPanel>> {
         let mut connection = get_connection(ctx).await?;
         let raw_sql = r#"
 WITH RECURSIVE affected_panels AS (
@@ -93,11 +94,7 @@ WHERE a.parent_panel IS NULL;
                     .collect()
             })?)
     }
-    async fn panel(
-        &self,
-        ctx: &Context<'_>,
-        panel_id: i32,
-    ) -> async_graphql::Result<Option<PlannedPanel>> {
+    async fn panel(&self, ctx: &Context<'_>, panel_id: i32) -> ApiResult<Option<PlannedPanel>> {
         {
             let mut connection = get_connection(ctx).await?;
             Ok(Panel::query()
@@ -111,7 +108,7 @@ WHERE a.parent_panel IS NULL;
                 }))
         }
     }
-    async fn usage(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<PortUsage>> {
+    async fn usage(&self, ctx: &Context<'_>) -> ApiResult<Vec<PortUsage>> {
         let mut connection = get_connection(ctx).await?;
         Ok(PortUsage::query()
             .filter(schema::port_usage::plan_id.eq(self.id))

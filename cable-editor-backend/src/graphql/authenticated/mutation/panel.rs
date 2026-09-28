@@ -1,6 +1,7 @@
 //! Panels, their ports and the ports' usage by fibres.
 
 use crate::db::entity::plan::BASELINE_PLAN_ID;
+use crate::graphql::error::{ApiError, ApiResult};
 use crate::{
     db::{
         entity::panel::{InsertPanel, InsertPanelPort, PanelPortType, PortSide, PortUsage},
@@ -30,7 +31,7 @@ impl PanelMutation {
         ctx: &Context<'_>,
         panel: CreatePanel,
         parent_panel: Option<i32>,
-    ) -> async_graphql::Result<bool> {
+    ) -> ApiResult<bool> {
         authenticated::get_connection(ctx)
             .await?
             .transaction(async move |conn| {
@@ -50,11 +51,7 @@ impl PanelMutation {
             .await
     }
     #[graphql(guard = "RoleGuard(Role::Planner)")]
-    async fn update_panels(
-        &self,
-        ctx: &Context<'_>,
-        updates: Vec<PanelUpdate>,
-    ) -> async_graphql::Result<bool> {
+    async fn update_panels(&self, ctx: &Context<'_>, updates: Vec<PanelUpdate>) -> ApiResult<bool> {
         authenticated::get_connection(ctx)
             .await?
             .transaction(async move |conn| {
@@ -89,7 +86,7 @@ impl PanelMutation {
         cabinet_id: i32,
         changes: Vec<FlatPanelInput>,
         deletes: Vec<i32>,
-    ) -> async_graphql::Result<bool> {
+    ) -> ApiResult<bool> {
         let mut connection = authenticated::get_connection(ctx).await?;
 
         connection
@@ -155,7 +152,7 @@ impl PanelMutation {
                     }
                 }
 
-                Ok::<bool, async_graphql::Error>(true)
+                Ok::<bool, ApiError>(true)
             })
             .await?;
 
@@ -168,7 +165,7 @@ impl PanelMutation {
         panel_id: i32,
         changes: Vec<FlatPortInput>,
         deletes: Vec<i32>,
-    ) -> async_graphql::Result<bool> {
+    ) -> ApiResult<bool> {
         let mut connection = authenticated::get_connection(ctx).await?;
 
         connection
@@ -229,7 +226,7 @@ impl PanelMutation {
                     }
                 }
 
-                Ok::<bool, async_graphql::Error>(true)
+                Ok::<bool, ApiError>(true)
             })
             .await?;
 
@@ -241,7 +238,7 @@ impl PanelMutation {
         ctx: &Context<'_>,
         plan_id: i32,
         changes: Vec<PortUsageInput>,
-    ) -> async_graphql::Result<bool> {
+    ) -> ApiResult<bool> {
         if plan_id == BASELINE_PLAN_ID {
             return Err(UserError::BaselineUnchangeable.into());
         }
@@ -310,7 +307,7 @@ impl PanelMutation {
                     }
                 }
 
-                Ok::<bool, async_graphql::Error>(true)
+                Ok::<bool, ApiError>(true)
             })
             .await
     }
@@ -388,7 +385,7 @@ async fn insert_panel_tree_recursive(
     node: CreatePanel,
     parent_id: Option<i32>,
     parent_order_val: Option<i32>,
-) -> async_graphql::Result<()> {
+) -> ApiResult<()> {
     // 1. Das aktuelle Panel speichern
     let new_panel = InsertPanel {
         name: node.name.clone(),

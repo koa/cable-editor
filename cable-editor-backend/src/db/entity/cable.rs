@@ -1,4 +1,5 @@
 use crate::db::entity::plan::BASELINE_PLAN_ID;
+use crate::graphql::error::ApiResult;
 use crate::{
     db::{
         entity::{
@@ -56,7 +57,7 @@ pub struct CableDuct {
 }
 impl Cable {
     /// The cable's path from its ducts (with their sequence), `None` without ducts.
-    fn path_from_ducts(&self, ducts: Vec<(Duct, i32)>) -> async_graphql::Result<Option<CablePath>> {
+    fn path_from_ducts(&self, ducts: Vec<(Duct, i32)>) -> ApiResult<Option<CablePath>> {
         let segments = align_ducts(ducts.into_iter())
             .map(|r| {
                 r.map(|segment| CablePathSegment {
@@ -90,7 +91,7 @@ impl Cable {
             }))
     }
     /// The path, its ducts loaded in batches with the other cables' of the request.
-    async fn load_path(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<CablePath>> {
+    async fn load_path(&self, ctx: &Context<'_>) -> ApiResult<Option<CablePath>> {
         let ducts = get_loader(ctx)?
             .load_one(CableDucts(self.id))
             .await?
@@ -128,15 +129,15 @@ impl Cable {
         self.faser_anz as u32
     }
     /// Metres along its ducts, missing without ducts
-    async fn length(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<f64>> {
+    async fn length(&self, ctx: &Context<'_>) -> ApiResult<Option<f64>> {
         get_loader(ctx)?.load_one(CableLength(self.id)).await
     }
 
-    async fn path(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<CablePath>> {
+    async fn path(&self, ctx: &Context<'_>) -> ApiResult<Option<CablePath>> {
         self.load_path(ctx).await
     }
     /// Course in WGS84 for the map; missing without ducts or with a gap between them
-    async fn line(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<Vec<GeoPoint>>> {
+    async fn line(&self, ctx: &Context<'_>) -> ApiResult<Option<Vec<GeoPoint>>> {
         let mut connection = get_connection(ctx).await?;
         // Unlike the view kabel_pfad, which fails on a gap (no LineString to cast to)
         let line: Option<CableLine> = sql_query(
@@ -158,7 +159,7 @@ impl Cable {
             .and_then(|l| l.line)
             .map(|l| l.points.into_iter().map(GeoPoint::from).collect()))
     }
-    async fn end(&self, ctx: &Context<'_>, schacht_id: i32) -> async_graphql::Result<CableEnd> {
+    async fn end(&self, ctx: &Context<'_>, schacht_id: i32) -> ApiResult<CableEnd> {
         let mut connection = get_connection(ctx).await?;
         Ok(self.cable_end(schacht_id, &mut connection).await?)
     }
@@ -218,11 +219,7 @@ pub async fn cable_usages_at(
 
 impl CableEnd {
     /// `cable_usages_at`, loaded in batches with the request's other cable ends.
-    async fn usages(
-        &self,
-        ctx: &Context<'_>,
-        plan_id: i32,
-    ) -> async_graphql::Result<Vec<PortUsage>> {
+    async fn usages(&self, ctx: &Context<'_>, plan_id: i32) -> ApiResult<Vec<PortUsage>> {
         Ok(get_loader(ctx)?
             .load_one(CableEndUsages {
                 cable: self.cable.id,
@@ -242,7 +239,7 @@ impl CableEnd {
     async fn schacht(&self) -> &Schacht {
         &self.schacht
     }
-    async fn path(&self, ctx: &Context<'_>) -> async_graphql::Result<CablePath> {
+    async fn path(&self, ctx: &Context<'_>) -> ApiResult<CablePath> {
         let path = self
             .cable
             .load_path(ctx)
@@ -258,11 +255,7 @@ impl CableEnd {
         })
     }
 
-    async fn used_ports(
-        &self,
-        ctx: &Context<'_>,
-        plan_id: i32,
-    ) -> async_graphql::Result<Vec<PortUsage>> {
+    async fn used_ports(&self, ctx: &Context<'_>, plan_id: i32) -> ApiResult<Vec<PortUsage>> {
         self.usages(ctx, plan_id).await
     }
     async fn fibers(&self) -> Vec<FiberEnd> {
@@ -296,15 +289,11 @@ impl FiberEnd {
     }
     /// The port the fiber ends at in the plan, if any; a usage of the plan wins over one of the
     /// current state.
-    async fn used_port(
-        &self,
-        ctx: &Context<'_>,
-        plan_id: i32,
-    ) -> async_graphql::Result<Option<PortUsage>> {
+    async fn used_port(&self, ctx: &Context<'_>, plan_id: i32) -> ApiResult<Option<PortUsage>> {
         let usages = self.cable.usages(ctx, plan_id).await?;
         Ok(fiber_usage(&usages, self.bundle, self.fiber).cloned())
     }
-    async fn other_end(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<FiberEnd>> {
+    async fn other_end(&self, ctx: &Context<'_>) -> ApiResult<Option<FiberEnd>> {
         let Some(path) = self.cable.cable.load_path(ctx).await? else {
             return Ok(None);
         };
@@ -368,7 +357,7 @@ impl Fiber {
     async fn fiber(&self) -> i32 {
         self.fiber
     }
-    async fn cable(&self, ctx: &Context<'_>) -> async_graphql::Result<Cable> {
+    async fn cable(&self, ctx: &Context<'_>) -> ApiResult<Cable> {
         load_one(ctx, CableId(self.cable)).await
     }
 }
@@ -411,10 +400,10 @@ impl CablePath {
 
 #[Object]
 impl CablePath {
-    async fn near_schacht(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
+    async fn near_schacht(&self, ctx: &Context<'_>) -> ApiResult<Schacht> {
         load_one(ctx, SchachtId(self.near_schacht)).await
     }
-    async fn near_end(&self, ctx: &Context<'_>) -> async_graphql::Result<CableEnd> {
+    async fn near_end(&self, ctx: &Context<'_>) -> ApiResult<CableEnd> {
         let schacht = load_one(ctx, SchachtId(self.near_schacht)).await?;
         Ok(CableEnd {
             cable: self.cable.clone(),
@@ -424,10 +413,10 @@ impl CablePath {
     async fn segments(&self) -> &[CablePathSegment] {
         self.segments.as_ref()
     }
-    async fn far_schacht(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
+    async fn far_schacht(&self, ctx: &Context<'_>) -> ApiResult<Schacht> {
         load_one(ctx, SchachtId(self.far_schacht_id())).await
     }
-    async fn far_end(&self, ctx: &Context<'_>) -> async_graphql::Result<CableEnd> {
+    async fn far_end(&self, ctx: &Context<'_>) -> ApiResult<CableEnd> {
         let schacht = load_one(ctx, SchachtId(self.far_schacht_id())).await?;
         Ok(CableEnd {
             cable: self.cable.clone(),
@@ -446,7 +435,7 @@ impl CablePathSegment {
     async fn duct(&self) -> &Duct {
         &self.segment.duct.0
     }
-    async fn far_schacht(&self, ctx: &Context<'_>) -> async_graphql::Result<Schacht> {
+    async fn far_schacht(&self, ctx: &Context<'_>) -> ApiResult<Schacht> {
         load_one(ctx, SchachtId(self.far_schacht)).await
     }
     async fn sequence(&self) -> i32 {

@@ -5,6 +5,7 @@
 pub mod perimeter;
 pub mod xtf;
 
+use crate::graphql::error::{ApiError, ApiResult};
 use crate::{
     config::LKMAP_CONFIG,
     db::{
@@ -198,10 +199,7 @@ struct PerimeterRow {
 
 /// The owner's delivery: the transfer files (with UID) and what they lack. Owners without
 /// anything to deliver get an empty one.
-pub async fn export(
-    connection: &mut AsyncPgConnection,
-    owner_id: i32,
-) -> async_graphql::Result<Export> {
+pub async fn export(connection: &mut AsyncPgConnection, owner_id: i32) -> ApiResult<Export> {
     let config = LKMAP_CONFIG.as_ref().ok_or(UserError::LkmapNotConfigured)?;
     let owner: Eigentuemer = Eigentuemer::query()
         .filter(schema::eigentuemer::id.eq(owner_id))
@@ -282,7 +280,7 @@ pub async fn export(
                 .get_result::<PerimeterRow>(connection)
                 .await?;
             let (Some(outline), Some(outline_wgs84)) = (area.area, area.area_wgs84) else {
-                return Err("PostGIS returned no perimeter".into());
+                return Err(ApiError::failed("PostGIS", "returned no perimeter"));
             };
             let outer = outline.rings.into_iter().next().unwrap_or_default();
             let perimeter = Perimeter {

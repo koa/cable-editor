@@ -1,5 +1,6 @@
 //! The delivery to the Leitungskataster as GraphQL (see `crate::lkmap`).
 
+use crate::graphql::error::ApiResult;
 use crate::{
     db::{
         entity::{Duct, eigentuemer::Eigentuemer, lkmap::LkLieferung, schacht::Schacht},
@@ -67,7 +68,7 @@ pub struct LkmapExport {
 #[ComplexObject]
 impl LkmapExport {
     /// The owner's deliveries, the latest first
-    async fn deliveries(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<LkLieferung>> {
+    async fn deliveries(&self, ctx: &Context<'_>) -> ApiResult<Vec<LkLieferung>> {
         let mut connection = get_connection(ctx).await?;
         Ok(deliveries(&mut connection, self.owner.id).await?)
     }
@@ -78,7 +79,7 @@ impl LkmapExport {
     async fn first_change_since_delivery(
         &self,
         ctx: &Context<'_>,
-    ) -> async_graphql::Result<Option<DateTime<Utc>>> {
+    ) -> ApiResult<Option<DateTime<Utc>>> {
         let mut connection = get_connection(ctx).await?;
         let last_delivered = deliveries(&mut connection, self.owner.id)
             .await?
@@ -124,7 +125,7 @@ async fn deliveries(
         .await
 }
 
-pub async fn export(ctx: &Context<'_>, owner_id: i32) -> async_graphql::Result<LkmapExport> {
+pub async fn export(ctx: &Context<'_>, owner_id: i32) -> ApiResult<LkmapExport> {
     let mut connection = get_connection(ctx).await?;
     let export = lkmap::export(&mut connection, owner_id).await?;
     to_graphql(&mut connection, export).await
@@ -148,7 +149,7 @@ struct OwnerRow {
     id: i32,
 }
 
-pub async fn exports(ctx: &Context<'_>) -> async_graphql::Result<Vec<LkmapExport>> {
+pub async fn exports(ctx: &Context<'_>) -> ApiResult<Vec<LkmapExport>> {
     let mut connection = get_connection(ctx).await?;
     let owners: Vec<OwnerRow> = sql_query(OWNERS).load(&mut connection).await?;
     let mut exports = Vec::with_capacity(owners.len());
@@ -162,7 +163,7 @@ pub async fn exports(ctx: &Context<'_>) -> async_graphql::Result<Vec<LkmapExport
 async fn to_graphql(
     connection: &mut AsyncPgConnection,
     export: lkmap::Export,
-) -> async_graphql::Result<LkmapExport> {
+) -> ApiResult<LkmapExport> {
     let (lkmap, perimeter, perimeter_area, checksum) = match export.files {
         Some(files) => (
             Some(files.lkmap.try_into()?),

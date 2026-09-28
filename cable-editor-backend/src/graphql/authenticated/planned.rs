@@ -1,4 +1,5 @@
 use crate::db::entity::plan::BASELINE_PLAN_ID;
+use crate::graphql::error::ApiResult;
 use crate::{
     db::{
         entity::{
@@ -30,7 +31,7 @@ impl PlannedPanel {
     async fn plan(&self) -> &Plan {
         &self.plan
     }
-    async fn parent(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<PlannedPanel>> {
+    async fn parent(&self, ctx: &Context<'_>) -> ApiResult<Option<PlannedPanel>> {
         if let Some(parent_panel_id) = self.panel.parent_panel {
             let mut connection = get_connection(ctx).await?;
             Ok(Some(
@@ -47,7 +48,7 @@ impl PlannedPanel {
             Ok(None)
         }
     }
-    async fn children(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<PlannedPanel>> {
+    async fn children(&self, ctx: &Context<'_>) -> ApiResult<Vec<PlannedPanel>> {
         let mut connection = get_connection(ctx).await?;
         Ok(Panel::query()
             .filter(panel::parent_panel.eq(self.panel.id))
@@ -64,7 +65,7 @@ impl PlannedPanel {
                     .collect()
             })?)
     }
-    async fn ports(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<PlannedPort>> {
+    async fn ports(&self, ctx: &Context<'_>) -> ApiResult<Vec<PlannedPort>> {
         let mut connection = get_connection(ctx).await?;
 
         // Lade einfach alle existierenden Hardware-Ports für dieses Panel
@@ -83,10 +84,7 @@ impl PlannedPanel {
             })
             .collect())
     }
-    async fn all_children_recursive(
-        &self,
-        ctx: &Context<'_>,
-    ) -> async_graphql::Result<Vec<PlannedPanel>> {
+    async fn all_children_recursive(&self, ctx: &Context<'_>) -> ApiResult<Vec<PlannedPanel>> {
         let mut connection = get_connection(ctx).await?;
         Ok(
             Panel::load_all_children_recursive(self.panel.id, &mut connection)
@@ -116,11 +114,7 @@ impl PlannedPort {
     }
 
     /// Lädt die effektive Belegung für eine bestimmte Seite des Ports
-    async fn usage(
-        &self,
-        ctx: &Context<'_>,
-        side: PortSide,
-    ) -> async_graphql::Result<Option<PortUsage>> {
+    async fn usage(&self, ctx: &Context<'_>, side: PortSide) -> ApiResult<Option<PortUsage>> {
         let mut connection = get_connection(ctx).await?;
 
         let usage = port_usage::table
@@ -142,7 +136,7 @@ impl PlannedPort {
         &self,
         ctx: &Context<'_>,
         side: PortSide,
-    ) -> async_graphql::Result<Option<PortUsage>> {
+    ) -> ApiResult<Option<PortUsage>> {
         let mut connection = get_connection(ctx).await?;
 
         let usage = port_usage::table
