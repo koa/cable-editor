@@ -1,7 +1,10 @@
 use crate::{
     error::FrontendError,
     graphql::{
-        authenticated::{cable_details::CableSegmentEndSchacht, schema},
+        authenticated::{
+            DateTime, Genauigkeit, Lv95Point, cable_details::CableSegmentEndSchacht,
+            duct_details::DuctOwner, schema,
+        },
         query,
     },
 };
@@ -24,8 +27,20 @@ struct FetchSchachtCablesQuery {
 pub struct SchachtCables {
     pub id: i32,
     pub name: String,
+    pub typ: Option<SchachtTypeName>,
+    pub owner: DuctOwner,
+    /// LV95, as stored
+    pub position: Option<Lv95Point>,
+    pub lagebestimmung: Genauigkeit,
+    pub changed_at: DateTime,
     pub root_panels: Vec<SchachtRootPanel>,
     pub cables: Vec<SchachtCableEnd>,
+}
+
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
+#[cynic(graphql_type = "SchachtTyp")]
+pub struct SchachtTypeName {
+    pub name: Option<String>,
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]

@@ -368,12 +368,13 @@ impl DuctView {
         }
     }
 
-    pub const ALL: [DuctView; 2] = [DuctView::Show, DuctView::Properties];
+    /// The views in the breadcrumb menu; `Properties` opens from the overview's button
+    pub const ALL: [DuctView; 1] = [DuctView::Show];
 
     pub fn title(&self) -> &'static str {
         match self {
             DuctView::Show => "Übersicht",
-            DuctView::Properties => "Eigenschaften",
+            DuctView::Properties => "Bearbeiten",
         }
     }
 }
@@ -399,16 +400,13 @@ impl CabinetView {
         }
     }
 
-    pub const ALL: [CabinetView; 3] = [
-        CabinetView::Overview,
-        CabinetView::Properties,
-        CabinetView::Edit,
-    ];
+    /// The views in the breadcrumb menu; `Properties` opens from the overview's button
+    pub const ALL: [CabinetView; 2] = [CabinetView::Overview, CabinetView::Edit];
 
     pub fn title(&self) -> &'static str {
         match self {
             CabinetView::Overview => "Übersicht",
-            CabinetView::Properties => "Eigenschaften",
+            CabinetView::Properties => "Bearbeiten",
             CabinetView::Edit => "Panels bearbeiten",
         }
     }

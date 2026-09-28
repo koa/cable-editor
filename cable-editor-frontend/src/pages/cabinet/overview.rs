@@ -7,13 +7,18 @@ use crate::{
         table::ListModel,
     },
     error::FrontendError,
-    graphql::authenticated::schacht_cables::{SchachtCableEnd, SchachtCables, SchachtPanelEntry},
+    geo::coordinates::CoordinateSystem,
+    graphql::authenticated::{
+        current_user::Role,
+        schacht_cables::{SchachtCableEnd, SchachtCables, SchachtPanelEntry},
+    },
     pages::router::{CabinetView, PlanView},
     util::{get_credentials, get_role},
 };
 use patternfly_yew::prelude::{
-    Cell, CellContext, ExpansionState, Level, MemoizedTableModel, Spinner, Table, TableColumn,
-    TableEntryRenderer, TableGridMode, TableHeader, TableMode, Title,
+    Cell, CellContext, DescriptionGroup, DescriptionList, ExpansionState, Level,
+    MemoizedTableModel, Spinner, Table, TableColumn, TableEntryRenderer, TableGridMode,
+    TableHeader, TableMode, Title,
 };
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use yew::{
@@ -85,7 +90,33 @@ fn view_panel(panel: &SchachtPanelEntry) -> Html {
     }
 }
 
-/// Schacht overview: panels and cables ending here.
+/// Type, owner, position and Lagebestimmung of the Schacht, read-only (the button of the
+/// overview opens `CabinetView::Properties` to change them).
+fn view_properties(schacht: &SchachtCables) -> Html {
+    let typ = schacht
+        .typ
+        .as_ref()
+        .and_then(|t| t.name.clone())
+        .unwrap_or_else(|| "kein Typ".to_string());
+    let position = match &schacht.position {
+        Some(point) => {
+            let (e, n) = CoordinateSystem::Lv95.format(point.e, point.n);
+            format!("{e} / {n}")
+        }
+        None => "keine".to_string(),
+    };
+    html! {
+        <DescriptionList>
+            <DescriptionGroup term="Typ">{typ}</DescriptionGroup>
+            <DescriptionGroup term="Eigentümer">{schacht.owner.name.clone()}</DescriptionGroup>
+            <DescriptionGroup term="Position (LV95)">{position}</DescriptionGroup>
+            <DescriptionGroup term="Lagebestimmung">{schacht.lagebestimmung.title()}</DescriptionGroup>
+            <DescriptionGroup term="Geändert">{schacht.changed_at.local()}</DescriptionGroup>
+        </DescriptionList>
+    }
+}
+
+/// Schacht overview: panels and cables ending here, its properties.
 pub struct CabinetOverview {
     /// `None` while loading
     schacht: Option<Result<SchachtCables, FrontendError>>,
@@ -185,6 +216,11 @@ impl CabinetOverview {
             id: ctx.props().cabinet_id,
             view: CabinetView::Edit,
         };
+        let edit_properties = PlanView::Cabinet {
+            id: ctx.props().cabinet_id,
+            view: CabinetView::Properties,
+        };
+        let role = get_role(ctx.link());
         html! {
             <PageLayout title={object_title("Schacht", Some(&schacht.name))}>
                 <Title level={Level::H2}>{"Panels"}</Title>
@@ -195,7 +231,7 @@ impl CabinetOverview {
                         {for panels.iter().map(view_panel)}
                     </ul>
                 }
-                if get_role(ctx.link()) >= edit_panels.required_role() {
+                if role >= edit_panels.required_role() {
                     <div class="pf-v6-u-mb-xl">
                         <PlanLink to={edit_panels} class="pf-v6-c-button pf-m-secondary">
                             {"Panels bearbeiten"}
@@ -209,6 +245,16 @@ impl CabinetOverview {
                     {header}
                     {entries}
                 />
+                <Title level={Level::H2}>{"Eigenschaften"}</Title>
+                {view_properties(schacht)}
+                // Readers may open the page too, but only to look at what is shown here already
+                if role >= Role::Planner {
+                    <div class="pf-v6-u-mt-md">
+                        <PlanLink to={edit_properties} class="pf-v6-c-button pf-m-secondary">
+                            {"Bearbeiten"}
+                        </PlanLink>
+                    </div>
+                }
             </PageLayout>
         }
     }

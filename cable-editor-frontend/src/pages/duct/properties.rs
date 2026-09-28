@@ -100,7 +100,9 @@ pub enum Msg {
     Save,
     SaveLine,
     StraightLine,
-    Done(Result<Option<i32>, FrontendError>),
+    /// The id of the stored duct
+    Saved(Result<i32, FrontendError>),
+    LineSaved(Result<(), FrontendError>),
     Delete,
 }
 
@@ -238,18 +240,30 @@ impl Component for EditDuctProperties {
             Msg::Save => self.save(ctx),
             Msg::SaveLine => self.save_line(ctx, self.file_line()),
             Msg::StraightLine => self.save_line(ctx, None),
-            Msg::Done(result) => {
+            Msg::Saved(result) => {
                 self.saving = false;
                 match result {
-                    Ok(Some(id)) => navigate(
-                        ctx.link(),
-                        ctx.props().plan_id,
-                        PlanView::Duct {
-                            id,
-                            view: DuctView::Properties,
-                        },
-                    ),
-                    Ok(None) => {
+                    // Back to the duct's overview, which shows what was saved
+                    Ok(id) => {
+                        toast_success(ctx.link(), "Trasse gespeichert");
+                        navigate(
+                            ctx.link(),
+                            ctx.props().plan_id,
+                            PlanView::Duct {
+                                id,
+                                view: DuctView::Show,
+                            },
+                        );
+                    }
+                    Err(error) => {
+                        toast_error(ctx.link(), "Trasse konnte nicht gespeichert werden", error)
+                    }
+                }
+            }
+            Msg::LineSaved(result) => {
+                self.saving = false;
+                match result {
+                    Ok(()) => {
                         self.file = None;
                         self.check = CheckState::None;
                         Self::fetch(ctx);
@@ -515,12 +529,12 @@ impl EditDuctProperties {
             let result = match duct {
                 IdOrNew::Id(id) => update_duct(credentials.as_ref(), id, input)
                     .await
-                    .map(|()| None),
-                IdOrNew::Temporary(_) => create_duct(credentials.as_ref(), input, line, confirmed)
-                    .await
-                    .map(Some),
+                    .map(|()| id),
+                IdOrNew::Temporary(_) => {
+                    create_duct(credentials.as_ref(), input, line, confirmed).await
+                }
             };
-            scope.send_message(Msg::Done(result));
+            scope.send_message(Msg::Saved(result));
         });
     }
 
@@ -533,10 +547,8 @@ impl EditDuctProperties {
         let scope = ctx.link().clone();
         let credentials = get_credentials(&scope);
         spawn_local(async move {
-            let result = set_duct_line(credentials.as_ref(), id, line, confirmed)
-                .await
-                .map(|()| None);
-            scope.send_message(Msg::Done(result));
+            let result = set_duct_line(credentials.as_ref(), id, line, confirmed).await;
+            scope.send_message(Msg::LineSaved(result));
         });
     }
 

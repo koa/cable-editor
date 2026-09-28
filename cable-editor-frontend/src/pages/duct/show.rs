@@ -2,12 +2,16 @@ use crate::{
     components::{
         links::{CableLink, SchachtLink},
         page_layout::{PageLayout, object_title},
+        plan_link::PlanLink,
     },
     error::FrontendError,
     geo::map::{MapHolder, duct_line, fit_points, schacht_marker},
-    graphql::authenticated::duct_details::{DuctDetails, fetch_duct_details},
-    pages::router::{CabinetView, PlanView},
-    util::{get_credentials, navigate},
+    graphql::authenticated::{
+        current_user::Role,
+        duct_details::{DuctDetails, fetch_duct_details},
+    },
+    pages::router::{CabinetView, DuctView, PlanView},
+    util::{get_credentials, get_role, navigate},
 };
 use patternfly_yew::prelude::{DescriptionGroup, DescriptionList, Spinner};
 use wasm_bindgen::JsCast;
@@ -83,7 +87,7 @@ impl Component for ShowDuct {
         }
     }
 
-    fn view(&self, _ctx: &Context<Self>) -> Html {
+    fn view(&self, ctx: &Context<Self>) -> Html {
         let loaded = self.duct.as_ref().and_then(Option::as_ref);
         let title = object_title("Trasse", loaded.map(DuctDetails::title));
         let content = if let Some(error) = &self.error {
@@ -92,7 +96,25 @@ impl Component for ShowDuct {
             match &self.duct {
                 None => html!(<Spinner/>),
                 Some(None) => (&FrontendError::NotFound).into_prop_value(),
-                Some(Some(duct)) => view_details(duct),
+                Some(Some(duct)) => {
+                    let edit = PlanView::Duct {
+                        id: duct.id,
+                        view: DuctView::Properties,
+                    };
+                    html! {
+                        <>
+                            {view_details(duct)}
+                            // Readers may open the page too, but only to look at what is shown here
+                            if get_role(ctx.link()) >= Role::Planner {
+                                <div class="pf-v6-u-mt-md">
+                                    <PlanLink to={edit} class="pf-v6-c-button pf-m-secondary">
+                                        {"Bearbeiten"}
+                                    </PlanLink>
+                                </div>
+                            }
+                        </>
+                    }
+                }
             }
         };
         // The map's div is always there, so Leaflet keeps its element (see pages/map.rs)

@@ -261,12 +261,17 @@ impl Component for CabinetProperties {
             Msg::Saved(result) => {
                 self.saving = false;
                 match result {
+                    // Back to the Schacht's overview, which shows what was saved
                     Ok(schacht) => {
-                        self.take_stored(ctx, Some(&schacht));
-                        if let Some((stored, _)) = &mut self.loaded {
-                            *stored = Some(schacht);
-                        }
                         toast_success(ctx.link(), "Schacht gespeichert");
+                        navigate(
+                            ctx.link(),
+                            ctx.props().plan_id,
+                            PlanView::Cabinet {
+                                id: schacht.id,
+                                view: CabinetView::Overview,
+                            },
+                        );
                     }
                     Err(error) => {
                         toast_error(ctx.link(), "Schacht konnte nicht gespeichert werden", error)
@@ -276,14 +281,17 @@ impl Component for CabinetProperties {
             Msg::Created(result) => {
                 self.saving = false;
                 match result {
-                    Ok(id) => navigate(
-                        ctx.link(),
-                        ctx.props().plan_id,
-                        PlanView::Cabinet {
-                            id,
-                            view: CabinetView::Properties,
-                        },
-                    ),
+                    Ok(id) => {
+                        toast_success(ctx.link(), "Schacht angelegt");
+                        navigate(
+                            ctx.link(),
+                            ctx.props().plan_id,
+                            PlanView::Cabinet {
+                                id,
+                                view: CabinetView::Overview,
+                            },
+                        );
+                    }
                     Err(error) => {
                         toast_error(ctx.link(), "Schacht konnte nicht angelegt werden", error)
                     }
