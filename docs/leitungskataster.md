@@ -1,9 +1,10 @@
 # Konzept: Datenlieferung an den Leitungskataster Kanton Zürich
 
-Stand: 27.09.2026 – Konzept; umgesetzt sind die Datenbank mit den Feldern in GraphQL (Abschnitt
-4), die Konfiguration (Abschnitt 3), die Felder in der UI (Abschnitt 6, ohne die Admin-Seite)
-und der Export beider Dateien (Abschnitt 5, `cable-editor-backend/src/lkmap/`). Der heutige Export
-(`cable-editor-backend/src/export.rs`) ist ein Platzhalter und wird ersetzt.
+Stand: 28.09.2026 – umgesetzt bis zum manuellen Upload beim Checkservice: die Datenbank mit
+den Feldern in GraphQL (Abschnitt 4), die Konfiguration (Abschnitt 3), der Export beider
+Dateien als ZIP mit dem Protokoll der Lieferungen (Abschnitt 5, `cable-editor-backend/src/lkmap/`)
+und die UI mit der Admin-Seite (Abschnitt 6, `pages/lkmap.rs`). Offen ist der automatische
+Upload (Abschnitt 7, Schritt 6).
 
 ## 1. Anforderungen
 
@@ -337,7 +338,22 @@ Im Export konstant, ohne Spalte:
   gelieferten Objekte (Linien der Trassen und Positionen der Schächte), `Letzte_Aenderung` das
   späteste ihrer Daten, die Koordinaten auf mm gerundet ohne doppelte Punkte; BID
   `<prefix>p<Eigentümer>`, TID `<prefix>z<Eigentümer>` (das Modell hat keine OID).
-- Paketierung: Dateinamen nach Konvention, je ein ZIP.
+- Paketierung (umgesetzt): je ein ZIP gleichen Namens mit der XTF-Datei
+  (`<uid>-kommunikation-lkmap.zip`, `<uid>-zustaendigkeit-peri.zip`), gebaut vom Backend
+  (`TransferFile::zip`) und von `downloadLkmap` in Base64 geliefert.
+- Prüfsumme: SHA-256 über beide Dateien. Sie enthalten kein Exportdatum, gleiche Daten ergeben
+  also gleiche Dateien; so erkennt der Vergleich auch gelöschte Objekte und einen geänderten
+  Puffer.
+- Protokoll (umgesetzt): `downloadLkmap(ownerId)` schreibt beim Herunterladen einen Eintrag in
+  `lk_lieferung` (wer, wann, Anzahl, Prüfsumme); ein noch nicht bestätigter Eintrag mit derselben
+  Prüfsumme wird wiederverwendet. `setLkmapDelivered(deliveryId, delivered)` setzt
+  `geliefert_am` nach dem Upload beim Checkservice oder nimmt es zurück (z. B. wenn der
+  Checkservice die Dateien ablehnt). Verweigert wird der Download ohne UID
+  (`OwnerWithoutUid`) und ohne etwas mit Position (`NothingToDeliver`); `lkmapExport` und
+  `lkmapExports` liefern in diesen Fällen den Bericht ohne Dateien.
+- Frist: `firstChangeSinceDelivery` ist das früheste `geaendert_am` eines gelieferten Objekts nach
+  dem Herunterladen der zuletzt bestätigten Lieferung (Beginn der Wochenfrist); fehlt es trotz
+  anderer Prüfsumme (nur gelöscht), ist die Lieferung ohne Datum fällig.
 - Prüfung: Unit-Tests für die Datei (`cargo test -p cable-editor-backend lkmap`) und
   `ilivalidator` gegen die Modelle mit `local/lkmap/validate.sh <datei.xtf>` (lädt ilivalidator
   1.15.0 ins Cache-Verzeichnis, Java aus dem PATH oder von nix; die Modelle holt ilivalidator
@@ -362,11 +378,16 @@ Was die Lieferung in der UI braucht; die Seiten für Eigentümer und Schachttype
 - **Schacht-Eigenschaften**: Eigentümer, Lagebestimmung.
 - **Lagebestimmung**: Standard immer `ungenau`, ausser man setzt sie ausdrücklich anders; kein
   automatischer Vorschlag (auch nicht aus der GPS-Genauigkeit).
-- **Admin-Seite „Leitungskataster“** (Schritt 5): pro Eigentümer Download der beiden ZIPs,
-  Warnungen (Eigentümer ohne UID mit gelieferten Trassen, Schächte solcher Eigentümer), Liste
-  der Lieferungen, „als geliefert markieren“, Hinweise auf Änderungen seit der letzten Lieferung
-  (Wochenfrist) und das nahende Quartalsende. Karte des Perimeters und der gelieferten Trassen
-  zur Kontrolle.
+- **Admin-Seite „Leitungskataster“** (umgesetzt, `pages/lkmap.rs`, Bereich im Pfad hinter dem
+  Plan): eine Zeile pro Eigentümer mit etwas zu liefern oder früheren Lieferungen, mit Inhalt
+  (Trassen, Schächte), Zustand und Download der beiden ZIPs. Zustand, dringendster zuerst:
+  keine UID (wird nicht geliefert), nichts zu liefern, noch nie geliefert, geändert seit der
+  letzten bestätigten Lieferung (liefern bis eine Woche nach der ersten Änderung, danach rot),
+  in diesem Quartal nicht geliefert (bis Quartalsende, ab 14 Tagen davor als Warnung), aktuell.
+  Aufgeklappt: Warnungen (ohne UID, Schächte ohne Position, Trassen an solchen) mit Links und
+  die Lieferungen mit „Als geliefert bestätigen“ bzw. „Bestätigung zurücknehmen“. Darunter eine
+  Karte mit den Perimetern und den gelieferten Trassen und Schächten; Trassen von Eigentümern
+  ohne UID gestrichelt.
 - GraphQL: Export und Protokoll mit `RoleGuard(Role::Admin)`; Eigentümer, Lieferung,
   Lagebestimmung und Breite einer Trasse oder eines Schachts setzen Planer (`DuctInput`,
   `SchachtInput`, Pflichtfelder).
@@ -384,7 +405,7 @@ Was die Lieferung in der UI braucht; die Seiten für Eigentümer und Schachttype
    4. ~~Schächte: Felder in `SchachtInput`, Eigenschaften~~ (erledigt).
 3. ~~LKMap-Export mit Validierungstest~~ (erledigt).
 4. ~~Perimeter-Export~~ (erledigt).
-5. Admin-Seite mit Download und Protokoll.
+5. ~~Admin-Seite mit Download und Protokoll~~ (erledigt).
 6. Später: automatischer Upload zum Checkservice (infoGrips dokumentiert nur das Webformular;
    Schnittstelle abklären) und Hinweis per Mail vor Fristen.
 
