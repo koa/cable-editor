@@ -36,7 +36,7 @@ use yew::{
 
 /// Waiting time after typing before the position is converted and shown on the map.
 const CONVERT_DELAY_MS: u32 = 400;
-/// Zoom when showing the position; the cadastral map starts at 17.
+/// Zoom when showing the position; the tiles of the map end at 18.
 const POSITION_ZOOM: f64 = 18.0;
 
 /// Name, type, owner, position and Lagebestimmung of a Schacht, or a new one

@@ -12,12 +12,15 @@ use js_sys::{Array, Function, Object, Reflect};
 use leaflet::{
     CircleMarker, CircleOptions, Icon, LatLng, LatLngBounds, Layer, Map, MapOptions, Marker,
     MarkerOptions, MouseEvent, MouseEvents, Polyline, PolylineOptions, TileLayer, TileLayerOptions,
-    TileLayerWms, TileLayerWmsOptions, Tooltip, TooltipOptions,
+    Tooltip, TooltipOptions,
 };
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue, closure::Closure};
 use web_sys::{AddEventListenerOptions, HtmlElement, TouchEvent};
 use yew::NodeRef;
+
+/// Listener remembering the chosen background
+type BackgroundChoice = Closure<dyn Fn(JsValue)>;
 
 /// A component's map: its container, the map once created and the layers drawn for the
 /// component's current state, replaced as a whole. Dropping it removes the map.
@@ -27,6 +30,8 @@ pub struct MapHolder {
     map: Option<Map>,
     layers: Vec<leaflet::Layer>,
     touch: Option<TouchGestures>,
+    /// Must live as long as the map
+    background_choice: Option<BackgroundChoice>,
 }
 
 impl MapHolder {
@@ -40,7 +45,10 @@ impl MapHolder {
     pub fn create(&mut self) -> Result<(), FrontendError> {
         if let Some(container) = self.container.cast::<HtmlElement>() {
             let touch = is_touch_screen();
-            self.map = Some(create_map(&container, touch).map_err(FrontendError::Map)?);
+            let (map, background_choice) =
+                create_map(&container, touch).map_err(FrontendError::Map)?;
+            self.map = Some(map);
+            self.background_choice = Some(background_choice);
             if touch {
                 self.touch = Some(TouchGestures::new(container).map_err(FrontendError::Map)?);
             }
@@ -146,38 +154,81 @@ const SWITZERLAND: (f64, f64) = (46.8, 8.23);
 
 /// A map on the container with swisstopo's maps as background, showing Switzerland. On a touch
 /// screen one finger doesn't move it (see `TouchGestures`).
-fn create_map(container: &HtmlElement, touch: bool) -> Result<Map, JsValue> {
+fn create_map(container: &HtmlElement, touch: bool) -> Result<(Map, BackgroundChoice), JsValue> {
     let options = MapOptions::default();
     if touch {
         options.set_dragging(false);
     }
     let map = Map::new_with_element(container, &options)?;
-    add_background(&map);
+    let background_choice = add_background(&map)?;
     map.set_view(&LatLng::new(SWITZERLAND.0, SWITZERLAND.1), 8.0);
-    Ok(map)
+    Ok((map, background_choice))
 }
 
-/// swisstopo's national map, from zoom 17 on the cadastral map (official survey).
-fn add_background(map: &Map) {
+const BACKGROUND_MAP: &str = "Karte";
+const BACKGROUND_AERIAL: &str = "Luftbild";
+/// Where the chosen background is kept, so the next map starts with it
+const BACKGROUND_KEY: &str = "map-background";
+
+fn swisstopo_layer(layer: &str, extension: &str, max_native_zoom: f64) -> TileLayer {
     let options = TileLayerOptions::default();
     options.set_max_zoom(20.0);
-    options.set_max_native_zoom(18.0);
+    options.set_max_native_zoom(max_native_zoom);
     options.set_attribution("© swisstopo".to_string());
     TileLayer::new_options(
-        "https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.pixelkarte-farbe/default/current/3857/{z}/{x}/{y}.jpeg",
+        &format!(
+            "https://wmts.geo.admin.ch/1.0.0/{layer}/default/current/3857/{{z}}/{{x}}/{{y}}.{extension}"
+        ),
         &options,
     )
-    .add_to(map);
+}
 
-    let options = TileLayerWmsOptions::default();
-    options.set_layers("ch.kantone.cadastralwebmap-farbe".to_string());
-    options.set_format("image/png".to_string());
-    options.set_transparent(true);
-    options.set_version("1.3.0".to_string());
-    options.set_min_zoom(17.0);
-    options.set_max_zoom(20.0);
-    options.set_attribution("© Kantone, swisstopo".to_string());
-    TileLayerWms::new_options("https://wms.geo.admin.ch/", &options).add_to(map);
+fn local_storage() -> Option<web_sys::Storage> {
+    web_sys::window()?.local_storage().ok().flatten()
+}
+
+/// swisstopo's national map (its tiles end at zoom 18, further in they are enlarged) or the
+/// aerial image (sharp up to zoom 20), chosen with a control on the map and remembered for the
+/// next one. The cadastral map (WMS/WMTS) isn't used: the server draws its lines per tile, so
+/// they are offset or cut at every tile border. Returns the listener storing the choice.
+fn add_background(map: &Map) -> Result<BackgroundChoice, JsValue> {
+    let national_map = swisstopo_layer("ch.swisstopo.pixelkarte-farbe", "jpeg", 18.0);
+    let aerial = swisstopo_layer("ch.swisstopo.swissimage", "jpeg", 20.0);
+    let chosen =
+        local_storage().and_then(|storage| storage.get_item(BACKGROUND_KEY).ok().flatten());
+    if chosen.as_deref() == Some(BACKGROUND_AERIAL) {
+        aerial.add_to(map);
+    } else {
+        national_map.add_to(map);
+    }
+
+    let leaflet = Reflect::get(&js_sys::global(), &JsValue::from_str("L"))?;
+    let control = Reflect::get(&leaflet, &JsValue::from_str("control"))?;
+    let layers: Function = Reflect::get(&control, &JsValue::from_str("layers"))?.dyn_into()?;
+    let backgrounds = Object::new();
+    set_option(&backgrounds, BACKGROUND_MAP, national_map.as_ref());
+    set_option(&backgrounds, BACKGROUND_AERIAL, aerial.as_ref());
+    let layers_control = layers.call1(&control, &backgrounds)?;
+    let add_to: Function =
+        Reflect::get(&layers_control, &JsValue::from_str("addTo"))?.dyn_into()?;
+    add_to.call1(&layers_control, map.as_ref())?;
+
+    let remember = Closure::<dyn Fn(JsValue)>::new(|event: JsValue| {
+        let name = Reflect::get(&event, &JsValue::from_str("name"))
+            .ok()
+            .and_then(|name| name.as_string());
+        if let (Some(name), Some(storage)) = (name, local_storage()) {
+            // Storage may be full or blocked; the choice then only lasts for this map
+            let _ = storage.set_item(BACKGROUND_KEY, &name);
+        }
+    });
+    let on: Function = Reflect::get(map.as_ref(), &JsValue::from_str("on"))?.dyn_into()?;
+    on.call2(
+        map.as_ref(),
+        &JsValue::from_str("baselayerchange"),
+        remember.as_ref(),
+    )?;
+    Ok(remember)
 }
 
 pub fn lat_lng(point: GeoPoint) -> LatLng {
@@ -224,7 +275,7 @@ fn schacht_icon(svg: &str) -> Result<Icon, JsValue> {
     div_icon_with("map-view__schacht-icon", SCHACHT_ICON_SIZE, Some(&img))
 }
 
-/// Zoom at most when fitting the map to what it shows; the cadastral map starts at 17.
+/// Zoom at most when fitting the map to what it shows; the tiles of the map end at 18.
 const FIT_MAX_ZOOM: f64 = 18.0;
 
 /// A Schacht labelled with its name, as its type's icon (`svg`) or, without one, a circle; a
