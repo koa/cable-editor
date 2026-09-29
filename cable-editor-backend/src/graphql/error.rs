@@ -130,7 +130,7 @@ impl From<ApiError> for async_graphql::Error {
                     id: next_id(),
                 };
                 log::error!(
-                    "Fehler {}: {message} ({}, {})",
+                    "Error {}: {message} ({}, {})",
                     origin.id,
                     origin.library,
                     origin.location
