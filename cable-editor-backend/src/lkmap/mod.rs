@@ -1,6 +1,6 @@
-//! The delivery to the Leitungskataster Kanton Zürich (see docs/leitungskataster.md): per owner
-//! with UID the delivered ducts and the Schächte where one ends, as SIA405 LKMap transfer file,
-//! and the Zuständigkeitsperimeter around them, each in a ZIP.
+//! The delivery to the Leitungskataster Kanton Zürich (see docs/leitungskataster.md): one for the
+//! whole network, whoever owns its parts: the delivered ducts and the Schächte where one ends, as
+//! SIA405 LKMap transfer file, and the Zuständigkeitsperimeter around them, each in a ZIP.
 
 pub mod perimeter;
 pub mod xtf;
@@ -9,18 +9,15 @@ use crate::graphql::error::{ApiError, ApiResult};
 use crate::{
     config::LKMAP_CONFIG,
     db::{
-        entity::{
-            eigentuemer::Eigentuemer,
-            lkmap::{Genauigkeit, LkmapPunktObjektart},
-        },
-        schema::{self, sql_types::GenauigkeitEnum, sql_types::LkmapPunktObjektartEnum},
+        entity::lkmap::{Genauigkeit, LkmapPunktObjektart},
+        schema::sql_types::{GenauigkeitEnum, LkmapPunktObjektartEnum},
     },
 };
 use cable_editor_common::{ObjectKind, UserError};
 use chrono::NaiveDate;
 use diesel::{
-    ExpressionMethods, HasQuery, OptionalExtension, QueryDsl, QueryableByName, sql_query,
-    sql_types::{Array, Bool, Date, Double, Integer, Nullable},
+    QueryableByName, sql_query,
+    sql_types::{Array, Bool, Date, Double, Integer, Nullable, Text},
 };
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use perimeter::Perimeter;
@@ -63,11 +60,12 @@ impl TransferFile {
     }
 }
 
-/// An owner's delivery: what goes into it and what can't.
+/// The delivery: what goes into it and what can't.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Export {
-    pub owner: Eigentuemer,
-    /// Missing without UID and when nothing to deliver has a position
+    /// UID of the Datenherr, the name of the files
+    pub datenherr: Box<str>,
+    /// Missing when nothing to deliver has a position
     pub files: Option<Files>,
     /// The delivered Schächte and ducts
     pub schaechte: Box<[i32]>,
@@ -78,7 +76,7 @@ pub struct Export {
     pub ducts_without_line: Box<[i32]>,
 }
 
-/// The transfer files of an owner's delivery.
+/// The transfer files of the delivery.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Files {
     /// The ducts and Schächte (`SIA405_LKMap_2015_LV95`)
@@ -95,16 +93,7 @@ pub struct Files {
 impl Export {
     /// The files to deliver, or why there are none.
     pub fn deliverable(&self) -> Result<&Files, UserError> {
-        if self.owner.uid.is_none() {
-            return Err(UserError::OwnerWithoutUid {
-                owner: self.owner.name.as_str().into(),
-            });
-        }
-        self.files
-            .as_ref()
-            .ok_or_else(|| UserError::NothingToDeliver {
-                owner: self.owner.name.as_str().into(),
-            })
+        self.files.as_ref().ok_or(UserError::NothingToDeliver)
     }
 }
 
@@ -125,6 +114,8 @@ struct DuctRow {
     breite_mm: Option<i32>,
     #[diesel(sql_type = Date)]
     geaendert: NaiveDate,
+    #[diesel(sql_type = Text)]
+    eigentuemer: String,
 }
 
 #[derive(QueryableByName)]
@@ -137,6 +128,8 @@ struct SchachtRow {
     lagebestimmung: Genauigkeit,
     #[diesel(sql_type = Date)]
     geaendert: NaiveDate,
+    #[diesel(sql_type = Text)]
+    eigentuemer: String,
     #[diesel(sql_type = LkmapPunktObjektartEnum)]
     objektart: LkmapPunktObjektart,
     #[diesel(sql_type = Nullable<Integer>)]
@@ -145,7 +138,8 @@ struct SchachtRow {
     dimension2_mm: Option<i32>,
 }
 
-/// The owner's delivered ducts. `Letzte_Aenderung` is the day in Zürich.
+/// The delivered ducts. `Letzte_Aenderung` is the day in Zürich, `Eigentuemer` the owner's name
+/// in the delivery.
 const DUCTS: &str = "
 select t.id,
        v.geom                                           as line,
@@ -153,34 +147,36 @@ select t.id,
        sa.geom is not null and sz.geom is not null      as ends_located,
        t.lagebestimmung,
        t.breite_mm,
-       (t.geaendert_am at time zone 'Europe/Zurich')::date as geaendert
+       (t.geaendert_am at time zone 'Europe/Zurich')::date as geaendert,
+       coalesce(e.lk_name, e.name)                      as eigentuemer
 from trasse t
          join trassen_mit_endpunkten v on v.id = t.id
          join schacht sa on sa.id = t.schacht_a
          join schacht sz on sz.id = t.schacht_z
+         join eigentuemer e on e.id = t.eigentuemer_id
 where t.leitungskataster
-  and t.eigentuemer_id = $1
 order by t.id";
 
-/// The owner's Schächte where a delivered duct ends, whoever owns the duct.
+/// The Schächte where a delivered duct ends.
 const SCHAECHTE: &str = "
 select s.id,
        s.geom,
        s.lagebestimmung,
        (s.geaendert_am at time zone 'Europe/Zurich')::date                 as geaendert,
+       coalesce(e.lk_name, e.name)                                         as eigentuemer,
        coalesce(st.lkmap_objektart, 'unbekannt'::lkmap_punkt_objektart_enum) as objektart,
        st.dimension1_mm,
        st.dimension2_mm
 from schacht s
          left join schacht_typ st on st.id = s.typ
-where s.eigentuemer_id = $1
-  and exists (select 1
+         join eigentuemer e on e.id = s.eigentuemer_id
+where exists (select 1
               from trasse t
               where t.leitungskataster
                 and (t.schacht_a = s.id or t.schacht_z = s.id))
 order by s.id";
 
-/// The area around an owner's delivered ducts and Schächte: their convex hull with a buffer,
+/// The area around the delivered ducts and Schächte: their convex hull with a buffer,
 /// the arcs of the buffer as straight segments (4 per quarter circle).
 const PERIMETER: &str = "
 select a.area, st_transform(a.area, 4326) as area_wgs84
@@ -197,27 +193,12 @@ struct PerimeterRow {
     area_wgs84: Option<Polygon<Point>>,
 }
 
-/// The owner's delivery: the transfer files (with UID) and what they lack. Owners without
-/// anything to deliver get an empty one.
-pub async fn export(connection: &mut AsyncPgConnection, owner_id: i32) -> ApiResult<Export> {
+/// The delivery: the transfer files and what they lack. Without anything to deliver it has no
+/// files.
+pub async fn export(connection: &mut AsyncPgConnection) -> ApiResult<Export> {
     let config = LKMAP_CONFIG.as_ref().ok_or(UserError::LkmapNotConfigured)?;
-    let owner: Eigentuemer = Eigentuemer::query()
-        .filter(schema::eigentuemer::id.eq(owner_id))
-        .first(connection)
-        .await
-        .optional()?
-        .ok_or(UserError::NotFound {
-            kind: ObjectKind::Owner,
-            id: owner_id.into(),
-        })?;
-    let duct_rows: Vec<DuctRow> = sql_query(DUCTS)
-        .bind::<Integer, _>(owner_id)
-        .load(connection)
-        .await?;
-    let schacht_rows: Vec<SchachtRow> = sql_query(SCHAECHTE)
-        .bind::<Integer, _>(owner_id)
-        .load(connection)
-        .await?;
+    let duct_rows: Vec<DuctRow> = sql_query(DUCTS).load(connection).await?;
+    let schacht_rows: Vec<SchachtRow> = sql_query(SCHAECHTE).load(connection).await?;
     let prefix = config.oid_prefix();
 
     let mut ducts = Vec::new();
@@ -234,6 +215,7 @@ pub async fn export(connection: &mut AsyncPgConnection, owner_id: i32) -> ApiRes
                 } else {
                     Genauigkeit::Unbekannt
                 },
+                eigentuemer: row.eigentuemer.into(),
                 breite_mm: row.breite_mm,
                 line: line.points.iter().map(|p| (p.x, p.y)).collect(),
             }),
@@ -253,6 +235,7 @@ pub async fn export(connection: &mut AsyncPgConnection, owner_id: i32) -> ApiRes
                 oid: oid(prefix, 's', row.id)?,
                 letzte_aenderung: row.geaendert,
                 lagebestimmung: row.lagebestimmung,
+                eigentuemer: row.eigentuemer.into(),
                 dimension1_mm: row.dimension1_mm,
                 dimension2_mm: row.dimension2_mm,
                 objektart: row.objektart,
@@ -271,8 +254,9 @@ pub async fn export(connection: &mut AsyncPgConnection, owner_id: i32) -> ApiRes
         .map(|d| d.letzte_aenderung)
         .chain(schaechte.iter().map(|s| s.letzte_aenderung))
         .max();
-    let files = match (&owner.uid, letzte_aenderung) {
-        (Some(uid), Some(letzte_aenderung)) => {
+    let datenherr = config.datenherr_uid();
+    let files = match letzte_aenderung {
+        Some(letzte_aenderung) => {
             let area = sql_query(PERIMETER)
                 .bind::<Array<Integer>, _>(&duct_ids)
                 .bind::<Array<Integer>, _>(&schacht_ids)
@@ -284,23 +268,26 @@ pub async fn export(connection: &mut AsyncPgConnection, owner_id: i32) -> ApiRes
             };
             let outer = outline.rings.into_iter().next().unwrap_or_default();
             let perimeter = Perimeter {
-                basket_id: oid(prefix, 'p', owner.id)?,
-                tid: oid(prefix, 'z', owner.id)?,
-                datenherr: uid.as_str().into(),
+                basket_id: basket_oid(prefix, 'p'),
+                tid: basket_oid(prefix, 'z'),
+                datenherr: datenherr.into(),
                 datenlieferant: config.datenlieferant_uid().into(),
                 letzte_aenderung,
                 boundary: perimeter::rounded_ring(outer.iter().map(|p| (p.x, p.y))),
             };
             let delivery = Delivery {
-                basket_id: oid(prefix, 'b', owner.id)?,
-                datenherr: uid.as_str().into(),
+                basket_id: basket_oid(prefix, 'b'),
+                datenherr: datenherr.into(),
                 datenlieferant: config.datenlieferant_uid().into(),
-                eigentuemer: owner.delivered_name().into(),
                 schaechte: schaechte.into(),
                 ducts: ducts.into(),
             };
-            let file_name =
-                |content: &str| format!("{}-{content}.xtf", uid.to_lowercase().replace('.', "-"));
+            let file_name = |content: &str| {
+                format!(
+                    "{}-{content}.xtf",
+                    datenherr.to_lowercase().replace('.', "-")
+                )
+            };
             let lkmap = TransferFile {
                 file_name: file_name("kommunikation-lkmap").into(),
                 xtf: xtf::write(&delivery)?,
@@ -323,10 +310,10 @@ pub async fn export(connection: &mut AsyncPgConnection, owner_id: i32) -> ApiRes
                 checksum,
             })
         }
-        _ => None,
+        None => None,
     };
     Ok(Export {
-        owner,
+        datenherr: datenherr.into(),
         files,
         schaechte: schacht_ids.into(),
         ducts: duct_ids.into(),
@@ -349,18 +336,22 @@ fn checksum(files: &[&TransferFile]) -> Box<str> {
 }
 
 /// The STANDARDOID of an object: the configured prefix (8 characters), a letter for its kind
-/// and its id in 7 digits; also `OBJ_ID`. `s`: Schacht, `t`: duct, of an owner's delivery `b`:
-/// the LKMap basket, `p`: the perimeter's basket, `z`: the perimeter.
+/// and its id in 7 digits; also `OBJ_ID`. `s`: Schacht, `t`: duct.
 fn oid(prefix: &str, letter: char, id: i32) -> Result<Box<str>, UserError> {
     if !(0..10_000_000).contains(&id) {
         let kind = match letter {
             's' => ObjectKind::Schacht,
-            't' => ObjectKind::Duct,
-            _ => ObjectKind::Owner,
+            _ => ObjectKind::Duct,
         };
         return Err(UserError::LkmapIdTooLarge { kind, id });
     }
     Ok(format!("{prefix}{letter}{id:07}").into())
+}
+
+/// The OID of what the delivery has once: `b` the LKMap basket, `p` the perimeter's basket, `z`
+/// the perimeter.
+fn basket_oid(prefix: &str, letter: char) -> Box<str> {
+    format!("{prefix}{letter}0000001").into()
 }
 
 #[cfg(test)]
@@ -374,7 +365,7 @@ mod tests {
             oid("ch4711ab", 't', 9_999_999),
             Ok("ch4711abt9999999".into())
         );
-        assert_eq!(oid("ch4711ab", 'b', 1), Ok("ch4711abb0000001".into()));
+        assert_eq!(basket_oid("ch4711ab", 'b'), "ch4711abb0000001".into());
         assert_eq!(
             oid("ch4711ab", 't', 10_000_000),
             Err(UserError::LkmapIdTooLarge {

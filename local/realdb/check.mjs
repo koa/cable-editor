@@ -225,36 +225,36 @@ await gql('mutation($d:Int!){ deleteDuct(ductId:$d) }', { d: duct.createDuct.id 
 await gql('mutation($id:Int!){ deleteSchacht(schachtId:$id) }', { id: schachtId });
 
 // ---------------------------------------------------------------- owners
-const OWNER = 'id name lkName uid isDefault schachtCount ductCount deliveredDuctCount';
+const OWNER = 'id name lkName isDefault schachtCount ductCount deliveredDuctCount';
 const owners = await gql(`{ listOwner { ${OWNER} } }`);
 console.log(`listOwner${statements(owners)}`);
 const standard = owners.listOwner.find((owner) => owner.isDefault);
 check('the default owner has all Schächte and ducts', standard?.schachtCount === 7 && standard?.ductCount === 6 && standard?.deliveredDuctCount === 0, JSON.stringify(standard));
-const createOwner = 'mutation($o:OwnerInput!){ createOwner(owner:$o) { id name lkName uid isDefault } }';
-const other = (await gql(createOwner, { o: { name: '  Private Leitung ', lkName: 'Keine_Angabe', uid: ' ZHE-100.100.101 ' } })).createOwner;
-check('createOwner trims', other.name === 'Private Leitung' && other.uid === 'ZHE-100.100.101' && other.lkName === 'Keine_Angabe' && !other.isDefault, JSON.stringify(other));
+const createOwner = 'mutation($o:OwnerInput!){ createOwner(owner:$o) { id name lkName isDefault } }';
+const other = (await gql(createOwner, { o: { name: '  Private Leitung ', lkName: 'Keine_Angabe' } })).createOwner;
+check('createOwner trims', other.name === 'Private Leitung' && other.lkName === 'Keine_Angabe' && !other.isDefault, JSON.stringify(other));
 await refused('createOwner without name', createOwner, { o: { name: ' ' } }, { code: 'NameMissing' });
 await refused('createOwner with a taken name', createOwner, { o: { name: 'Private Leitung' } }, { code: 'NameTaken', kind: 'Owner', name: 'Private Leitung' });
-await refused('createOwner with a malformed UID', createOwner, { o: { name: 'X', uid: 'CHE-123456789' } }, { code: 'InvalidUid', uid: 'CHE-123456789' });
-await refused('createOwner with a taken UID', createOwner, { o: { name: 'X', uid: 'ZHE-100.100.101' } }, { code: 'UidTaken', uid: 'ZHE-100.100.101', owner: 'Private Leitung' });
 await refused('createOwner with a long name in the delivery', createOwner, { o: { name: 'X', lkName: 'x'.repeat(81) } }, { code: 'LkNameTooLong', max: 80 });
-const updateOwner = 'mutation($id:Int!,$o:OwnerInput!){ updateOwner(ownerId:$id, owner:$o) { name lkName uid } }';
-const cleared = (await gql(updateOwner, { id: other.id, o: { name: 'Private Leitung', lkName: '', uid: null } })).updateOwner;
-check('updateOwner clears empty values', cleared.lkName === null && cleared.uid === null, JSON.stringify(cleared));
+const updateOwner = 'mutation($id:Int!,$o:OwnerInput!){ updateOwner(ownerId:$id, owner:$o) { name lkName } }';
+const cleared = (await gql(updateOwner, { id: other.id, o: { name: 'Private Leitung', lkName: '' } })).updateOwner;
+check('updateOwner clears empty values', cleared.lkName === null, JSON.stringify(cleared));
 check('updateOwner keeps its own name', (await gql(updateOwner, { id: other.id, o: { name: 'Private Leitung' } })).updateOwner.name === 'Private Leitung');
-// Name and UID of the owner are Eigentuemer and Datenherr of its objects
+// Name and name in the delivery of the owner are the Eigentuemer of its objects
 const changedAt = async () => (await gql('{ duct(ductId:1) { changedAt } }')).duct.changedAt;
 const before = await changedAt();
-await gql(updateOwner, { id: standard.id, o: { name: standard.name, lkName: standard.lkName, uid: standard.uid } });
+await gql(updateOwner, { id: standard.id, o: { name: standard.name, lkName: standard.lkName } });
 check('updateOwner without change keeps changedAt of its ducts', (await changedAt()) === before);
-await gql(updateOwner, { id: standard.id, o: { name: standard.name, uid: 'CHE-123.456.789' } });
-const afterUid = await changedAt();
-check('updateOwner with a new UID changes its ducts', afterUid !== before, `${before} → ${afterUid}`);
+await gql(updateOwner, { id: standard.id, o: { name: standard.name, lkName: 'Genossenschaft' } });
+const afterName = await changedAt();
+check('updateOwner with a new name in the delivery changes its ducts', afterName !== before, `${before} → ${afterName}`);
+await gql(updateOwner, { id: standard.id, o: { name: standard.name } });
+const restored = await changedAt();
 const setDefault = 'mutation($id:Int!){ setDefaultOwner(ownerId:$id) { id isDefault } }';
 check('setDefaultOwner', (await gql(setDefault, { id: other.id })).setDefaultOwner.isDefault);
 const defaults = (await gql(`{ listOwner { ${OWNER} } }`)).listOwner.filter((owner) => owner.isDefault);
 check('exactly one default owner', defaults.length === 1 && defaults[0].id === other.id, JSON.stringify(defaults));
-check('setDefaultOwner keeps changedAt', (await changedAt()) === afterUid);
+check('setDefaultOwner keeps changedAt', (await changedAt()) === restored);
 const deleteOwner = 'mutation($id:Int!){ deleteOwner(ownerId:$id) }';
 await refused('deleteOwner of the default owner', deleteOwner, { id: other.id }, { code: 'DefaultOwnerNotDeletable' });
 await refused('deleteOwner with Schächte and ducts', deleteOwner, { id: standard.id }, { code: 'OwnerReferenced', schaechte: 7, ducts: 6 });
@@ -346,57 +346,55 @@ check('syncNetbox syncs right away', sync.state === 'SYNCHRON' && (await netboxQ
 await refused('setNetboxActivePlan of a missing plan', 'mutation{ setNetboxActivePlan(planId:999999) { id } }', {}, { code: 'NotFound', kind: 'Plan', id: 999999 });
 
 // ---------------------------------------------------------------- Leitungskataster
-// run-realdb.sh configures lkmap (Datenlieferant CHE-123.456.789, prefix ch4711ab); the default
-// owner has the UID CHE-123.456.789 since the owner checks
-const lkmapExport = 'query($o:Int!){ lkmapExport(ownerId:$o) { owner { id } lkmap { fileName xtf } perimeter { fileName xtf } perimeterArea { lat lng } checksum schaechte { id } ducts { id } schaechteWithoutPosition { id } ductsWithoutLine { id } deliveries { id } firstChangeSinceDelivery } }';
-const downloadLkmap = 'mutation($o:Int!){ downloadLkmap(ownerId:$o) { delivery { id createdBy schachtCount ductCount checksum deliveredAt } files { fileName content } } }';
+// run-realdb.sh configures lkmap (Datenlieferant CHE-123.456.789, Datenherr CHE-987.654.321, prefix
+// ch4711ab): one delivery for the whole network, named after the Datenherr
+const lkmapExport = 'query{ lkmapExport { datenherr lkmap { fileName xtf } perimeter { fileName xtf } perimeterArea { lat lng } checksum schaechte { id } ducts { id } schaechteWithoutPosition { id } ductsWithoutLine { id } deliveries { id } firstChangeSinceDelivery } }';
+const downloadLkmap = 'mutation{ downloadLkmap { delivery { id createdBy schachtCount ductCount checksum deliveredAt } files { fileName content } } }';
 const setDelivered = 'mutation($d:Int!, $v:Boolean!){ setLkmapDelivered(deliveryId:$d, delivered:$v) { id deliveredAt } }';
-const withoutUid = (await gql(createOwner, { o: { name: 'Ohne UID' } })).createOwner;
-const empty = (await gql(lkmapExport, { o: withoutUid.id })).lkmapExport;
-check('lkmapExport of an owner without anything delivers nothing', empty.lkmap === null && empty.checksum === null && empty.ducts.length === 0, JSON.stringify(empty));
-await refused('downloadLkmap of an owner without UID', downloadLkmap, { o: withoutUid.id }, { code: 'OwnerWithoutUid', owner: 'Ohne UID' });
-await refused('downloadLkmap with nothing delivered', downloadLkmap, { o: standard.id }, { code: 'NothingToDeliver' });
+const empty = (await gql(lkmapExport)).lkmapExport;
+check('lkmapExport with nothing delivered delivers nothing', empty.datenherr === 'CHE-987.654.321' && empty.lkmap === null && empty.checksum === null && empty.ducts.length === 0, JSON.stringify(empty));
+await refused('downloadLkmap with nothing delivered', downloadLkmap, {}, { code: 'NothingToDeliver' });
 const deliveredDuct = (a, z) => ({ schachtA: a, schachtZ: z, ownerId: standard.id, leitungskataster: true, lagebestimmung: 'GENAU' });
 // Duct 5 (Berghof 1061–Grosswies) with its course, a straight one Berg 1654–Berg, one from a Schacht without position
 await gql('mutation($d:DuctInput!){ updateDuct(ductId:5, duct:$d) { id } }', { d: deliveredDuct(5, 6) });
 const straight = (await gql('mutation($d:DuctInput!){ createDuct(duct:$d) { id } }', { d: deliveredDuct(1, 4) })).createDuct.id;
 const unlocated = (await gql('mutation{ createSchacht(schacht:{name:"Ohne Position", ownerId:1, lagebestimmung:UNGENAU}) { id } }')).createSchacht.id;
 const unlocatedDuct = (await gql('mutation($d:DuctInput!){ createDuct(duct:$d) { id } }', { d: deliveredDuct(unlocated, 6) })).createDuct.id;
-const exported = await gql(lkmapExport, { o: standard.id });
+const exported = await gql(lkmapExport);
 const lk = exported.lkmapExport;
 console.log(`lkmapExport${statements(exported)}`);
-check('lkmapExport file names', lk.lkmap.fileName === 'che-123-456-789-kommunikation-lkmap.xtf'
-  && lk.perimeter.fileName === 'che-123-456-789-zustaendigkeit-peri.xtf', `${lk.lkmap.fileName}, ${lk.perimeter.fileName}`);
+check('lkmapExport file names', lk.lkmap.fileName === 'che-987-654-321-kommunikation-lkmap.xtf'
+  && lk.perimeter.fileName === 'che-987-654-321-zustaendigkeit-peri.xtf', `${lk.lkmap.fileName}, ${lk.perimeter.fileName}`);
+check('lkmapExport names Datenherr and Datenlieferant', lk.lkmap.xtf.includes('<Datenherr>CHE-987.654.321</Datenherr>') && lk.lkmap.xtf.includes('<Datenlieferant>CHE-123.456.789</Datenlieferant>')
+  && lk.perimeter.xtf.includes('<Datenherr>CHE-987.654.321</Datenherr>'));
 check('lkmapExport delivers the located ducts and their Schächte', lk.ducts.length === 2 && lk.schaechte.length === 4, `${lk.ducts.length} ducts, ${lk.schaechte.length} Schächte`);
 check('lkmapExport reports what lacks a position', JSON.stringify(lk.schaechteWithoutPosition) === JSON.stringify([{ id: unlocated }])
   && JSON.stringify(lk.ductsWithoutLine) === JSON.stringify([{ id: unlocatedDuct }]), JSON.stringify([lk.schaechteWithoutPosition, lk.ductsWithoutLine]));
 check('lkmapExport has the perimeter in WGS84', lk.perimeterArea.length > 4 && lk.perimeterArea.every((p) => near(p.lat, 47.3, 0.5) && near(p.lng, 8.7, 0.8)), JSON.stringify(lk.perimeterArea[0]));
 check('lkmapExport has a checksum and no deliveries yet', /^[0-9a-f]{64}$/.test(lk.checksum) && lk.deliveries.length === 0 && lk.firstChangeSinceDelivery === null);
-const exports = (await gql('query{ lkmapExports { owner { id } } }')).lkmapExports;
-check('lkmapExports lists the owners with something to deliver', exports.length === 1 && exports[0].owner.id === standard.id, JSON.stringify(exports));
 // The download: the ZIPs of the same name with the file, logged once per state of the data
-const download = (await gql(downloadLkmap, { o: standard.id })).downloadLkmap;
+const download = (await gql(downloadLkmap)).downloadLkmap;
 const zipEntry = (base64) => {
   const zip = Buffer.from(base64, 'base64');
   // local file header: signature, the name's length at 26, the name at 30
   return zip.readUInt32LE(0) === 0x04034b50 ? zip.toString('utf8', 30, 30 + zip.readUInt16LE(26)) : null;
 };
 check('downloadLkmap delivers the ZIPs', JSON.stringify(download.files.map((f) => [f.fileName, zipEntry(f.content)])) === JSON.stringify([
-  ['che-123-456-789-kommunikation-lkmap.zip', 'che-123-456-789-kommunikation-lkmap.xtf'],
-  ['che-123-456-789-zustaendigkeit-peri.zip', 'che-123-456-789-zustaendigkeit-peri.xtf']]), JSON.stringify(download.files.map((f) => f.fileName)));
+  ['che-987-654-321-kommunikation-lkmap.zip', 'che-987-654-321-kommunikation-lkmap.xtf'],
+  ['che-987-654-321-zustaendigkeit-peri.zip', 'che-987-654-321-zustaendigkeit-peri.xtf']]), JSON.stringify(download.files.map((f) => f.fileName)));
 check('downloadLkmap logs the delivery', download.delivery.checksum === lk.checksum && download.delivery.createdBy === 'tester'
   && download.delivery.ductCount === 2 && download.delivery.schachtCount === 4 && download.delivery.deliveredAt === null, JSON.stringify(download.delivery));
-const again = (await gql(downloadLkmap, { o: standard.id })).downloadLkmap;
+const again = (await gql(downloadLkmap)).downloadLkmap;
 check('downloading the same data again keeps the unmarked delivery', again.delivery.id === download.delivery.id);
 const marked = (await gql(setDelivered, { d: download.delivery.id, v: true })).setLkmapDelivered;
 check('setLkmapDelivered marks it', marked.deliveredAt !== null);
 const markedAgain = (await gql(setDelivered, { d: download.delivery.id, v: true })).setLkmapDelivered;
 check('marking it again keeps the time', markedAgain.deliveredAt === marked.deliveredAt);
-check('unchanged after the delivery', (await gql(lkmapExport, { o: standard.id })).lkmapExport.firstChangeSinceDelivery === null);
+check('unchanged after the delivery', (await gql(lkmapExport)).lkmapExport.firstChangeSinceDelivery === null);
 await gql('mutation($d:DuctInput!){ updateDuct(ductId:5, duct:$d) { id } }', { d: { ...deliveredDuct(5, 6), widthMm: 300 } });
-const changed = (await gql(lkmapExport, { o: standard.id })).lkmapExport;
+const changed = (await gql(lkmapExport)).lkmapExport;
 check('a change after the delivery shows', changed.checksum !== lk.checksum && changed.firstChangeSinceDelivery !== null, JSON.stringify([changed.checksum, changed.firstChangeSinceDelivery]));
-const next = (await gql(downloadLkmap, { o: standard.id })).downloadLkmap;
+const next = (await gql(downloadLkmap)).downloadLkmap;
 check('downloading changed data logs a new delivery', next.delivery.id !== download.delivery.id && next.delivery.checksum === changed.checksum);
 check('setLkmapDelivered takes the mark back', (await gql(setDelivered, { d: download.delivery.id, v: false })).setLkmapDelivered.deliveredAt === null);
 await refused('setLkmapDelivered of a missing delivery', setDelivered, { d: 999999, v: true }, { code: 'NotFound', kind: 'LkmapDelivery', id: 999999 });

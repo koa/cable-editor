@@ -156,20 +156,10 @@ impl Query {
         let mut connection = get_connection(ctx).await?;
         duct_line::check(&mut connection, schacht_a, schacht_z, &line).await
     }
-    /// The owner's delivery to the Leitungskataster (SIA405 LKMap, Zuständigkeitsperimeter)
+    /// The delivery to the Leitungskataster (SIA405 LKMap, Zuständigkeitsperimeter)
     #[graphql(guard = "RoleGuard(Role::Admin)")]
-    async fn lkmap_export(
-        &self,
-        ctx: &Context<'_>,
-        owner_id: i32,
-    ) -> ApiResult<lkmap::LkmapExport> {
-        lkmap::export(ctx, owner_id).await
-    }
-    /// The deliveries to the Leitungskataster of all owners with something to deliver or
-    /// delivered before, by name
-    #[graphql(guard = "RoleGuard(Role::Admin)")]
-    async fn lkmap_exports(&self, ctx: &Context<'_>) -> ApiResult<Vec<lkmap::LkmapExport>> {
-        lkmap::exports(ctx).await
+    async fn lkmap_export(&self, ctx: &Context<'_>) -> ApiResult<lkmap::LkmapExport> {
+        lkmap::export(ctx).await
     }
     async fn netbox_devices(&self) -> ApiResult<Vec<DeviceWithRearPorts>> {
         Ok(fetch_devices_and_ports().await?)

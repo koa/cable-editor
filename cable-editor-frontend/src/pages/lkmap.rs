@@ -1,19 +1,18 @@
-//! The delivery to the Leitungskataster (see docs/leitungskataster.md), for admins: a row per
-//! owner with where its delivery stands and the download of its files, opened its report and
-//! deliveries; below a map of the perimeters and what is delivered.
+//! The delivery to the Leitungskataster (see docs/leitungskataster.md), for admins: where the
+//! delivery of the whole network stands, the download of its files, what can't be delivered and
+//! the deliveries so far; below a map of the perimeter and what is delivered.
 
 use crate::{
     components::{
         links::{DuctLink, SchachtLink},
         page_layout::PageLayout,
-        table::ListModel,
     },
     error::FrontendError,
     geo::map::{MapHolder, duct_line, fit_points, hover_text, lat_lng, schacht_marker},
     graphql::authenticated::{
         lkmap::{
             DeliveryState, LkmapDelivery, LkmapExport, days_until, download_lkmap,
-            fetch_lkmap_exports, set_lkmap_delivered,
+            fetch_lkmap_export, set_lkmap_delivered,
         },
         local_day,
         schacht_types::type_icon,
@@ -24,11 +23,8 @@ use crate::{
 use js_sys::{Array, Date};
 use leaflet::{Polygon, PolylineOptions};
 use patternfly_yew::prelude::{
-    Alert, AlertType, Button, ButtonVariant, Cell, CellContext, Color, ExpansionState, Icon, Label,
-    Level, MemoizedTableModel, Span, Spinner, Table, TableColumn, TableEntryRenderer,
-    TableGridMode, TableHeader, TableMode, Title,
+    Alert, AlertType, Button, ButtonVariant, Color, Icon, Label, Level, Spinner, Title,
 };
-use std::{cell::RefCell, collections::HashMap, collections::hash_map::Entry, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue};
 use yew::platform::spawn_local;
 use yew::{Callback, Component, Context, Html, Properties, html, html::IntoPropValue};
@@ -39,94 +35,51 @@ const ZIP: &str = "application/zip";
 /// How many days before the end of a quarter a missing delivery becomes a warning.
 const QUARTER_WARNING_DAYS: i32 = 14;
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub enum Columns {
-    Owner,
-    Content,
-    State,
-    Actions,
-}
-
-/// What a row does with its owner's delivery.
+/// What the page does with the delivery.
 #[derive(Clone, PartialEq, Debug)]
 pub enum Action {
-    Download(i32),
+    Download,
     /// The delivery reached the Checkservice, or takes that back
     SetDelivered(i32, bool),
 }
 
-#[derive(Clone, PartialEq)]
-struct DeliveryRow {
+/// The loaded delivery with where it stands.
+struct Loaded {
     export: LkmapExport,
     state: DeliveryState,
-    onaction: Callback<Action>,
 }
 
-impl TableEntryRenderer<Columns> for DeliveryRow {
-    fn render_cell(&self, context: CellContext<'_, Columns>) -> Cell {
+impl Loaded {
+    fn view(&self, ctx: &Context<Leitungskataster>) -> Html {
         let export = &self.export;
-        match context.column {
-            // One element per cell: on phones the cell lays its children out as a grid
-            Columns::Owner => Cell::new(html! {
-                <span>
-                    {export.owner.name.clone()}
-                    <br/>
-                    <span class="lkmap__subtle">
-                        {export.owner.uid.clone().unwrap_or_else(|| "keine UID".to_string())}
-                    </span>
-                </span>
-            }),
-            Columns::Content => {
-                Cell::new(html!(content(export.ducts.len(), export.schaechte.len())))
-            }
-            Columns::State => Cell::new(html! {
-                <span>
-                    {state_label(&self.state)}
-                    if let Some(pending) = export.pending() {
-                        <br/>
-                        <span class="lkmap__subtle">
-                            {format!("heruntergeladen {}, nicht bestätigt", pending.created_at.local())}
-                        </span>
-                    }
-                </span>
-            }),
-            Columns::Actions => Cell::new(if export.checksum.is_some() {
-                let owner_id = export.owner.id;
-                let onclick = self.onaction.reform(move |_| Action::Download(owner_id));
-                html! {
-                    <Button
-                        label="Herunterladen"
-                        icon={Icon::Download}
-                        variant={ButtonVariant::Secondary}
-                        {onclick}
-                    />
-                }
-            } else {
-                Html::default()
-            }),
-        }
-    }
-
-    fn is_full_width_details(&self) -> Option<bool> {
-        Some(true)
-    }
-
-    fn render_details(&self) -> Vec<Span> {
-        vec![Span::max(self.view_details())]
-    }
-}
-
-impl DeliveryRow {
-    fn view_details(&self) -> Html {
-        let export = &self.export;
+        let onaction = ctx.link().callback(Msg::Action);
         html! {
             <div class="lkmap__details">
-                if export.owner.uid.is_none() {
-                    <Alert inline=true r#type={AlertType::Warning} title="Ohne UID (Datenherr) wird nichts geliefert">
-                        {"Die UID wird beim Eigentümer erfasst, für Private eine fiktive UID der \
-                          Geschäftsstelle (ZHE-…)."}
-                    </Alert>
-                }
+                <div class="lkmap__summary">
+                    <span>
+                        {state_label(&self.state)}
+                        <br/>
+                        <span class="lkmap__subtle">
+                            {format!("{}, Datenherr {}",
+                                content(export.ducts.len(), export.schaechte.len()),
+                                export.datenherr)}
+                        </span>
+                        if let Some(pending) = export.pending() {
+                            <br/>
+                            <span class="lkmap__subtle">
+                                {format!("heruntergeladen {}, nicht bestätigt", pending.created_at.local())}
+                            </span>
+                        }
+                    </span>
+                    if export.checksum.is_some() {
+                        <Button
+                            label="Herunterladen"
+                            icon={Icon::Download}
+                            variant={ButtonVariant::Primary}
+                            onclick={onaction.reform(|_| Action::Download)}
+                        />
+                    }
+                </div>
                 if !export.schaechte_without_position.is_empty() {
                     <Alert inline=true r#type={AlertType::Warning}
                         title={format!("{} ohne Position, {} nicht geliefert",
@@ -147,24 +100,22 @@ impl DeliveryRow {
                         }))}
                     </Alert>
                 }
-                <Title level={Level::H3}>{"Lieferungen"}</Title>
+                <Title level={Level::H2}>{"Lieferungen"}</Title>
                 if export.deliveries.is_empty() {
                     <p class="lkmap__subtle">{"Noch nichts heruntergeladen."}</p>
                 } else {
-                    {self.view_deliveries()}
+                    {self.view_deliveries(&onaction)}
                 }
             </div>
         }
     }
 
-    fn view_deliveries(&self) -> Html {
+    fn view_deliveries(&self, onaction: &Callback<Action>) -> Html {
         let checksum = self.export.checksum.as_deref();
         let rows = self.export.deliveries.iter().map(|delivery| {
             let delivered = delivery.delivered_at.is_some();
             let id = delivery.id;
-            let onclick = self
-                .onaction
-                .reform(move |_| Action::SetDelivered(id, !delivered));
+            let onclick = onaction.reform(move |_| Action::SetDelivered(id, !delivered));
             let current = Some(delivery.checksum.as_str()) == checksum;
             html! {
                 <li class="lkmap__delivery">
@@ -231,7 +182,6 @@ fn links(links: impl Iterator<Item = Html>) -> Html {
 fn state_label(state: &DeliveryState) -> Html {
     let now = Date::new_0();
     let (text, color) = match state {
-        DeliveryState::WithoutUid => ("keine UID, wird nicht geliefert".to_string(), Color::Orange),
         DeliveryState::NothingToDeliver => ("nichts zu liefern".to_string(), Color::Grey),
         DeliveryState::NeverDelivered => ("noch nie geliefert".to_string(), Color::Orange),
         DeliveryState::Changed { due: Some(due) } if days_until(&now, due) < 0 => (
@@ -256,19 +206,16 @@ fn state_label(state: &DeliveryState) -> Html {
     html!(<Label label={text} compact=true {color}/>)
 }
 
-/// The owners' deliveries to the Leitungskataster.
+/// The delivery of the whole network to the Leitungskataster.
 pub struct Leitungskataster {
     /// `None` while loading
-    exports: Option<Result<Rc<Vec<DeliveryRow>>, FrontendError>>,
-    /// Which rows are opened
-    table_state: Rc<RefCell<HashMap<usize, ExpansionState<Columns>>>>,
+    export: Option<Result<Loaded, FrontendError>>,
     map: MapHolder,
 }
 
 pub enum Msg {
     Load,
-    Loaded(Result<Vec<LkmapExport>, FrontendError>),
-    Toggle(usize, ExpansionState<Columns>),
+    Loaded(Result<LkmapExport, FrontendError>),
     Action(Action),
     /// A change is stored: reloads and confirms
     Changed(&'static str),
@@ -288,8 +235,7 @@ impl Component for Leitungskataster {
     fn create(ctx: &Context<Self>) -> Self {
         ctx.link().send_message(Msg::Load);
         Self {
-            exports: None,
-            table_state: Rc::default(),
+            export: None,
             map: MapHolder::default(),
         }
     }
@@ -300,47 +246,23 @@ impl Component for Leitungskataster {
             Msg::Load => {
                 let credentials = get_credentials(&scope);
                 spawn_local(async move {
-                    scope
-                        .send_message(Msg::Loaded(fetch_lkmap_exports(credentials.as_ref()).await));
+                    scope.send_message(Msg::Loaded(fetch_lkmap_export(credentials.as_ref()).await));
                 });
                 false
             }
-            Msg::Loaded(exports) => {
-                let onaction = ctx.link().callback(Msg::Action);
+            Msg::Loaded(export) => {
                 let now = Date::new_0();
-                self.exports = Some(exports.map(|exports| {
-                    Rc::new(
-                        exports
-                            .into_iter()
-                            .map(|export| DeliveryRow {
-                                state: export.state(&now),
-                                export,
-                                onaction: onaction.clone(),
-                            })
-                            .collect(),
-                    )
+                self.export = Some(export.map(|export| Loaded {
+                    state: export.state(&now),
+                    export,
                 }));
                 self.show_on_map(ctx);
                 true
             }
-            Msg::Toggle(key, state) => {
-                match self.table_state.borrow_mut().entry(key) {
-                    Entry::Occupied(entry) if entry.get() == &state => {
-                        entry.remove();
-                    }
-                    Entry::Occupied(mut entry) => {
-                        entry.insert(state);
-                    }
-                    Entry::Vacant(entry) => {
-                        entry.insert(state);
-                    }
-                }
-                true
-            }
-            Msg::Action(Action::Download(owner_id)) => {
+            Msg::Action(Action::Download) => {
                 let credentials = get_credentials(&scope);
                 spawn_local(async move {
-                    let saved = download_lkmap(credentials.as_ref(), owner_id)
+                    let saved = download_lkmap(credentials.as_ref())
                         .await
                         .and_then(|files| {
                             files
@@ -391,27 +313,24 @@ impl Component for Leitungskataster {
                 false
             }
             Msg::MapError(error) => {
-                self.exports = Some(Err(error));
+                self.export = Some(Err(error));
                 true
             }
         }
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        let content = match &self.exports {
+        let content = match &self.export {
             None => html!(<Spinner/>),
             Some(Err(error)) => error.into_prop_value(),
-            Some(Ok(rows)) if rows.is_empty() => html! {
-                <p>{"Keine Trasse ist zur Lieferung an den Leitungskataster markiert."}</p>
-            },
-            Some(Ok(rows)) => self.view_rows(ctx, rows),
+            Some(Ok(loaded)) => loaded.view(ctx),
         };
         // The map's div is always there, so Leaflet keeps its element (see pages/map.rs)
         html! {
             <PageLayout title="Leitungskataster">
                 <div class="lkmap">
                     <p class="lkmap__subtle">
-                        {"Pro Eigentümer die Dateien herunterladen, beim Checkservice von infoGrips \
+                        {"Die Dateien für das ganze Netz herunterladen, beim Checkservice von infoGrips \
                           hochladen und danach die Lieferung bestätigen. Zu liefern ist innerhalb einer \
                           Woche nach einer Änderung, mindestens aber jedes Quartal."}
                     </p>
@@ -435,78 +354,42 @@ impl Component for Leitungskataster {
 }
 
 impl Leitungskataster {
-    fn view_rows(&self, ctx: &Context<Self>, rows: &Rc<Vec<DeliveryRow>>) -> Html {
-        let header = yew::html_nested! {
-            <TableHeader<Columns>>
-                <TableColumn<Columns> label="Eigentümer" index={Columns::Owner}/>
-                <TableColumn<Columns> label="Lieferung" index={Columns::Content}/>
-                <TableColumn<Columns> label="Zustand" index={Columns::State}/>
-                <TableColumn<Columns> index={Columns::Actions}/>
-            </TableHeader<Columns>>
-        };
-        let entries = ListModel::new(
-            MemoizedTableModel::new(rows.clone()),
-            self.table_state.clone(),
-        );
-        let onexpand = ctx.link().callback(|(key, state)| Msg::Toggle(key, state));
-        html! {
-            <Table<Columns, ListModel<Columns, MemoizedTableModel<DeliveryRow>>>
-                mode={TableMode::CompactExpandable}
-                grid={TableGridMode::Medium}
-                {header}
-                {entries}
-                {onexpand}
-            />
-        }
-    }
-
-    /// Draws the perimeters and what is delivered, once both the map and the data are there.
+    /// Draws the perimeter and what is delivered, once both the map and the data are there.
     fn show_on_map(&mut self, ctx: &Context<Self>) {
-        let (Some(map), Some(Ok(rows))) = (self.map.map().cloned(), &self.exports) else {
+        let (Some(map), Some(Ok(loaded))) = (self.map.map().cloned(), &self.export) else {
             return;
         };
+        let export = &loaded.export;
         let mut layers: Vec<leaflet::Layer> = Vec::new();
         let mut points = Vec::new();
-        for row in rows.iter() {
-            let export = &row.export;
-            if let Some(area) = &export.perimeter_area {
-                let options = PolylineOptions::default();
-                options.set_class_name("lkmap__perimeter".to_string());
-                let corners: Array = area.iter().map(|p| JsValue::from(lat_lng(*p))).collect();
-                let polygon = Polygon::new_with_options(&corners, &options);
-                let layer: leaflet::Layer = polygon.unchecked_into();
-                hover_text(
-                    &layer,
-                    &format!("Zuständigkeitsperimeter {}", export.owner.name),
-                );
-                layers.push(layer);
-                points.extend(area.iter().copied());
-            }
-            // Without files (no UID) they aren't delivered
-            let class = if export.checksum.is_some() {
-                "map-view__duct"
-            } else {
-                "map-view__duct lkmap__undelivered"
+        if let Some(area) = &export.perimeter_area {
+            let options = PolylineOptions::default();
+            options.set_class_name("lkmap__perimeter".to_string());
+            let corners: Array = area.iter().map(|p| JsValue::from(lat_lng(*p))).collect();
+            let polygon = Polygon::new_with_options(&corners, &options);
+            let layer: leaflet::Layer = polygon.unchecked_into();
+            hover_text(&layer, "Zuständigkeitsperimeter");
+            layers.push(layer);
+            points.extend(area.iter().copied());
+        }
+        for line in export.ducts.iter().filter_map(|duct| duct.line.as_ref()) {
+            layers.push(duct_line(line, "map-view__duct").unchecked_into());
+            points.extend(line.iter().copied());
+        }
+        for schacht in &export.schaechte {
+            let Some(location) = schacht.location else {
+                continue;
             };
-            for line in export.ducts.iter().filter_map(|duct| duct.line.as_ref()) {
-                layers.push(duct_line(line, class).unchecked_into());
-                points.extend(line.iter().copied());
-            }
-            for schacht in &export.schaechte {
-                let Some(location) = schacht.location else {
-                    continue;
-                };
-                let id = schacht.id;
-                let scope = ctx.link().clone();
-                let marker = schacht_marker(
-                    &schacht.name,
-                    location,
-                    type_icon(&schacht.typ),
-                    move || scope.send_message(Msg::OpenSchacht(id)),
-                );
-                layers.push(marker.unchecked_into());
-                points.push(location);
-            }
+            let id = schacht.id;
+            let scope = ctx.link().clone();
+            let marker = schacht_marker(
+                &schacht.name,
+                location,
+                type_icon(&schacht.typ),
+                move || scope.send_message(Msg::OpenSchacht(id)),
+            );
+            layers.push(marker.unchecked_into());
+            points.push(location);
         }
         fit_points(&map, points.iter());
         self.map.replace_layers(layers);

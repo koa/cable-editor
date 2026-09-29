@@ -19,7 +19,6 @@ pub struct OwnerListEntry {
     pub name: String,
     /// Name in the delivery to the Leitungskataster if not the name
     pub lk_name: Option<String>,
-    pub uid: Option<String>,
     pub is_default: bool,
     pub schacht_count: i32,
     pub duct_count: i32,
@@ -31,20 +30,11 @@ pub struct OwnerListEntry {
 pub const NAME_NOT_RELEASED: &str = "Keine_Angabe";
 
 impl OwnerListEntry {
-    /// Ducts that would be delivered, but can't be without a UID.
-    pub fn undeliverable_ducts(&self) -> i32 {
-        if self.uid.is_none() {
-            self.delivered_duct_count
-        } else {
-            0
-        }
-    }
     /// The values the dialog edits.
     pub fn input(&self) -> OwnerInput {
         OwnerInput {
             name: self.name.clone(),
             lk_name: self.lk_name.clone(),
-            uid: self.uid.clone(),
         }
     }
 }
@@ -63,7 +53,6 @@ pub async fn fetch_owner_list(
 pub struct OwnerInput {
     pub name: String,
     pub lk_name: Option<String>,
-    pub uid: Option<String>,
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone, Copy)]

@@ -12,8 +12,7 @@ pub const MAX_MILLIMETRES: i32 = 4000;
 /// An icon of a Schacht type: enough for a drawn symbol, a bigger file is likely a photo
 pub const MAX_ICON_BYTES: usize = 64 * 1024;
 
-/// A real (`CHE-`) or fictitious (`ZHE-`) UID like `CHE-123.456.789`, as the table eigentuemer
-/// checks it.
+/// A real (`CHE-`) or fictitious (`ZHE-`) UID like `CHE-123.456.789`.
 pub fn is_uid(uid: &str) -> bool {
     let Some(digits) = uid
         .strip_prefix("CHE-")

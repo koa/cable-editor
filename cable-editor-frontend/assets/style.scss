@@ -1042,9 +1042,8 @@ body {
   stroke-opacity: 0.35;
 }
 
-// Owners (pages/owner/list.rs): a value that just repeats another one, and the dialog's note
-.owner-list__default,
-.owner-dialog__hint {
+// Owners (pages/owner/list.rs): a value that just repeats another one
+.owner-list__default {
   color: var(--pf-t--global--text--color--subtle);
 }
 
@@ -1106,6 +1105,14 @@ body {
   gap: var(--pf-t--global--spacer--md);
 }
 
+.lkmap__summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--lg);
+}
+
 .lkmap__deliveries {
   margin: 0;
   padding-inline-start: 0;
@@ -1147,18 +1154,6 @@ body {
   stroke-dasharray: 8 4;
   fill: var(--pf-t--global--color--status--info--default);
   fill-opacity: 0.08;
-}
-
-.lkmap__undelivered {
-  stroke: var(--pf-t--global--color--status--warning--default);
-  stroke-dasharray: 10 6;
-}
-
-// On phones (the table's grid mode) the download button below the row's cells, not beside them
-@media screen and (max-width: 47.9375rem) {
-  .lkmap .pf-v6-c-table__tbody > .pf-v6-c-table__tr:not(.pf-v6-c-table__expandable-row) > td:last-child {
-    grid-column: 1 / -1;
-  }
 }
 
 // The state's date must not be cut off

@@ -126,18 +126,8 @@ pub enum UserError {
         schaechte: i64,
         ducts: i64,
     },
-    OwnerDelivered {
-        deliveries: i64,
-    },
     LkNameTooLong {
         max: usize,
-    },
-    InvalidUid {
-        uid: Box<str>,
-    },
-    UidTaken {
-        uid: Box<str>,
-        owner: Box<str>,
     },
 
     // Schacht types
@@ -164,19 +154,13 @@ pub enum UserError {
     // Delivery to the Leitungskataster
     /// The section `lkmap` of the configuration is missing
     LkmapNotConfigured,
-    /// The owner has no UID, so nothing of it can be delivered
-    OwnerWithoutUid {
-        owner: Box<str>,
-    },
     /// An id doesn't fit into the 7 digits of an OID
     LkmapIdTooLarge {
         kind: ObjectKind,
         id: i32,
     },
-    /// The owner has no delivered duct and no Schacht where one ends
-    NothingToDeliver {
-        owner: Box<str>,
-    },
+    /// No delivered duct and no Schacht where one ends has a position
+    NothingToDeliver,
 
     // Netbox sync
     /// Netbox refused a step; `detail` is Netbox's answer, for support

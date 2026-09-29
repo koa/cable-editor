@@ -1,5 +1,5 @@
-//! Owners of Schächte and ducts (see docs/stammdaten.md); Admin only, as the owner is the
-//! Datenherr of the delivery to the Leitungskataster.
+//! Owners of Schächte and ducts (see docs/stammdaten.md); Admin only, as the owner's name goes
+//! into the delivery to the Leitungskataster.
 
 use crate::graphql::error::{ApiError, ApiResult};
 use crate::{
@@ -8,10 +8,7 @@ use crate::{
     graphql::authorization::{Role, RoleGuard},
 };
 use async_graphql::{Context, InputObject, Object};
-use cable_editor_common::{
-    ObjectKind, UserError,
-    limits::{MAX_LK_NAME, is_uid},
-};
+use cable_editor_common::{ObjectKind, UserError, limits::MAX_LK_NAME};
 use diesel::{ExpressionMethods, HasQuery, OptionalExtension, QueryDsl, SelectableHelper};
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
 
@@ -28,13 +25,12 @@ impl OwnerMutation {
             .values((
                 schema::eigentuemer::name.eq(owner.name),
                 schema::eigentuemer::lk_name.eq(owner.lk_name),
-                schema::eigentuemer::uid.eq(owner.uid),
             ))
             .returning(Eigentuemer::as_returning())
             .get_result(&mut connection)
             .await?)
     }
-    /// Name, name in the delivery and UID; the owner's Schächte and ducts count as changed
+    /// Name and name in the delivery; the owner's Schächte and ducts count as changed
     /// for the Leitungskataster.
     #[graphql(guard = "RoleGuard(Role::Admin)")]
     async fn update_owner(
@@ -49,7 +45,6 @@ impl OwnerMutation {
             .set((
                 schema::eigentuemer::name.eq(owner.name),
                 schema::eigentuemer::lk_name.eq(owner.lk_name),
-                schema::eigentuemer::uid.eq(owner.uid),
             ))
             .returning(Eigentuemer::as_returning())
             .get_result(&mut connection)
@@ -76,7 +71,7 @@ impl OwnerMutation {
             .get_result(&mut connection)
             .await?)
     }
-    /// Only an owner without Schächte, ducts and deliveries, and not the default one.
+    /// Only an owner without Schächte and ducts, and not the default one.
     #[graphql(guard = "RoleGuard(Role::Admin)")]
     async fn delete_owner(&self, ctx: &Context<'_>, owner_id: i32) -> ApiResult<bool> {
         let mut connection = authenticated::get_connection(ctx).await?;
@@ -94,16 +89,8 @@ impl OwnerMutation {
             .count()
             .get_result(&mut connection)
             .await?;
-        let deliveries: i64 = schema::lk_lieferung::table
-            .filter(schema::lk_lieferung::eigentuemer_id.eq(owner_id))
-            .count()
-            .get_result(&mut connection)
-            .await?;
         if schaechte > 0 || ducts > 0 {
             return Err(UserError::OwnerReferenced { schaechte, ducts }.into());
-        }
-        if deliveries > 0 {
-            return Err(UserError::OwnerDelivered { deliveries }.into());
         }
         let deleted = diesel::delete(schema::eigentuemer::table.find(owner_id))
             .execute(&mut connection)
@@ -121,27 +108,24 @@ async fn find_owner(connection: &mut AsyncPgConnection, owner_id: i32) -> ApiRes
         .ok_or_else(|| owner_not_found(owner_id))
 }
 
-/// Name, name in the delivery and UID of an owner.
+/// Name and name in the delivery of an owner.
 #[derive(Debug, Clone, PartialEq, InputObject)]
 struct OwnerInput {
     name: String,
     /// Name in the delivery to the Leitungskataster if not the name, `Keine_Angabe` if it
     /// isn't released; empty: the name
     lk_name: Option<String>,
-    /// `CHE-123.456.789`, fictitious `ZHE-…`; empty: none (not delivered)
-    uid: Option<String>,
 }
 
 /// `OwnerInput` checked, empty values as `None`.
 struct CheckedOwner {
     name: String,
     lk_name: Option<String>,
-    uid: Option<String>,
 }
 
 impl OwnerInput {
     /// Refuses what the table would refuse; `owner_id` is the owner being
-    /// changed (its own name and UID don't count as taken).
+    /// changed (its own name doesn't count as taken).
     async fn checked(
         self,
         connection: &mut AsyncPgConnection,
@@ -156,15 +140,6 @@ impl OwnerInput {
             && lk_name.chars().count() > MAX_LK_NAME
         {
             return Err(UserError::LkNameTooLong { max: MAX_LK_NAME }.into());
-        }
-        let uid = non_empty(self.uid);
-        if let Some(uid) = &uid
-            && !is_uid(uid)
-        {
-            return Err(UserError::InvalidUid {
-                uid: uid.as_str().into(),
-            }
-            .into());
         }
         let others = || {
             let mut others = schema::eigentuemer::table
@@ -187,20 +162,7 @@ impl OwnerInput {
             }
             .into());
         }
-        if let Some(uid) = &uid
-            && let Some(other) = others()
-                .filter(schema::eigentuemer::uid.eq(uid))
-                .first::<String>(connection)
-                .await
-                .optional()?
-        {
-            return Err(UserError::UidTaken {
-                uid: uid.as_str().into(),
-                owner: other.into(),
-            }
-            .into());
-        }
-        Ok(CheckedOwner { name, lk_name, uid })
+        Ok(CheckedOwner { name, lk_name })
     }
 }
 

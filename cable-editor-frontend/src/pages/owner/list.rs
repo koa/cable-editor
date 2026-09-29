@@ -8,7 +8,7 @@ use crate::{
         page_layout::PageLayout,
         table::ListModel,
     },
-    error::{FrontendError, messages},
+    error::FrontendError,
     graphql::authenticated::{
         current_user::Role,
         owners::{
@@ -19,8 +19,8 @@ use crate::{
     util::{get_backdrop, get_credentials, get_role, toast_error, toast_success},
 };
 use patternfly_yew::prelude::{
-    ActionGroup, Alert, AlertType, Backdrop, Bullseye, Button, ButtonType, ButtonVariant, Cell,
-    CellContext, Checkbox, CheckboxState, Color, ExpansionState, Form, FormGroup, Icon, Label,
+    ActionGroup, Backdrop, Bullseye, Button, ButtonType, ButtonVariant, Cell, CellContext,
+    Checkbox, CheckboxState, Color, ExpansionState, Form, FormGroup, Icon, Label,
     MemoizedTableModel, MenuToggleVariant, Modal, ModalVariant, Spinner, Table, TableColumn,
     TableEntryRenderer, TableGridMode, TableHeader, TableMode, TextInput,
 };
@@ -35,7 +35,6 @@ use yew::{
 pub enum Columns {
     Name,
     LkName,
-    Uid,
     Schaechte,
     Ducts,
     Actions,
@@ -74,20 +73,6 @@ impl TableEntryRenderer<Columns> for OwnerRow {
                 Some(NAME_NOT_RELEASED) => html!(<i>{"nicht freigegeben"}</i>),
                 Some(name) => html!(name),
                 None => html!(<span class="owner-list__default">{"wie Name"}</span>),
-            }),
-            Columns::Uid => Cell::new(match (&owner.uid, owner.undeliverable_ducts()) {
-                (Some(uid), _) => html!(uid),
-                (None, 0) => html!("–"),
-                (None, _) => html! {
-                    <span>
-                        <Label
-                            label="keine UID"
-                            compact=true
-                            color={Color::Orange}
-                            icon={Icon::ExclamationTriangle}
-                        />
-                    </span>
-                },
             }),
             Columns::Schaechte => Cell::new(owner.schacht_count.into_prop_value()),
             Columns::Ducts => Cell::new(if owner.delivered_duct_count > 0 {
@@ -282,7 +267,6 @@ impl ListOfOwners {
             <TableHeader<Columns>>
                 <TableColumn<Columns> label="Name" index={Columns::Name}/>
                 <TableColumn<Columns> label="Name in der Lieferung" index={Columns::LkName}/>
-                <TableColumn<Columns> label="UID" index={Columns::Uid}/>
                 <TableColumn<Columns> label="Schächte" index={Columns::Schaechte}/>
                 <TableColumn<Columns> label="Trassen" index={Columns::Ducts}/>
                 <TableColumn<Columns> index={Columns::Actions}/>
@@ -292,18 +276,8 @@ impl ListOfOwners {
             MemoizedTableModel::new(owners.clone()),
             self.table_state.clone(),
         );
-        let undeliverable: i32 = owners
-            .iter()
-            .map(|row| row.owner.undeliverable_ducts())
-            .sum();
         html! {
             <>
-                if undeliverable > 0 {
-                    <Alert inline=true r#type={AlertType::Warning}
-                        title={format!("{} nicht an den Leitungskataster geliefert werden", ducts_can(undeliverable))}>
-                        {"Ohne UID (Datenherr) kann ein Eigentümer nicht liefern."}
-                    </Alert>
-                }
                 <Table<Columns, ListModel<Columns, MemoizedTableModel<OwnerRow>>>
                     mode={TableMode::Compact}
                     grid={TableGridMode::Medium}
@@ -345,15 +319,6 @@ impl ListOfOwners {
     }
 }
 
-/// "1 Trasse kann", "3 Trassen können"
-fn ducts_can(count: i32) -> String {
-    if count == 1 {
-        "1 Trasse kann".to_string()
-    } else {
-        format!("{count} Trassen können")
-    }
-}
-
 #[derive(Properties, PartialEq)]
 pub struct OwnerDialogProps {
     pub title: &'static str,
@@ -363,7 +328,7 @@ pub struct OwnerDialogProps {
     pub oncancel: Callback<()>,
 }
 
-/// Name, name in the delivery and UID of an owner; the page stores them and closes the dialog,
+/// Name and name in the delivery of an owner; the page stores them and closes the dialog,
 /// which stays open with the entered values if that fails.
 pub struct OwnerDialog {
     name: String,
@@ -371,14 +336,12 @@ pub struct OwnerDialog {
     lk_name: String,
     /// `Eigentuemer` is `Keine_Angabe` in the delivery
     not_released: bool,
-    uid: String,
 }
 
 pub enum DialogMsg {
     Name(String),
     LkName(String),
     NotReleased(bool),
-    Uid(String),
     Save,
 }
 
@@ -397,7 +360,6 @@ impl Component for OwnerDialog {
                 owner.lk_name.clone().unwrap_or_default()
             },
             not_released,
-            uid: owner.uid.clone().unwrap_or_default(),
         }
     }
 
@@ -406,7 +368,6 @@ impl Component for OwnerDialog {
             DialogMsg::Name(name) => self.name = name,
             DialogMsg::LkName(lk_name) => self.lk_name = lk_name,
             DialogMsg::NotReleased(not_released) => self.not_released = not_released,
-            DialogMsg::Uid(uid) => self.uid = uid,
             DialogMsg::Save => {
                 let optional = |value: &str| {
                     let value = value.trim();
@@ -419,7 +380,6 @@ impl Component for OwnerDialog {
                     } else {
                         optional(&self.lk_name)
                     },
-                    uid: optional(&self.uid),
                 });
                 return false;
             }
@@ -468,18 +428,6 @@ impl Component for OwnerDialog {
                                 onchange={link.callback(|state: CheckboxState| DialogMsg::NotReleased(state == CheckboxState::Checked))}
                             />
                         </FormGroup>
-                        <FormGroup label="UID (Datenherr)">
-                            <TextInput
-                                value={self.uid.clone()}
-                                onchange={link.callback(DialogMsg::Uid)}
-                                placeholder={messages::UID_EXAMPLE}
-                            />
-                        </FormGroup>
-                        <p class="owner-dialog__hint">
-                            {"Unternehmens-Identifikationsnummer (uid.admin.ch), für Private eine fiktive UID \
-                              der Geschäftsstelle (ZHE-…). Ohne UID werden die Trassen des Eigentümers nicht \
-                              an den Leitungskataster geliefert."}
-                        </p>
                         <ActionGroup>
                             <Button label="Speichern" variant={ButtonVariant::Primary} r#type={ButtonType::Submit}/>
                             <Button label="Abbrechen" variant={ButtonVariant::Link} onclick={oncancel}/>

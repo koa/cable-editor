@@ -75,6 +75,8 @@ config:
   lkmap:
     # UID der liefernden Stelle (Datenlieferant), z.B. "CHE-123.456.789"
     datenlieferantUid: ""
+    # UID des Datenherrn, für den das ganze Netz geliefert wird; leer: der Datenlieferant
+    datenherrUid: ""
     # Präfix der OIDs (STANDARDOID), 8 Zeichen, beginnt mit einem Buchstaben
     oidPrefix: ""
     # Puffer in Metern um die konvexe Hülle der gelieferten Trassen (Zuständigkeitsperimeter)

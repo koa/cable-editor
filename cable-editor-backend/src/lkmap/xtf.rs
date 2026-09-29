@@ -1,4 +1,4 @@
-//! Writes the transfer file of an owner's delivery in the model `SIA405_LKMap_2015_LV95`
+//! Writes the transfer file of the delivery in the model `SIA405_LKMap_2015_LV95`
 //! (INTERLIS 2.3 XTF), see docs/leitungskataster.md. Attributes follow the order of the model;
 //! the XML writer escapes names and texts.
 
@@ -20,17 +20,15 @@ const STATUS: &str = "in_Betrieb";
 /// The system knows only ducts in the ground
 const DUCT_OBJEKTART: &str = "Kommunikation.Trasse.unterirdisch";
 
-/// What goes into one owner's file.
+/// What goes into the file.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Delivery {
     /// BID of the basket
     pub basket_id: Box<str>,
-    /// UID of the owner
+    /// UID of the Datenherr (configuration)
     pub datenherr: Box<str>,
     /// UID of whoever delivers (configuration)
     pub datenlieferant: Box<str>,
-    /// `Eigentuemer` of every object: the owner's name in the delivery
-    pub eigentuemer: Box<str>,
     pub schaechte: Box<[LkPunkt]>,
     pub ducts: Box<[LkLinie]>,
 }
@@ -41,6 +39,8 @@ pub struct LkPunkt {
     pub oid: Box<str>,
     pub letzte_aenderung: NaiveDate,
     pub lagebestimmung: Genauigkeit,
+    /// `Eigentuemer`: the owner's name in the delivery
+    pub eigentuemer: Box<str>,
     pub dimension1_mm: Option<i32>,
     pub dimension2_mm: Option<i32>,
     pub objektart: LkmapPunktObjektart,
@@ -54,6 +54,8 @@ pub struct LkLinie {
     pub oid: Box<str>,
     pub letzte_aenderung: NaiveDate,
     pub lagebestimmung: Genauigkeit,
+    /// `Eigentuemer`: the owner's name in the delivery
+    pub eigentuemer: Box<str>,
     pub breite_mm: Option<i32>,
     /// LV95 (east, north), from Schacht A to Z
     pub line: Box<[(f64, f64)]>,
@@ -129,6 +131,7 @@ fn write_objects(xtf: &mut Xtf, delivery: &Delivery) -> io::Result<()> {
             &schacht.oid,
             schacht.letzte_aenderung,
             schacht.lagebestimmung,
+            &schacht.eigentuemer,
         )?;
         if let Some(dimension) = schacht.dimension1_mm {
             xtf.text("Dimension1", &dimension.to_string())?;
@@ -150,6 +153,7 @@ fn write_objects(xtf: &mut Xtf, delivery: &Delivery) -> io::Result<()> {
             &duct.oid,
             duct.letzte_aenderung,
             duct.lagebestimmung,
+            &duct.eigentuemer,
         )?;
         if let Some(breite) = duct.breite_mm {
             xtf.text("Breite", &breite.to_string())?;
@@ -206,6 +210,7 @@ impl Xtf {
         oid: &str,
         letzte_aenderung: NaiveDate,
         lagebestimmung: Genauigkeit,
+        eigentuemer: &str,
     ) -> io::Result<()> {
         self.text("OBJ_ID", oid)?;
         self.start("Metaattribute", &[])?;
@@ -215,7 +220,7 @@ impl Xtf {
         self.text("Letzte_Aenderung", &interlis_date(letzte_aenderung))?;
         self.end("SIA405_Base_LV95.Metaattribute")?;
         self.end("Metaattribute")?;
-        self.text("Eigentuemer", &delivery.eigentuemer)?;
+        self.text("Eigentuemer", eigentuemer)?;
         self.text("Lagebestimmung", lagebestimmung.transfer_value())?;
         self.text("Status", STATUS)
     }
@@ -234,11 +239,11 @@ mod tests {
             basket_id: "ch4711abb0000001".into(),
             datenherr: "CHE-123.456.789".into(),
             datenlieferant: "CHE-987.654.321".into(),
-            eigentuemer: "Müller & <Söhne>".into(),
             schaechte: vec![LkPunkt {
                 oid: "ch4711abs0000042".into(),
                 letzte_aenderung: date(),
                 lagebestimmung: Genauigkeit::Genau,
+                eigentuemer: "Müller & <Söhne>".into(),
                 dimension1_mm: Some(1200),
                 dimension2_mm: None,
                 objektart: LkmapPunktObjektart::SchachtRund,
@@ -249,6 +254,7 @@ mod tests {
                 oid: "ch4711abt0000007".into(),
                 letzte_aenderung: date(),
                 lagebestimmung: Genauigkeit::Unbekannt,
+                eigentuemer: "Genossenschaft".into(),
                 breite_mm: None,
                 line: vec![(2709223.56, 1253098.32), (2709228.27, 1253125.88)].into(),
             }]
@@ -305,7 +311,9 @@ mod tests {
     }
 
     #[test]
-    fn escapes_names() {
-        assert!(xtf().contains("<Eigentuemer>Müller &amp; &lt;Söhne&gt;</Eigentuemer>"));
+    fn owner_per_object_and_escaped() {
+        let xtf = xtf();
+        assert!(xtf.contains("<Eigentuemer>Müller &amp; &lt;Söhne&gt;</Eigentuemer>"));
+        assert!(xtf.contains("<Eigentuemer>Genossenschaft</Eigentuemer>"));
     }
 }

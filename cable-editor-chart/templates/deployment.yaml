@@ -91,6 +91,10 @@ spec:
             {{- if .datenlieferantUid }}
             - name: APP__LKMAP__DATENLIEFERANT_UID
               value: {{ .datenlieferantUid | quote }}
+            {{- if .datenherrUid }}
+            - name: APP__LKMAP__DATENHERR_UID
+              value: {{ .datenherrUid | quote }}
+            {{- end }}
             - name: APP__LKMAP__OID_PREFIX
               value: {{ required "Set config.lkmap.oidPrefix" .oidPrefix | quote }}
             - name: APP__LKMAP__PERIMETER_PUFFER_M

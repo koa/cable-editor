@@ -101,30 +101,44 @@ impl NetboxSettings {
 #[derive(Deserialize)]
 pub struct LkmapSettings {
     datenlieferant_uid: Box<str>,
+    datenherr_uid: Option<Box<str>>,
     oid_prefix: Box<str>,
     perimeter_puffer_m: Option<f64>,
 }
 
 impl LkmapSettings {
-    /// UID of whoever delivers the data (`Datenlieferant`), the same for all owners.
+    /// UID of whoever delivers the data (`Datenlieferant`).
     pub fn datenlieferant_uid(&self) -> &str {
         &self.datenlieferant_uid
+    }
+    /// UID of whom the data belong to (`Datenherr`), the one delivery's name-giver: the
+    /// deliverer unless `datenherr_uid` says otherwise.
+    pub fn datenherr_uid(&self) -> &str {
+        self.datenherr_uid
+            .as_deref()
+            .unwrap_or(&self.datenlieferant_uid)
     }
     /// The first 8 characters of every `STANDARDOID`.
     pub fn oid_prefix(&self) -> &str {
         &self.oid_prefix
     }
-    /// Metres around the convex hull of an owner's delivered ducts.
+    /// Metres around the convex hull of the delivered ducts and Schächte.
     pub fn perimeter_puffer_m(&self) -> f64 {
         self.perimeter_puffer_m.unwrap_or(10.0)
     }
 
     fn validated(self) -> Result<Self, ConfigError> {
-        if !is_uid(&self.datenlieferant_uid) {
-            return Err(ConfigError::Message(format!(
-                "lkmap.datenlieferant_uid {:?} is no UID like CHE-123.456.789",
-                self.datenlieferant_uid
-            )));
+        for (key, uid) in [
+            ("datenlieferant_uid", Some(&self.datenlieferant_uid)),
+            ("datenherr_uid", self.datenherr_uid.as_ref()),
+        ] {
+            if let Some(uid) = uid
+                && !is_uid(uid)
+            {
+                return Err(ConfigError::Message(format!(
+                    "lkmap.{key} {uid:?} is no UID like CHE-123.456.789"
+                )));
+            }
         }
         // STANDARDOID: 8 characters prefix + 8 characters, an XML id (starts with a letter)
         let prefix = self.oid_prefix.as_bytes();

@@ -1,5 +1,5 @@
-//! The delivery to the Leitungskataster (see docs/leitungskataster.md): per owner the files,
-//! what goes into them, the deliveries so far and when the next one is due.
+//! The delivery to the Leitungskataster (see docs/leitungskataster.md): the files of the whole
+//! network, what goes into them, the deliveries so far and when the next one is due.
 
 use crate::{
     error::FrontendError,
@@ -13,15 +13,16 @@ use yew_oauth2::context::OAuth2Context;
 
 #[derive(cynic::QueryFragment, Debug)]
 #[cynic(graphql_type = "Query")]
-struct LkmapExportsQuery {
-    lkmap_exports: Vec<LkmapExport>,
+struct LkmapExportQuery {
+    lkmap_export: LkmapExport,
 }
 
-/// An owner's delivery.
+/// The delivery of the whole network.
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
 pub struct LkmapExport {
-    pub owner: LkmapOwner,
-    /// Missing without UID and when nothing has a position
+    /// UID of the Datenherr, from the configuration
+    pub datenherr: String,
+    /// Missing when nothing has a position
     pub checksum: Option<String>,
     pub perimeter_area: Option<Vec<GeoPoint>>,
     pub schaechte: Vec<LkmapSchacht>,
@@ -31,14 +32,6 @@ pub struct LkmapExport {
     /// The latest first
     pub deliveries: Vec<LkmapDelivery>,
     pub first_change_since_delivery: Option<DateTime>,
-}
-
-#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
-#[cynic(graphql_type = "Owner")]
-pub struct LkmapOwner {
-    pub id: i32,
-    pub name: String,
-    pub uid: Option<String>,
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
@@ -90,11 +83,9 @@ pub struct LkmapDelivery {
     pub delivered_at: Option<DateTime>,
 }
 
-/// Where an owner's delivery stands, the most urgent first.
+/// Where the delivery stands, the most urgent first.
 #[derive(Debug, Clone, PartialEq)]
 pub enum DeliveryState {
-    /// Something to deliver, but no UID (Datenherr)
-    WithoutUid,
     /// Nothing with a position to deliver
     NothingToDeliver,
     /// Never delivered: the Zuständigkeitsperimeter is due before anything else
@@ -124,9 +115,6 @@ impl LkmapExport {
     }
 
     pub fn state(&self, now: &Date) -> DeliveryState {
-        if self.owner.uid.is_none() {
-            return DeliveryState::WithoutUid;
-        }
         let Some(checksum) = &self.checksum else {
             return DeliveryState::NothingToDeliver;
         };
@@ -190,24 +178,17 @@ pub fn days_until(now: &Date, day: &Date) -> i32 {
     ((end.get_time() - now.get_time()) / DAY_MS).floor() as i32
 }
 
-/// The owners with something to deliver or delivered before, by name.
-pub async fn fetch_lkmap_exports(
+pub async fn fetch_lkmap_export(
     credentials: Option<&OAuth2Context>,
-) -> Result<Vec<LkmapExport>, FrontendError> {
-    Ok(query::<LkmapExportsQuery, _>((), credentials)
+) -> Result<LkmapExport, FrontendError> {
+    Ok(query::<LkmapExportQuery, _>((), credentials)
         .await?
-        .lkmap_exports)
-}
-
-#[derive(cynic::QueryVariables)]
-struct DownloadVariables {
-    owner_id: i32,
+        .lkmap_export)
 }
 
 #[derive(cynic::QueryFragment, Debug)]
-#[cynic(graphql_type = "Mutation", variables = "DownloadVariables")]
+#[cynic(graphql_type = "Mutation")]
 struct DownloadMutation {
-    #[arguments(ownerId: $owner_id)]
     download_lkmap: LkmapDownload,
 }
 
@@ -223,17 +204,14 @@ pub struct DownloadFile {
     pub content: String,
 }
 
-/// The owner's ZIPs (LKMap, Zuständigkeitsperimeter); logs a delivery.
+/// The ZIPs (LKMap, Zuständigkeitsperimeter); logs a delivery.
 pub async fn download_lkmap(
     credentials: Option<&OAuth2Context>,
-    owner_id: i32,
 ) -> Result<Vec<DownloadFile>, FrontendError> {
-    Ok(
-        mutate::<DownloadMutation, _>(DownloadVariables { owner_id }, credentials)
-            .await?
-            .download_lkmap
-            .files,
-    )
+    Ok(mutate::<DownloadMutation, _>((), credentials)
+        .await?
+        .download_lkmap
+        .files)
 }
 
 #[derive(cynic::QueryVariables)]

@@ -71,6 +71,7 @@ netbox:
   type_id: 1
 lkmap:
   datenlieferant_uid: "CHE-123.456.789"
+  datenherr_uid: "CHE-987.654.321"
   oid_prefix: "ch4711ab"
 EOF
 # The backend reads the issuer's discovery at startup, so the mock must be up

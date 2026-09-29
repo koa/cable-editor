@@ -59,14 +59,13 @@ impl LkmapPunktObjektart {
     }
 }
 
-/// A delivery of an owner's transfer files (`lk_lieferung`): logged when they are downloaded,
+/// A delivery of the transfer files (`lk_lieferung`): logged when they are downloaded,
 /// marked when they reached the Checkservice.
 #[derive(HasQuery, Debug, Clone, PartialEq)]
 #[diesel(table_name = schema::lk_lieferung)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct LkLieferung {
     pub id: i32,
-    pub eigentuemer_id: i32,
     pub erstellt_am: DateTime<Utc>,
     pub erstellt_von: String,
     pub anzahl_schaechte: i32,

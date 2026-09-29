@@ -1,4 +1,4 @@
-//! Writes an owner's Zuständigkeitsperimeter in the model `Perimeter_LK_ZH_V2_LV95` of the
+//! Writes the Zuständigkeitsperimeter in the model `Perimeter_LK_ZH_V2_LV95` of the
 //! canton (see docs/leitungskataster.md): the area its delivered ducts and Schächte lie in.
 
 use super::xtf::{Model, interlis_date, transfer};
@@ -12,13 +12,13 @@ const MODEL: Model = Model {
 };
 const TOPIC: &str = "Perimeter_LK_ZH_V2_LV95.Perimeter_LK_ZH";
 
-/// The perimeter of one owner.
+/// The perimeter of the delivery.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Perimeter {
     pub basket_id: Box<str>,
     /// The model has no OID, the TID only needs to be unique in the file
     pub tid: Box<str>,
-    /// UID of the owner
+    /// UID of the Datenherr (configuration)
     pub datenherr: Box<str>,
     /// UID of whoever delivers (configuration)
     pub datenlieferant: Box<str>,

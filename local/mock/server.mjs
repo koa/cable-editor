@@ -97,11 +97,11 @@ const schachtFromInput = ({ name, typeId, position }) => {
   const wgs84 = position ? positionToWgs84(position) : null;
   return [name.trim(), wgs84 ? [wgs84.lat, wgs84.lng] : null, typeId ?? null];
 };
-// Owners of Schächte and ducts; the Gemeinde has no UID, so its delivered duct can't be delivered
+// Owners of Schächte and ducts
 const ownerRows = [
-  { id: 1, name: 'Genossenschaft Glasfaser Berg', lkName: null, uid: 'CHE-123.456.789', isDefault: true },
-  { id: 2, name: 'Gemeinde Berg', lkName: null, uid: null, isDefault: false },
-  { id: 3, name: 'Hans Muster', lkName: 'Keine_Angabe', uid: 'ZHE-100.100.101', isDefault: false },
+  { id: 1, name: 'Genossenschaft Glasfaser Berg', lkName: null, isDefault: true },
+  { id: 2, name: 'Gemeinde Berg', lkName: null, isDefault: false },
+  { id: 3, name: 'Hans Muster', lkName: 'Keine_Angabe', isDefault: false },
 ];
 // Owner of a Schacht (default 1) and a duct (default 1), ducts delivered to the Leitungskataster
 const schachtOwner = { 5: 2 };
@@ -115,17 +115,12 @@ const storeSchachtDelivery = (id, { ownerId, lagebestimmung }) => {
   schachtLage[id] = lagebestimmung;
 };
 const deliveredDucts = new Set([711, 713, 714]);
-const ownerFromInput = ({ name, lkName, uid }, ownerId) => {
+const ownerFromInput = ({ name, lkName }, ownerId) => {
   const clean = (value) => value?.trim() || null;
   if (!name.trim()) refuse('NameMissing');
-  if (clean(uid) && !/^(CHE|ZHE)-\d{3}\.\d{3}\.\d{3}$/.test(clean(uid))) {
-    refuse('InvalidUid', { uid: clean(uid) });
-  }
   const others = ownerRows.filter((o) => o.id !== ownerId);
   if (others.some((o) => o.name === name.trim())) refuse('NameTaken', { kind: 'Owner', name: name.trim() });
-  const uidOwner = clean(uid) && others.find((o) => o.uid === clean(uid));
-  if (uidOwner) refuse('UidTaken', { uid: clean(uid), owner: uidOwner.name });
-  return { name: name.trim(), lkName: clean(lkName), uid: clean(uid) };
+  return { name: name.trim(), lkName: clean(lkName) };
 };
 const ownerOfSchacht = (id) => schachtOwner[id] ?? 1;
 const ownerOfDuct = (id) => ductOwner[id] ?? 1;
@@ -237,38 +232,42 @@ const duct = (row) => ({
   widthMm: row.widthMm ?? null,
   changedAt: row.changedAt ?? '2026-09-27T08:15:00+00:00',
 });
-// The delivery to the Leitungskataster like lkmap/mod.rs: an owner's delivered ducts and the
-// Schächte where one ends; the perimeter a box around them, the checksum over their data
-const lkmapExport = (ownerId) => {
+// The delivery to the Leitungskataster like lkmap/mod.rs: the delivered ducts of the whole
+// network and the Schächte where one ends; the perimeter a box around them, the checksum over
+// their data (and the owners' names, which go into the files)
+const DATENHERR = 'CHE-123.456.789';
+const lkmapExport = () => {
   const rows = ductRows.filter((r) => deliveredDucts.has(r.id));
-  const own = rows.filter((r) => ownerOfDuct(r.id) === ownerId);
-  const ends = [...new Set(rows.flatMap((r) => [r.a, r.z]))].filter((id) => ownerOfSchacht(id) === ownerId).sort((a, b) => a - b);
-  const ducts = own.filter((r) => ductLine(r)).map(duct);
+  const ends = [...new Set(rows.flatMap((r) => [r.a, r.z]))].sort((a, b) => a - b);
+  const ducts = rows.filter((r) => ductLine(r)).map(duct);
   const schaechte = ends.map(schacht).filter((s) => s.location);
   const points = [...ducts.flatMap((d) => d.line), ...schaechte.map((s) => s.location)];
-  const row = ownerRows.find((o) => o.id === ownerId);
-  const files = row.uid && points.length > 0;
+  const files = points.length > 0;
   const [lats, lngs] = [points.map((p) => p.lat), points.map((p) => p.lng)];
   const [s0, n0, w0, e0] = [Math.min(...lats) - 0.0001, Math.max(...lats) + 0.0001, Math.min(...lngs) - 0.00015, Math.max(...lngs) + 0.00015];
-  const uid = row.uid?.toLowerCase().replaceAll('.', '-');
-  const checksum = files ? createHash('sha256').update(JSON.stringify([row, ducts.map((d) => [d.id, d.line, d.changedAt]), schaechte.map((s) => [s.id, s.location])])).digest('hex') : null;
+  const uid = DATENHERR.toLowerCase().replaceAll('.', '-');
+  const names = (id) => ownerRows.find((o) => o.id === id);
+  const checksum = files ? createHash('sha256').update(JSON.stringify([
+    ducts.map((d) => [d.id, d.line, d.changedAt, names(ownerOfDuct(d.id))]),
+    schaechte.map((s) => [s.id, s.location, names(ownerOfSchacht(s.id))]),
+  ])).digest('hex') : null;
   return {
-    owner: owner(ownerId),
+    datenherr: DATENHERR,
     lkmap: files ? { fileName: `${uid}-kommunikation-lkmap.xtf`, xtf: '<TRANSFER/>' } : null,
     perimeter: files ? { fileName: `${uid}-zustaendigkeit-peri.xtf`, xtf: '<TRANSFER/>' } : null,
     perimeterArea: files ? [[s0, w0], [s0, e0], [n0, e0], [n0, w0], [s0, w0]].map(([lat, lng]) => ({ lat, lng })) : null,
     checksum,
     schaechte, ducts,
     schaechteWithoutPosition: ends.map(schacht).filter((s) => !s.location),
-    ductsWithoutLine: own.filter((r) => !ductLine(r)).map(duct),
-    deliveries: lkmapDeliveries.filter((d) => d.ownerId === ownerId).sort((a, b) => b.id - a.id),
+    ductsWithoutLine: rows.filter((r) => !ductLine(r)).map(duct),
+    deliveries: [...lkmapDeliveries].sort((a, b) => b.id - a.id),
     // The mock's objects all changed on 25.09. (after the delivery in July)
-    firstChangeSinceDelivery: lkmapDeliveries.some((d) => d.ownerId === ownerId && d.deliveredAt && d.checksum !== checksum) ? '2026-09-25T09:30:00+00:00' : null,
+    firstChangeSinceDelivery: lkmapDeliveries.some((d) => d.deliveredAt && d.checksum !== checksum) ? '2026-09-25T09:30:00+00:00' : null,
   };
 };
-// The owner with UID delivered in July, the data changed since; a download not confirmed yet
+// Delivered in July, the data changed since; a download not confirmed yet
 const lkmapDeliveries = [
-  { id: 1, ownerId: 1, createdAt: '2026-07-14T13:05:00+00:00', createdBy: 'monteur', schachtCount: 3, ductCount: 1, checksum: '5f1c0a7e'.repeat(8), deliveredAt: '2026-07-14T13:20:00+00:00' },
+  { id: 1, createdAt: '2026-07-14T13:05:00+00:00', createdBy: 'monteur', schachtCount: 3, ductCount: 1, checksum: '5f1c0a7e'.repeat(8), deliveredAt: '2026-07-14T13:20:00+00:00' },
 ];
 const ductOfCable = (c) => duct(ductRows.find((r) => r.id === 700 + c[0]));
 // checkDuctLine's fitting, like graphql/duct_line.rs (distances in LV95)
@@ -489,17 +488,13 @@ const root = {
   listDuct: () => ductRows.map(duct),
   duct: ({ ductId }) => { const row = ductRows.find((r) => r.id === ductId); return row ? duct(row) : null; },
   checkDuctLine: ({ schachtA, schachtZ, line }) => fitLine(schachtA, schachtZ, line),
-  lkmapExport: ({ ownerId }) => lkmapExport(ownerId),
-  lkmapExports: () => ownerRows.map((o) => lkmapExport(o.id))
-    .filter((e) => e.ducts.length || e.schaechte.length || e.ductsWithoutLine.length || e.schaechteWithoutPosition.length || e.deliveries.length)
-    .sort((a, b) => a.owner.name.localeCompare(b.owner.name)),
-  downloadLkmap: ({ ownerId }) => {
-    const exported = lkmapExport(ownerId);
-    if (!exported.owner.uid) refuse('OwnerWithoutUid', { owner: exported.owner.name });
-    if (!exported.checksum) refuse('NothingToDeliver', { owner: exported.owner.name });
-    let delivery = lkmapDeliveries.find((d) => d.ownerId === ownerId && !d.deliveredAt && d.checksum === exported.checksum);
+  lkmapExport: () => lkmapExport(),
+  downloadLkmap: () => {
+    const exported = lkmapExport();
+    if (!exported.checksum) refuse('NothingToDeliver');
+    let delivery = lkmapDeliveries.find((d) => !d.deliveredAt && d.checksum === exported.checksum);
     if (!delivery) {
-      delivery = { id: Math.max(0, ...lkmapDeliveries.map((d) => d.id)) + 1, ownerId, createdAt: new Date().toISOString(), createdBy: 'monteur',
+      delivery = { id: Math.max(0, ...lkmapDeliveries.map((d) => d.id)) + 1, createdAt: new Date().toISOString(), createdBy: 'monteur',
         schachtCount: exported.schaechte.length, ductCount: exported.ducts.length, checksum: exported.checksum, deliveredAt: null };
       lkmapDeliveries.push(delivery);
     }

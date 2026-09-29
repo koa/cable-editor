@@ -6,10 +6,8 @@ Dateien als ZIP mit dem Protokoll der Lieferungen (Abschnitt 5, `cable-editor-ba
 und die UI mit der Admin-Seite (Abschnitt 6, `pages/lkmap.rs`). Offen ist der automatische
 Upload (Abschnitt 7, Schritt 7).
 
-Umstellung beschlossen, noch nicht umgesetzt (Abschnitt 7, Schritt 6): der Kanton wünscht
-entgegen den Weisungen *eine* Lieferung pro Datenherr, also eine für das ganze Netz, egal wem
-die einzelnen Teile gehören. Dieses Dokument beschreibt bereits den Zielzustand; die
-Abschnitte 4 bis 6 gelten für den Code erst nach Schritt 6.
+Die Lieferung ist *eine* für das ganze Netz, nicht eine pro Eigentümer (Wunsch des Kantons,
+Abschnitt 1, Schritt 6 in Abschnitt 7).
 
 ## 1. Anforderungen
 
@@ -410,10 +408,10 @@ Was die Lieferung in der UI braucht; die Seiten für Eigentümer und Schachttype
 3. ~~LKMap-Export mit Validierungstest~~ (erledigt).
 4. ~~Perimeter-Export~~ (erledigt).
 5. ~~Admin-Seite mit Download und Protokoll~~ (erledigt).
-6. Eine Lieferung pro Datenherr statt pro Eigentümer (Wunsch des Kantons, siehe 1.):
+6. ~~Eine Lieferung pro Datenherr statt pro Eigentümer (Wunsch des Kantons, siehe 1.):
    `datenherr_uid` in der Konfiguration, `eigentuemer.uid` und `lk_lieferung.eigentuemer_id`
    entfallen, ein Export und ein Perimeter für das ganze Netz, die Admin-Seite mit einer
-   Lieferung.
+   Lieferung.~~ (erledigt)
 7. Später: automatischer Upload zum Checkservice (infoGrips dokumentiert nur das Webformular;
    Schnittstelle abklären) und Hinweis per Mail vor Fristen.
 

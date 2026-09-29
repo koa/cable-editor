@@ -25,8 +25,6 @@ diesel::table! {
         name -> Text,
         #[max_length = 80]
         lk_name -> Nullable<Varchar>,
-        #[max_length = 15]
-        uid -> Nullable<Varchar>,
         standard -> Bool,
     }
 }
@@ -51,7 +49,6 @@ diesel::table! {
 diesel::table! {
     lk_lieferung (id) {
         id -> Int4,
-        eigentuemer_id -> Int4,
         erstellt_am -> Timestamptz,
         erstellt_von -> Text,
         anzahl_schaechte -> Int4,
@@ -211,7 +208,6 @@ diesel::table! {
 }
 
 diesel::joinable!(kabel_trasse -> kabel (kabel));
-diesel::joinable!(lk_lieferung -> eigentuemer (eigentuemer_id));
 diesel::joinable!(kabel_trasse -> trasse (trasse));
 diesel::joinable!(kabel_trasse -> trassen_mit_endpunkten (trasse));
 diesel::joinable!(schacht -> eigentuemer (eigentuemer_id));

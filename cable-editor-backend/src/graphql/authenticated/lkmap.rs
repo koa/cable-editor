@@ -3,7 +3,7 @@
 use crate::graphql::error::ApiResult;
 use crate::{
     db::{
-        entity::{Duct, eigentuemer::Eigentuemer, lkmap::LkLieferung, schacht::Schacht},
+        entity::{Duct, lkmap::LkLieferung, schacht::Schacht},
         schema,
     },
     graphql::{authenticated::get_connection, model::GeoPoint},
@@ -37,14 +37,15 @@ impl TryFrom<lkmap::TransferFile> for TransferFile {
     }
 }
 
-/// An owner's delivery: the transfer files (SIA405 LKMap, Zuständigkeitsperimeter), what goes
-/// into them and what can't, a report the UI words (docs/fehlermeldungen.md), and the
-/// deliveries so far.
+/// The delivery of the whole network: the transfer files (SIA405 LKMap,
+/// Zuständigkeitsperimeter), what goes into them and what can't, a report the UI words
+/// (docs/fehlermeldungen.md), and the deliveries so far.
 #[derive(SimpleObject)]
 #[graphql(complex)]
 pub struct LkmapExport {
-    pub owner: Eigentuemer,
-    /// The ducts and Schächte; missing without UID and when nothing has a position
+    /// UID of the Datenherr (configuration), the name of the files
+    pub datenherr: Box<str>,
+    /// The ducts and Schächte; missing when nothing has a position
     pub lkmap: Option<TransferFile>,
     /// The area they lie in, missing like `lkmap`
     pub perimeter: Option<TransferFile>,
@@ -67,10 +68,10 @@ pub struct LkmapExport {
 
 #[ComplexObject]
 impl LkmapExport {
-    /// The owner's deliveries, the latest first
+    /// The deliveries so far, the latest first
     async fn deliveries(&self, ctx: &Context<'_>) -> ApiResult<Vec<LkLieferung>> {
         let mut connection = get_connection(ctx).await?;
-        Ok(deliveries(&mut connection, self.owner.id).await?)
+        Ok(deliveries(&mut connection).await?)
     }
     /// The first change of a delivered Schacht or duct after the files last delivered were
     /// downloaded, when the week to deliver started; missing if nothing was delivered yet or
@@ -81,7 +82,7 @@ impl LkmapExport {
         ctx: &Context<'_>,
     ) -> ApiResult<Option<DateTime<Utc>>> {
         let mut connection = get_connection(ctx).await?;
-        let last_delivered = deliveries(&mut connection, self.owner.id)
+        let last_delivered = deliveries(&mut connection)
             .await?
             .into_iter()
             .find(|delivery| delivery.geliefert_am.is_some());
@@ -113,51 +114,18 @@ struct FirstChange {
     first_change: Option<DateTime<Utc>>,
 }
 
-async fn deliveries(
-    connection: &mut AsyncPgConnection,
-    owner_id: i32,
-) -> diesel::QueryResult<Vec<LkLieferung>> {
+async fn deliveries(connection: &mut AsyncPgConnection) -> diesel::QueryResult<Vec<LkLieferung>> {
     LkLieferung::query()
-        .filter(schema::lk_lieferung::eigentuemer_id.eq(owner_id))
         .order(schema::lk_lieferung::erstellt_am.desc())
         .then_order_by(schema::lk_lieferung::id.desc())
         .load(connection)
         .await
 }
 
-pub async fn export(ctx: &Context<'_>, owner_id: i32) -> ApiResult<LkmapExport> {
+pub async fn export(ctx: &Context<'_>) -> ApiResult<LkmapExport> {
     let mut connection = get_connection(ctx).await?;
-    let export = lkmap::export(&mut connection, owner_id).await?;
+    let export = lkmap::export(&mut connection).await?;
     to_graphql(&mut connection, export).await
-}
-
-/// Owners with something to deliver or delivered before, by name.
-const OWNERS: &str = "
-select e.id
-from eigentuemer e
-where exists (select 1 from trasse t where t.leitungskataster and t.eigentuemer_id = e.id)
-   or exists (select 1
-              from schacht s
-                       join trasse t on t.leitungskataster and s.id in (t.schacht_a, t.schacht_z)
-              where s.eigentuemer_id = e.id)
-   or exists (select 1 from lk_lieferung l where l.eigentuemer_id = e.id)
-order by e.name";
-
-#[derive(QueryableByName)]
-struct OwnerRow {
-    #[diesel(sql_type = Integer)]
-    id: i32,
-}
-
-pub async fn exports(ctx: &Context<'_>) -> ApiResult<Vec<LkmapExport>> {
-    let mut connection = get_connection(ctx).await?;
-    let owners: Vec<OwnerRow> = sql_query(OWNERS).load(&mut connection).await?;
-    let mut exports = Vec::with_capacity(owners.len());
-    for owner in owners {
-        let export = lkmap::export(&mut connection, owner.id).await?;
-        exports.push(to_graphql(&mut connection, export).await?);
-    }
-    Ok(exports)
 }
 
 async fn to_graphql(
@@ -180,7 +148,7 @@ async fn to_graphql(
         None => (None, None, None, None),
     };
     Ok(LkmapExport {
-        owner: export.owner,
+        datenherr: export.datenherr,
         lkmap,
         perimeter,
         perimeter_area,

@@ -1,5 +1,5 @@
-//! Owners of Schächte and ducts; the Leitungskataster is delivered per owner (see
-//! docs/leitungskataster.md).
+//! Owners of Schächte and ducts, named as `Eigentuemer` in the delivery to the
+//! Leitungskataster (see docs/leitungskataster.md).
 
 use crate::graphql::error::ApiResult;
 use crate::{
@@ -16,7 +16,6 @@ pub struct Eigentuemer {
     pub id: i32,
     pub name: String,
     pub lk_name: Option<String>,
-    pub uid: Option<String>,
     pub standard: bool,
 }
 
@@ -40,10 +39,6 @@ impl Eigentuemer {
     /// isn't released
     async fn lk_name(&self) -> Option<&str> {
         self.lk_name.as_deref()
-    }
-    /// UID (`CHE-…`, fictitious `ZHE-…`), the Datenherr; not delivered without one
-    async fn uid(&self) -> Option<&str> {
-        self.uid.as_deref()
     }
     /// Owner of new Schächte and ducts
     async fn is_default(&self) -> bool {

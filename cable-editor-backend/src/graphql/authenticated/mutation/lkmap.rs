@@ -1,4 +1,4 @@
-//! The delivery to the Leitungskataster (see docs/leitungskataster.md): downloading an owner's
+//! The delivery to the Leitungskataster (see docs/leitungskataster.md): downloading the
 //! files logs a delivery, which is marked once they reached the Checkservice. Admin only.
 
 use crate::graphql::error::ApiResult;
@@ -33,7 +33,7 @@ pub struct DownloadFile {
     pub content: Box<str>,
 }
 
-/// An owner's transfer files, each in a ZIP of the same name, and the delivery logged for them.
+/// The transfer files, each in a ZIP of the same name, and the delivery logged for them.
 #[derive(SimpleObject)]
 pub struct LkmapDownload {
     pub delivery: LkLieferung,
@@ -43,16 +43,15 @@ pub struct LkmapDownload {
 
 #[Object]
 impl LkmapMutation {
-    /// The owner's transfer files; logs them as a delivery, or reuses the one logged for the
-    /// same files that isn't marked yet.
+    /// The transfer files; logs them as a delivery, or reuses the one logged for the same files
+    /// that isn't marked yet.
     #[graphql(guard = "RoleGuard(Role::Admin)")]
-    async fn download_lkmap(&self, ctx: &Context<'_>, owner_id: i32) -> ApiResult<LkmapDownload> {
+    async fn download_lkmap(&self, ctx: &Context<'_>) -> ApiResult<LkmapDownload> {
         let user = ctx.data::<UserInfo>()?.preferred_username.to_string();
         let mut connection = authenticated::get_connection(ctx).await?;
-        let export = lkmap::export(&mut connection, owner_id).await?;
+        let export = lkmap::export(&mut connection).await?;
         let files = export.deliverable()?;
         let pending = LkLieferung::query()
-            .filter(schema::lk_lieferung::eigentuemer_id.eq(owner_id))
             .filter(schema::lk_lieferung::pruefsumme.eq(&*files.checksum))
             .filter(schema::lk_lieferung::geliefert_am.is_null())
             .order(schema::lk_lieferung::id.desc())
@@ -64,7 +63,6 @@ impl LkmapMutation {
             None => {
                 diesel::insert_into(schema::lk_lieferung::table)
                     .values((
-                        schema::lk_lieferung::eigentuemer_id.eq(owner_id),
                         schema::lk_lieferung::erstellt_von.eq(user),
                         schema::lk_lieferung::anzahl_schaechte
                             .eq(i32::try_from(export.schaechte.len())?),
