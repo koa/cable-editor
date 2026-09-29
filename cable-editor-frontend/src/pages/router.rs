@@ -7,6 +7,7 @@ use crate::components::menu::list_plan::ListPlan;
 use crate::components::menu::{MenuDropdown, MenuEntry};
 use crate::{
     components::{
+        netbox::NetboxHint,
         panel::{attach_fiber::AttachFiber, loop_editor::LoopPortEditor, show::ShowPanel},
         recovery::RetryScope,
         user::{RequireRole, UserMenu},
@@ -23,6 +24,7 @@ use crate::{
         list_of_cables::ListOfCables,
         lkmap::Leitungskataster,
         map::Map,
+        netbox::NetboxPage,
         owner::list::ListOfOwners,
         panel::EditPanel,
         planning::{edit::EditPlan, list::ListOfPlannings},
@@ -170,6 +172,8 @@ pub enum PlanView {
     },
     /// The delivery to the Leitungskataster (admins)
     Leitungskataster,
+    /// The automatic sync to Netbox (admins)
+    Netbox,
     Panel {
         id: i32,
         #[target(nested)]
@@ -198,10 +202,11 @@ impl PlanView {
             | PlanView::NewCabinetType { .. }
             | PlanView::CabinetType { .. } => ("Schachttyp".into(), PlanView::ListOfCabinetTypes),
             PlanView::Leitungskataster => ("Leitungskataster".into(), PlanView::Leitungskataster),
+            PlanView::Netbox => ("Netbox".into(), PlanView::Netbox),
         };
 
         // The areas of the plan, each leading to its start page
-        let areas: [(&str, PlanView); 8] = [
+        let areas: [(&str, PlanView); 9] = [
             ("Ändern", PlanView::Edit),
             ("Schacht", PlanView::ListOfCabinets),
             ("Kabel", PlanView::ListOfCables),
@@ -210,6 +215,7 @@ impl PlanView {
             ("Eigentümer", PlanView::ListOfOwners),
             ("Schachttyp", PlanView::ListOfCabinetTypes),
             ("Leitungskataster", PlanView::Leitungskataster),
+            ("Netbox", PlanView::Netbox),
         ];
         let entries = areas
             .into_iter()
@@ -257,6 +263,7 @@ impl AppRoute {
     pub fn content(self) -> Html {
         let breadcrumb = self.breadcrumb();
         let role = self.required_role();
+        let route = self.clone();
         let content = match self {
             AppRoute::ListOfPlans => html!(<ListOfPlannings/>),
             AppRoute::Plan { plan_id, view } => view.content(plan_id),
@@ -268,7 +275,7 @@ impl AppRoute {
                     <div class="pf-v6-c-page__main-container">
                         <main class="pf-v6-c-page__main" id="main-content" tabindex="-1">
                             <PageSection r#type={PageSectionType::Breadcrumbs}>
-                                <div class="breadcrumb-bar">{breadcrumb}<UserMenu/></div>
+                                <div class="breadcrumb-bar">{breadcrumb}<NetboxHint {route}/><UserMenu/></div>
                             </PageSection>
                             <RequireRole {role}>{content}</RequireRole>
                         </main>
@@ -324,7 +331,9 @@ impl PlanView {
                 view: PanelView::Edit | PanelView::Loop | PanelView::Attach,
                 ..
             } => Role::Planner,
-            PlanView::NewCabinetType { .. } | PlanView::Leitungskataster => Role::Admin,
+            PlanView::NewCabinetType { .. } | PlanView::Leitungskataster | PlanView::Netbox => {
+                Role::Admin
+            }
             _ => Role::Reader,
         }
     }
@@ -354,6 +363,7 @@ impl PlanView {
             }
             PlanView::Duct { id, view } => view.content(plan_id, id),
             PlanView::Leitungskataster => html!(<Leitungskataster {plan_id}/>),
+            PlanView::Netbox => html!(<NetboxPage {plan_id}/>),
         }
     }
 }

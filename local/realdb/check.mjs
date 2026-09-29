@@ -2,8 +2,8 @@
 // builds cables, panels, port usages and plans through GraphQL, then checks what the pages
 // query (the DataLoaders), the PostGIS conversions, fitting a duct's course, owners, Schacht
 // types and the refusals of the mutations. With PG_LOG (printed by run-realdb.sh) it counts the
-// SQL statements per query, which shows whether the loaders batch. Changes the data, so run it
-// once per start.
+// SQL statements per query, which shows whether the loaders batch, and the automatic sync to
+// Netbox (the mock's). Changes the data, so run it once per start.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -295,6 +295,55 @@ const deleteTyp = 'mutation($id:Int!){ deleteSchachtTyp(typId:$id) }';
 await refused('deleteSchachtTyp with Schächte', deleteTyp, { id: usedTyp.id }, { code: 'SchachtTypReferenced', schaechte: usedTyp.schachtCount });
 check('deleteSchachtTyp without Schächte', (await gql(deleteTyp, { id: newTyp.id })).deleteSchachtTyp === true);
 check('schachtTyp of a deleted type', (await gql('query($id:Int!){ schachtTyp(typId:$id) { id } }', { id: newTyp.id })).schachtTyp === null);
+
+// ---------------------------------------------------------------- Netbox sync
+// The backend's worker syncs the plan active in Netbox after every change that affects it
+// (docs/netbox-sync.md); run-realdb.sh points it at the mock's Netbox without circuits, which
+// counts the queries: the plans here have no connectors, so a run only lists the circuits.
+const netboxSync = async () => (await gql('{ netboxSync { state pending lastRun retryAt activePlan { id } issues { __typename } error { message } } }')).netboxSync;
+const netboxQueries = async () => (await (await fetch('http://localhost:8099/netbox/queries')).json()).count;
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+/** The state once a run after `lastRun` is done (at most 20 s), else the last one */
+async function nextRun(lastRun) {
+  let sync;
+  for (let i = 0; i < 40; i++) {
+    sync = await netboxSync();
+    if (sync.lastRun !== lastRun && !sync.pending) return sync;
+    await sleep(500);
+  }
+  return sync;
+}
+let sync = await nextRun(null);
+check('the sync ran after the changes above', sync.state === 'SYNCHRON' && sync.issues.length === 0 && sync.error === null, JSON.stringify(sync));
+check('the baseline is active in Netbox', sync.activePlan?.id === 0);
+const netboxPlan = await planId('Netbox-Test');
+let queries = await netboxQueries();
+await gql('mutation($pl:Int!,$c:[PortUsageInput!]!){ setPortUsage(planId:$pl, changes:$c) }', { pl: netboxPlan, c: [attach(ports[4][4], 'BACK', cables.K4, 5)] });
+await gql('mutation($pl:Int!){ updatePlan(planId:$pl, name:"Netbox-Test") { id } }', { pl: netboxPlan });
+await sleep(2000);
+sync = await netboxSync();
+check('changing a plan not active in Netbox starts no sync', !sync.pending && (await netboxQueries()) === queries, JSON.stringify(sync));
+const activated = await gql('mutation($pl:Int!){ setNetboxActivePlan(planId:$pl) { id netboxActive } }', { pl: netboxPlan });
+sync = await nextRun(sync.lastRun);
+const active = (await gql('{ listPlan { id netboxActive } }')).listPlan.filter((plan) => plan.netboxActive).map((plan) => plan.id);
+check('setNetboxActivePlan makes only this plan active', activated.setNetboxActivePlan.netboxActive && JSON.stringify(active) === JSON.stringify([netboxPlan]), JSON.stringify(active));
+check('activating a plan syncs it', sync.activePlan?.id === netboxPlan && (await netboxQueries()) > queries, JSON.stringify(sync));
+queries = await netboxQueries();
+await gql('mutation($pl:Int!,$c:[PortUsageInput!]!){ setPortUsage(planId:$pl, changes:$c) }', { pl: netboxPlan, c: [attach(ports[4][5], 'BACK', cables.K4, 6)] });
+sync = await nextRun(sync.lastRun);
+check('changing the active plan syncs it', (await netboxQueries()) > queries, JSON.stringify(sync));
+queries = await netboxQueries();
+await gql('mutation($id:Int!){ updateCable(cableId:$id, fibers:{bundleCount:1,fiberCount:24}){ id } }', { id: cables.K4 });
+sync = await nextRun(sync.lastRun);
+check('changing a cable syncs', (await netboxQueries()) > queries, JSON.stringify(sync));
+await gql('mutation($pl:Int!){ implementPlan(planId:$pl){ id } }', { pl: netboxPlan });
+sync = await nextRun(sync.lastRun);
+check('implementing the active plan makes the baseline active', sync.activePlan?.id === 0, JSON.stringify(sync));
+queries = await netboxQueries();
+await gql('mutation{ syncNetbox }');
+sync = await nextRun(sync.lastRun);
+check('syncNetbox syncs right away', sync.state === 'SYNCHRON' && (await netboxQueries()) > queries, JSON.stringify(sync));
+await refused('setNetboxActivePlan of a missing plan', 'mutation{ setNetboxActivePlan(planId:999999) { id } }', {}, { code: 'NotFound', kind: 'Plan', id: 999999 });
 
 // ---------------------------------------------------------------- Leitungskataster
 // run-realdb.sh configures lkmap (Datenlieferant CHE-123.456.789, prefix ch4711ab); the default

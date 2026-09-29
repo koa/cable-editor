@@ -3,7 +3,8 @@
 # builds the frontend (which also generates the GraphQL schemas) and serves it on
 # http://localhost:8099. Screenshots: `node local/mock/screenshot.mjs /plan/0/cabinet/1/overview`
 # (needs a Playwright Chromium: `npx playwright install chromium`). MOCK_ROLE=READER, PLANNER or
-# ADMIN (default) sets the role of the mock user, DENIED refuses the login.
+# ADMIN (default) sets the role of the mock user, DENIED refuses the login. MOCK_NETBOX=OK
+# (default), ISSUES or FEHLER sets the result of the last Netbox sync, anything else: none yet.
 set -e
 cd "$(dirname "$0")"
 npm install --no-fund --no-audit

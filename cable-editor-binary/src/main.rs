@@ -25,6 +25,7 @@ use cable_editor_backend::{
         context::UserInfo,
         loader::DbLoader,
     },
+    netbox::auto_sync,
     sql_query,
 };
 use cable_editor_common::UserError;
@@ -38,7 +39,7 @@ use rust_embed::RustEmbed;
 use serde::Deserialize;
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use thiserror::Error;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Notify};
 use tracing_actix_web::TracingLogger;
 
 #[derive(RustEmbed)]
@@ -46,13 +47,12 @@ use tracing_actix_web::TracingLogger;
 struct Assets;
 
 async fn static_handler(req: HttpRequest) -> impl Responder {
-    // Den Pfad aus der URL extrahieren (catch-all)
+    // The path from the URL (catch-all)
     let path = match req.match_info().query("filename") {
         "" => "index.html",
         path => path,
     };
-    // Fallback für Yew (SPA): Wenn eine Route nicht gefunden wird,
-    // liefere die index.html aus, damit der Yew-Router übernehmen kann.
+    // SPA fallback: a path without a file gets index.html, the Yew router takes over
     let Some((path, content)) = Assets::get(path)
         .map(|content| (path, content))
         .or_else(|| Assets::get("index.html").map(|content| ("index.html", content)))
@@ -158,8 +158,10 @@ async fn graphql(
 
     let mut final_conn = shared_conn.lock().await;
     if response.errors.is_empty() {
-        if let Err(e) = sql_query("COMMIT").execute(&mut *final_conn).await {
-            log::error!("Failed to commit transaction: {}", e);
+        match sql_query("COMMIT").execute(&mut *final_conn).await {
+            // The change may have made a Netbox sync pending (netbox::auto_sync)
+            Ok(_) => context.netbox_changed.notify_one(),
+            Err(e) => log::error!("Failed to commit transaction: {}", e),
         }
     } else {
         if let Err(e) = sql_query("ROLLBACK").execute(&mut *final_conn).await {
@@ -257,6 +259,8 @@ struct ApplicationContext {
     schema: AuthenticatedGraphqlSchema,
     anonymous_schema: AnonymousGraphqlSchema,
     pool: DB,
+    /// Wakes the automatic Netbox sync
+    netbox_changed: Arc<Notify>,
 }
 
 #[derive(Error, Debug)]
@@ -333,11 +337,18 @@ async fn main() -> Result<(), BackendError> {
         },
     };
 
+    let netbox_changed = Arc::new(Notify::new());
+    actix_web::rt::spawn(auto_sync::run(
+        connection_pool.clone(),
+        netbox_changed.clone(),
+    ));
+
     let data = Data::new(ApplicationContext {
         graphql_request_histogram,
         schema,
         anonymous_schema,
         pool: connection_pool.clone(),
+        netbox_changed,
     });
     let main_server = HttpServer::new(move || {
         App::new()

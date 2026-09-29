@@ -15,8 +15,8 @@ Frontend an einem Ort.
   Meldung, die Transaktion der Anfrage wird zurückgerollt. → **Fehlerstruktur** `UserError`.
 - **Bericht**: Probleme sind das Ergebnis einer Prüfung, meist mehrere, mit Verweisen auf
   Objekte, oder das UI reagiert anders als mit einer Meldung. → **expliziter Typ im Schema**,
-  z. B. `SyncIssue` von `syncPlanToNetbox` (Ports als Objekte, alle Probleme auf einmal, vor dem
-  Schreiben) oder `DuctLineCheck.needsConfirmation` (führt zur Checkbox „Trotzdem verwenden“).
+  z. B. `SyncIssue` des Netbox-Syncs (`netboxSync.issues`; Ports als Objekte, alle Probleme auf
+  einmal, vor dem Schreiben) oder `DuctLineCheck.needsConfirmation` (führt zur Checkbox „Trotzdem verwenden“).
 
 Die Abwägung: explizite Antworten im Schema sind als Vertrag sichtbarer, brauchen aber pro
 Mutation eigene Union-Typen, und eine Anfrage mit Fehler als Antwort wird committet (siehe

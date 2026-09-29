@@ -85,6 +85,8 @@ spec:
               value: {{ .Values.config.netboxProviderId | quote }}
             - name: APP__NETBOX__TYPE_ID
               value: {{ .Values.config.netboxTypeId | quote }}
+            - name: APP__NETBOX__SYNC_INTERVAL_H
+              value: {{ .Values.config.netboxSyncIntervalHours | quote }}
             {{- with .Values.config.lkmap }}
             {{- if .datenlieferantUid }}
             - name: APP__LKMAP__DATENLIEFERANT_UID

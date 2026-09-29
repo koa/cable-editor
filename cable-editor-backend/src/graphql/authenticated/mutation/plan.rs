@@ -1,4 +1,5 @@
-//! Plans: creating, renaming, implementing (implement.rs) and syncing them to NetBox (sync.rs).
+//! Plans: creating, renaming, implementing (implement.rs) and choosing the one Netbox shows
+//! (synced by the backend's worker, `netbox::auto_sync`).
 
 use crate::graphql::error::{ApiError, ApiResult};
 use crate::{
@@ -6,15 +7,13 @@ use crate::{
         entity::plan::{InsertPlan, Plan},
         schema,
     },
-    graphql::authenticated::{
-        self,
-        mutation::sync::{SyncIssue, sync_plan_to_netbox},
-    },
+    graphql::authenticated,
     graphql::authorization::{Role, RoleGuard},
 };
 use async_graphql::{Context, InputObject, Object};
-use cable_editor_common::UserError;
-use diesel::{ExpressionMethods, HasQuery, QueryDsl};
+use cable_editor_common::{ObjectKind, UserError};
+use chrono::{DateTime, Utc};
+use diesel::{ExpressionMethods, HasQuery, OptionalExtension, QueryDsl};
 use diesel_async::{AsyncConnection, RunQueryDsl};
 
 #[derive(Default)]
@@ -55,13 +54,46 @@ impl PlanMutation {
     async fn implement_plan(&self, ctx: &Context<'_>, plan_id: i32) -> ApiResult<Plan> {
         super::implement::implement_plan(plan_id, authenticated::get_connection(ctx).await?).await
     }
+    /// Syncs Netbox right away (the worker runs it after the request), e.g. after a change made
+    /// in Netbox by hand, also without waiting after a failed run.
     #[graphql(guard = "RoleGuard(Role::Admin)")]
-    async fn sync_plan_to_netbox(
-        &self,
-        ctx: &Context<'_>,
-        plan_id: i32,
-    ) -> ApiResult<Vec<SyncIssue>> {
-        sync_plan_to_netbox(plan_id, authenticated::get_connection(ctx).await?).await
+    async fn sync_netbox(&self, ctx: &Context<'_>) -> ApiResult<bool> {
+        let mut connection = authenticated::get_connection(ctx).await?;
+        diesel::insert_into(schema::netbox_sync_anstoss::table)
+            .default_values()
+            .execute(&mut connection)
+            .await?;
+        // Also after a failure, e.g. once Netbox is reachable again
+        diesel::update(schema::netbox_sync::table)
+            .set(schema::netbox_sync::naechster_versuch.eq(None::<DateTime<Utc>>))
+            .execute(&mut connection)
+            .await?;
+        Ok(true)
+    }
+    /// Netbox shows the circuits of this plan from now on, synced automatically (see
+    /// docs/netbox-sync.md); the plan active so far no longer.
+    #[graphql(guard = "RoleGuard(Role::Admin)")]
+    async fn set_netbox_active_plan(&self, ctx: &Context<'_>, plan_id: i32) -> ApiResult<Plan> {
+        let mut connection = authenticated::get_connection(ctx).await?;
+        // At most one plan is active (unique index), so the other one first
+        diesel::update(schema::plan::table)
+            .filter(schema::plan::netbox_active)
+            .filter(schema::plan::id.ne(plan_id))
+            .set(schema::plan::netbox_active.eq(false))
+            .execute(&mut connection)
+            .await?;
+        diesel::update(schema::plan::table.find(plan_id))
+            .set(schema::plan::netbox_active.eq(true))
+            .get_result(&mut connection)
+            .await
+            .optional()?
+            .ok_or_else(|| {
+                UserError::NotFound {
+                    kind: ObjectKind::Plan,
+                    id: plan_id.into(),
+                }
+                .into()
+            })
     }
 }
 

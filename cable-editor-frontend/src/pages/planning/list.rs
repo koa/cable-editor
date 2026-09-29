@@ -7,9 +7,10 @@ use crate::{
     util::{get_backdrop, get_credentials, get_role, toast_error},
 };
 use patternfly_yew::prelude::{
-    ActionGroup, Backdrop, Bullseye, Button, ButtonVariant, Cell, CellContext, ExpansionState,
-    Form, FormGroup, LabelIcon, MemoizedTableModel, Modal, PopoverBody, Spinner, Table,
-    TableColumn, TableEntryRenderer, TableGridMode, TableHeader, TableMode, TextInput,
+    ActionGroup, Backdrop, Bullseye, Button, ButtonVariant, Cell, CellContext, Color,
+    ExpansionState, Form, FormGroup, Label, LabelIcon, MemoizedTableModel, Modal, PopoverBody,
+    Spinner, Table, TableColumn, TableEntryRenderer, TableGridMode, TableHeader, TableMode,
+    TextInput,
 };
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use yew::{
@@ -195,14 +196,21 @@ impl TableEntryRenderer<Columns> for PlanListEntry {
             Columns::Name => Cell::new(
                 html!(<Link<AppRoute> to={AppRoute::Plan {plan_id: self.id,view: PlanView::ListOfCabinets}}>{self.name.as_str()}</Link<AppRoute>>),
             ),
-            Columns::Kind => Cell::new(
-                if self.is_baseline {
+            Columns::Kind => {
+                let kind = if self.is_baseline {
                     "Ist-Zustand"
                 } else {
                     "Planung"
-                }
-                .into_prop_value(),
-            ),
+                };
+                Cell::new(html! {
+                    <>
+                        {kind}
+                        if self.netbox_active {
+                            {" "}<Label label="In Netbox aktiv" compact=true color={Color::Blue}/>
+                        }
+                    </>
+                })
+            }
         }
     }
 }

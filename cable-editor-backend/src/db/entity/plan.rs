@@ -21,6 +21,8 @@ use diesel_async::RunQueryDsl;
 pub struct Plan {
     pub id: i32,
     pub name: String,
+    /// Netbox shows the circuits of this plan (at most one, see docs/netbox-sync.md)
+    pub netbox_active: bool,
 }
 
 /// The plan holding the current state. Every other plan holds the changes it plans on top of
@@ -52,6 +54,10 @@ impl Plan {
     #[graphql(name = "isBaseline")]
     async fn graphql_is_baseline(&self) -> bool {
         self.is_baseline()
+    }
+    /// Whether Netbox shows the circuits of this plan (synced automatically)
+    async fn netbox_active(&self) -> bool {
+        self.netbox_active
     }
 
     async fn root_panels(&self, ctx: &Context<'_>) -> ApiResult<Vec<PlannedPanel>> {

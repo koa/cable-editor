@@ -17,6 +17,9 @@ const PORT = Number(process.env.MOCK_PORT ?? 8099);
 // Role of the mock user (READER, PLANNER or ADMIN), to check what the frontend hides; DENIED
 // refuses the login like a provider that doesn't allow the user's groups
 const ROLE = process.env.MOCK_ROLE ?? 'ADMIN';
+// Result of the last Netbox sync (docs/netbox-sync.md): OK (default), ISSUES, FEHLER or none
+// (NEU, no run yet)
+const NETBOX = process.env.MOCK_NETBOX ?? 'OK';
 const ORIGIN = `http://localhost:${PORT}`;
 const ISSUER = `${ORIGIN}/realms/cable`;
 const CLIENT_ID = 'cable-editor';
@@ -155,9 +158,9 @@ const panelRows = [
 ];
 const plans = [
   // Plan 0 is the baseline (current state); implemented plans are deleted
-  { id: 0, name: 'Ist-Zustand' },
-  { id: 1, name: 'Erschliessung Gewerbe Nord' },
-  { id: 2, name: 'Umbau Dorfplatz 2025' },
+  { id: 0, name: 'Ist-Zustand', netboxActive: true },
+  { id: 1, name: 'Erschliessung Gewerbe Nord', netboxActive: false },
+  { id: 2, name: 'Umbau Dorfplatz 2025', netboxActive: false },
 ];
 const devices = [{ id: 501, name: 'ODF-SCH101-1', deviceType: 'ODF 144', locationName: 'SCH 101', ports: 24 }];
 
@@ -369,6 +372,33 @@ const plan = (id) => {
     usage: () => (planUsage[id] || []).map((u) => portUsage(id, u[0], u[1])),
   };
 };
+// The last run of the automatic Netbox sync, as MOCK_NETBOX says
+const netboxSync = () => {
+  const connectors = ports.filter((p) => p.portType === 'CONNECTOR');
+  const rearPort = (name) => ({ id: 9000, name, deviceName: 'ODF-SCH101-1', locationName: 'SCH 101' });
+  const issues = NETBOX !== 'ISSUES' ? [] : [
+    { __typename: 'MissingNetboxReferenceError', port: () => panelPort(connectors[0].id) },
+    { __typename: 'RoutingLoopError', port: () => panelPort(connectors[1].id) },
+    {
+      __typename: 'AsymmetricDuplexError', startNetboxPort: rearPort('RP 1'),
+      connections: [1, 2].map((i) => ({
+        targetNetboxPort: rearPort(`RP ${i + 1}`),
+        pairs: [{ sourcePort: () => panelPort(connectors[2].id), targetPort: () => panelPort(connectors[2 + i].id) }],
+      })),
+    },
+  ];
+  const error = NETBOX !== 'FEHLER' ? null : {
+    message: 'error sending request for url (http://netbox.local/graphql/)',
+    extensions: JSON.stringify({ origin: { library: 'cynic (Netbox)', location: 'cable-editor-backend/src/netbox/fetch.rs:117', id: '1a0e8c917ee0a' } }),
+  };
+  const state = { OK: 'SYNCHRON', ISSUES: 'NICHT_SYNCHRON', FEHLER: 'FEHLER' }[NETBOX] ?? 'AUSSTEHEND';
+  return {
+    state, pending: NETBOX === 'FEHLER',
+    lastRun: state === 'AUSSTEHEND' ? null : '2026-09-28T06:00:00+00:00',
+    retryAt: NETBOX === 'FEHLER' ? '2026-09-28T06:02:00+00:00' : null,
+    activePlan: () => plan(plans.find((p) => p.netboxActive)?.id ?? 0), issues, error,
+  };
+};
 const portUsage = (planId, portId, side) => {
   const u = usageRow(planId, portId, side);
   if (!u) return null;
@@ -485,6 +515,7 @@ const root = {
   },
   listOwner: () => ownerRows.map((o) => owner(o.id)).sort((a, b) => a.name.localeCompare(b.name)),
   listPlan: () => plans.map((p) => plan(p.id)),
+  netboxSync: () => netboxSync(),
   plan: ({ planId }) => plan(planId),
   panel: ({ panelId }) => panel(panelId),
   netboxDevices: () => devices.map((d) => device(d.id)),
@@ -494,7 +525,12 @@ const root = {
   createPanel: () => true, updatePanels: () => true, createPlan: () => true,
   updateCabinetPanels: () => true, updatePanelPorts: () => true, setPortUsage: () => true,
   updatePlan: ({ planId }) => plan(planId), implementPlan: ({ planId }) => plan(planId),
-  syncPlanToNetbox: () => [],
+  setNetboxActivePlan: ({ planId }) => {
+    if (!plan(planId)) refuse('NotFound', { kind: 'Plan', id: planId });
+    for (const p of plans) p.netboxActive = p.id === planId;
+    return plan(planId);
+  },
+  syncNetbox: () => true,
   createSchacht: ({ schacht: input }) => {
     const id = Math.max(...schachtRows.map((r) => r[0])) + 1;
     const values = schachtFromInput(input);
@@ -595,6 +631,7 @@ const body = (req) => new Promise((ok) => { let b = ''; req.on('data', (c) => (b
 const json = (res, obj, status = 200) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(obj)); };
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.wasm': 'application/wasm', '.css': 'text/css', '.woff2': 'font/woff2', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.mjs': 'text/javascript' };
 
+let netboxQueries = 0;
 http.createServer(async (req, res) => {
   const url = new URL(req.url, ORIGIN);
   const p = url.pathname;
@@ -645,6 +682,13 @@ http.createServer(async (req, res) => {
       return json(res, { access_token: await idToken(), token_type: 'Bearer', expires_in: 7200, id_token: await idToken(nonce) });
     }
     if (p === '/realms/cable/userinfo') return json(res, { sub: 'user-1', preferred_username: 'monteur' });
+    // A Netbox without circuits for the real backend's automatic sync (local/realdb): enough for a
+    // plan without connectors, whose sync only lists the circuits to delete the stale ones
+    if (p === '/netbox/graphql/') {
+      netboxQueries++;
+      return json(res, { data: { circuit_list: [] } });
+    }
+    if (p === '/netbox/queries') return json(res, { count: netboxQueries });
     // static, SPA fallback
     let file = path.join(DIST, decodeURIComponent(p));
     if (!file.startsWith(DIST) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(DIST, 'index.html');

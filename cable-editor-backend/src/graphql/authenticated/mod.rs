@@ -1,5 +1,6 @@
 pub mod lkmap;
 pub mod mutation;
+pub mod netbox_sync;
 pub mod planned;
 
 use crate::graphql::error::ApiResult;
@@ -108,6 +109,10 @@ impl Query {
             .first(&mut connection)
             .await
             .optional()?)
+    }
+    /// Where the automatic sync of the plan active in Netbox stands
+    async fn netbox_sync(&self, ctx: &Context<'_>) -> ApiResult<netbox_sync::NetboxSync> {
+        netbox_sync::NetboxSync::load(ctx).await
     }
     async fn list_plan(&self, ctx: &Context<'_>) -> ApiResult<Vec<Plan>> {
         let mut connection = get_connection(ctx).await?;

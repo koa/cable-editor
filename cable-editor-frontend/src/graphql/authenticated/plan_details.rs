@@ -25,6 +25,8 @@ pub struct PlanDetails {
     pub id: i32,
     pub name: String,
     pub is_baseline: bool,
+    /// Netbox shows its circuits (synced automatically)
+    pub netbox_active: bool,
     pub usage: Vec<PortUsage>,
 }
 
@@ -75,7 +77,7 @@ pub struct Schacht {
     pub name: String,
 }
 
-// --- Mutations für EditPlan ---
+// --- Mutations of EditPlan ---
 
 #[derive(cynic::QueryVariables)]
 pub struct UpdatePlanVariables {
@@ -91,15 +93,22 @@ pub struct UpdatePlanMutation {
 }
 
 #[derive(cynic::QueryVariables)]
-pub struct ImplementPlanVariables {
+pub struct PlanIdVariables {
     pub plan_id: i32,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
-#[cynic(graphql_type = "Mutation", variables = "ImplementPlanVariables")]
+#[cynic(graphql_type = "Mutation", variables = "PlanIdVariables")]
 pub struct ImplementPlanMutation {
     #[arguments(planId: $plan_id)]
     pub implement_plan: PlanDetails,
+}
+
+#[derive(cynic::QueryFragment, Debug)]
+#[cynic(graphql_type = "Mutation", variables = "PlanIdVariables")]
+pub struct SetNetboxActivePlanMutation {
+    #[arguments(planId: $plan_id)]
+    pub set_netbox_active_plan: PlanDetails,
 }
 
 impl PlanDetails {
@@ -131,9 +140,21 @@ impl PlanDetails {
         plan_id: i32,
     ) -> Result<PlanDetails, FrontendError> {
         Ok(
-            mutate::<ImplementPlanMutation, _>(ImplementPlanVariables { plan_id }, credentials)
+            mutate::<ImplementPlanMutation, _>(PlanIdVariables { plan_id }, credentials)
                 .await?
                 .implement_plan,
+        )
+    }
+
+    /// Netbox shows the circuits of this plan from now on
+    pub async fn set_netbox_active(
+        credentials: Option<&OAuth2Context>,
+        plan_id: i32,
+    ) -> Result<PlanDetails, FrontendError> {
+        Ok(
+            mutate::<SetNetboxActivePlanMutation, _>(PlanIdVariables { plan_id }, credentials)
+                .await?
+                .set_netbox_active_plan,
         )
     }
 }

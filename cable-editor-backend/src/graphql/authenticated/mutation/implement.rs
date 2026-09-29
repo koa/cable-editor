@@ -91,6 +91,13 @@ pub async fn implement_plan(
             diesel::delete(schema::plan::table.filter(schema::plan::id.eq(plan_id)))
                 .execute(conn)
                 .await?;
+            // Netbox showed this plan, which the baseline now is
+            if plan.netbox_active {
+                diesel::update(schema::plan::table.find(BASELINE_PLAN_ID))
+                    .set(schema::plan::netbox_active.eq(true))
+                    .execute(conn)
+                    .await?;
+            }
             Ok(plan)
         })
         .await

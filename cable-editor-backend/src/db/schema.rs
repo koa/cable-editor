@@ -94,6 +94,34 @@ diesel::table! {
         id -> Int4,
         #[max_length = 50]
         name -> Varchar,
+        netbox_active -> Bool,
+    }
+}
+
+diesel::table! {
+    netbox_sync_anstoss (id) {
+        id -> Int8,
+        txid -> Int8,
+        erstellt -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    netbox_sync (id) {
+        id -> Bool,
+        letzter_lauf -> Nullable<Timestamptz>,
+        #[max_length = 10]
+        ergebnis -> Nullable<Varchar>,
+        fehler -> Nullable<Jsonb>,
+        fehlversuche -> Int4,
+        naechster_versuch -> Nullable<Timestamptz>,
+    }
+}
+
+diesel::table! {
+    netbox_sync_issue (id) {
+        id -> Int4,
+        daten -> Jsonb,
     }
 }
 
@@ -200,6 +228,9 @@ diesel::allow_tables_to_appear_in_same_query!(
     kabel,
     kabel_trasse,
     lk_lieferung,
+    netbox_sync,
+    netbox_sync_anstoss,
+    netbox_sync_issue,
     panel,
     panel_port,
     plan,

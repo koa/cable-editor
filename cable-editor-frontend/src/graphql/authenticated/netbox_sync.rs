@@ -1,20 +1,93 @@
-use crate::graphql::authenticated::{write_panel_path, write_port_label};
+use crate::graphql::authenticated::{DateTime, write_panel_path, write_port_label};
 use crate::{
     error::FrontendError,
-    graphql::{authenticated::schema, mutate},
+    graphql::{authenticated::schema, mutate, query},
 };
 use yew_oauth2::context::OAuth2Context;
 
-#[derive(cynic::QueryVariables)]
-pub struct SyncNetboxVariables {
-    pub plan_id: i32,
+/// Where the automatic sync of the plan active in Netbox stands (see docs/netbox-sync.md)
+#[derive(cynic::Enum, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NetboxSyncState {
+    Synchron,
+    Ausstehend,
+    NichtSynchron,
+    Fehler,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
-#[cynic(graphql_type = "Mutation", variables = SyncNetboxVariables)]
-pub struct SyncNetbox {
-    #[arguments(planId: $plan_id)]
-    pub sync_plan_to_netbox: Vec<SyncIssue>,
+#[cynic(graphql_type = "Query")]
+struct NetboxStatusQuery {
+    netbox_sync: NetboxStatus,
+}
+
+/// What everyone sees: whether Netbox is in sync
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
+#[cynic(graphql_type = "NetboxSync")]
+pub struct NetboxStatus {
+    pub state: NetboxSyncState,
+}
+
+impl NetboxStatus {
+    pub async fn fetch(credentials: Option<&OAuth2Context>) -> Result<Self, FrontendError> {
+        Ok(query::<NetboxStatusQuery, _>((), credentials)
+            .await?
+            .netbox_sync)
+    }
+}
+
+#[derive(cynic::QueryFragment, Debug)]
+#[cynic(graphql_type = "Query")]
+struct NetboxSyncQuery {
+    netbox_sync: NetboxSync,
+}
+
+/// The last run with its issues and error (admins)
+#[derive(cynic::QueryFragment, Debug)]
+pub struct NetboxSync {
+    pub state: NetboxSyncState,
+    /// Something changed that the last run didn't sync
+    pub pending: bool,
+    pub last_run: Option<DateTime>,
+    /// After a failed run: when it is tried again
+    pub retry_at: Option<DateTime>,
+    pub active_plan: Option<ActivePlan>,
+    pub issues: Vec<SyncIssue>,
+    pub error: Option<NetboxSyncError>,
+}
+
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
+#[cynic(graphql_type = "Plan")]
+pub struct ActivePlan {
+    pub id: i32,
+    pub name: String,
+}
+
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
+pub struct NetboxSyncError {
+    pub message: String,
+    /// The extensions of the GraphQL error the run ended with, as JSON
+    pub extensions: Option<String>,
+}
+
+impl NetboxSync {
+    pub async fn fetch(credentials: Option<&OAuth2Context>) -> Result<Self, FrontendError> {
+        Ok(query::<NetboxSyncQuery, _>((), credentials)
+            .await?
+            .netbox_sync)
+    }
+
+    /// Runs the sync right away (the backend's worker, after this request)
+    pub async fn start(credentials: Option<&OAuth2Context>) -> Result<(), FrontendError> {
+        mutate::<SyncNetboxMutation, _>((), credentials).await?;
+        Ok(())
+    }
+}
+
+#[derive(cynic::QueryFragment, Debug)]
+#[cynic(graphql_type = "Mutation")]
+struct SyncNetboxMutation {
+    #[allow(dead_code)]
+    sync_netbox: bool,
 }
 
 #[derive(cynic::InlineFragments, Debug)]
@@ -95,26 +168,18 @@ pub struct AsymmetricDuplexError {
     pub start_netbox_port: RearPort,
     pub connections: Vec<AsymetricTargetConnectionEntry>,
 }
+/// A Netbox rear port as it was when the issue was found
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
-#[cynic(graphql_type = "DeviceWithRearPorts")]
-pub struct NetboxDevice {
-    pub name: Option<String>,
-    pub location_name: Option<String>,
-}
-
-#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
+#[cynic(graphql_type = "NetboxPortRef")]
 pub struct RearPort {
     pub name: String,
-    pub device: NetboxDevice,
+    pub device_name: Option<String>,
+    pub location_name: Option<String>,
 }
 impl RearPort {
     pub fn display_name(&self) -> String {
-        let location = self
-            .device
-            .location_name
-            .as_deref()
-            .unwrap_or("<kein name>");
-        let device = self.device.name.as_deref().unwrap_or("<kein name>");
+        let location = self.location_name.as_deref().unwrap_or("<kein name>");
+        let device = self.device_name.as_deref().unwrap_or("<kein name>");
         format!("{}, {}, {}", location, device, self.name)
     }
 }
@@ -159,17 +224,4 @@ pub struct RoutingLoopError {
 #[cynic(graphql_type = "InvalidTargetReferenceError")]
 pub struct InvalidTargetReferenceError {
     pub port: PanelPortInfo,
-}
-
-impl SyncNetbox {
-    pub async fn sync_netbox(
-        credentials: Option<&OAuth2Context>,
-        plan_id: i32,
-    ) -> Result<Vec<SyncIssue>, FrontendError> {
-        Ok(
-            mutate::<SyncNetbox, _>(SyncNetboxVariables { plan_id }, credentials)
-                .await?
-                .sync_plan_to_netbox,
-        )
-    }
 }

@@ -5,6 +5,7 @@ pub mod duct;
 pub mod list_of_cables;
 pub mod lkmap;
 pub mod map;
+pub mod netbox;
 pub mod owner;
 pub mod panel;
 pub mod planning;

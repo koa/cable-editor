@@ -1,0 +1,14 @@
+drop trigger netbox_sync on plan;
+drop trigger netbox_sync on schacht;
+drop trigger netbox_sync on trasse;
+drop trigger netbox_sync on kabel_trasse;
+drop trigger netbox_sync on kabel;
+drop trigger netbox_sync on panel;
+drop trigger netbox_sync on panel_port;
+drop trigger netbox_sync on port_usage;
+drop function netbox_sync_port_usage();
+drop function netbox_sync_anstossen();
+drop function netbox_sync_anstossen_jetzt();
+drop table netbox_sync_issue;
+drop table netbox_sync;
+drop table netbox_sync_anstoss;

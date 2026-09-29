@@ -2,7 +2,6 @@ use crate::components::page_layout::{PageLayout, object_title};
 use crate::{
     components::{
         links::{CableLink, PanelLink, SchachtLink},
-        plan::netbox_sync::NetboxSyncModal,
         table::ListModel,
     },
     error::FrontendError,
@@ -17,9 +16,9 @@ use crate::{
 };
 use patternfly_yew::prelude::{
     ActionGroup, Alert, AlertType, Backdrop, Bullseye, Button, ButtonVariant, Cell, CellContext,
-    ExpansionState, Form, FormGroup, Level, MemoizedTableModel, Modal, ModalVariant, Spinner,
-    Table, TableColumn, TableEntryRenderer, TableGridMode, TableHeader, TableMode, TextInput,
-    Title,
+    Color, ExpansionState, Form, FormGroup, Label, Level, MemoizedTableModel, Modal, ModalVariant,
+    Spinner, Table, TableColumn, TableEntryRenderer, TableGridMode, TableHeader, TableMode,
+    TextInput, Title,
 };
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use yew::{
@@ -127,7 +126,9 @@ pub enum Msg {
     /// The plan is merged into the baseline and deleted
     Implemented,
     Error(FrontendError),
-    SyncNetbox,
+    AskNetboxActive,
+    SetNetboxActive,
+    NetboxActivated(PlanDetails),
 }
 
 impl Component for EditPlan {
@@ -265,22 +266,57 @@ impl Component for EditPlan {
                 self.saving = false;
                 true
             }
-            Msg::SyncNetbox => {
-                if let Some(backdrop) = get_backdrop(ctx.link())
-                    && let Some(data) = &self.details
-                {
-                    let on_close = {
+            Msg::AskNetboxActive => {
+                if let Some(backdrop) = get_backdrop(ctx.link()) {
+                    let on_confirm = {
+                        let backdrop = backdrop.clone();
+                        let scope = ctx.link().clone();
+                        Callback::from(move |_| {
+                            backdrop.close();
+                            scope.send_message(Msg::SetNetboxActive);
+                        })
+                    };
+                    let on_cancel = {
                         let backdrop = backdrop.clone();
                         Callback::from(move |_| backdrop.close())
                     };
-                    let plan_id = data.id;
                     backdrop.open(Backdrop::new(html! {
                         <Bullseye>
-                            <NetboxSyncModal {plan_id} {on_close}/>
+                            <Modal
+                                title="In Netbox aktivieren"
+                                variant={ModalVariant::Small}
+                                footer={html!{
+                                    <>
+                                        <Button label="Aktivieren" variant={ButtonVariant::Danger} onclick={on_confirm}/>
+                                        <Button label="Abbrechen" variant={ButtonVariant::Link} onclick={on_cancel}/>
+                                    </>
+                                }}>
+                                <p>{"Netbox zeigt danach die Circuits dieses Plans, statt die des bisher aktiven. Sie werden automatisch synchronisiert; findet der Sync Probleme, bleibt Netbox unverändert."}</p>
+                            </Modal>
                         </Bullseye>
                     }));
                 }
                 false
+            }
+            Msg::SetNetboxActive => {
+                self.saving = true;
+                let plan_id = ctx.props().plan_id;
+                let scope = ctx.link().clone();
+                spawn_local(async move {
+                    let credentials = get_credentials(&scope);
+                    scope.send_message(
+                        PlanDetails::set_netbox_active(credentials.as_ref(), plan_id)
+                            .await
+                            .map_or_else(Msg::Error, Msg::NetboxActivated),
+                    );
+                });
+                true
+            }
+            Msg::NetboxActivated(data) => {
+                self.saving = false;
+                self.details = Some(data);
+                toast_success(ctx.link(), "In Netbox aktiviert");
+                true
             }
         }
     }
@@ -373,7 +409,6 @@ impl EditPlan {
         } else {
             "Offene Planung"
         };
-        let sync_netbox = ctx.link().callback(|_| Msg::SyncNetbox);
 
         html! {
             <div class="pf-v6-c-panel">
@@ -403,11 +438,26 @@ impl EditPlan {
                                     />
                                 </div>
                             </FormGroup>
-                            if role >= Role::Admin {
-                                <ActionGroup>
-                                    <Button variant={ButtonVariant::Secondary} label="Sync Netbox" onclick={sync_netbox}/>
-                                </ActionGroup>
-                            }
+                            <FormGroup label="Netbox">
+                                if details.netbox_active {
+                                    <div>
+                                        <Label label="In Netbox aktiv" compact=true color={Color::Blue}/>
+                                        {" Netbox zeigt die Circuits dieses Plans."}
+                                    </div>
+                                } else {
+                                    <div>{"Netbox zeigt die Circuits eines anderen Plans."}</div>
+                                    if role >= Role::Admin {
+                                        <div class="pf-v6-u-mt-sm">
+                                            <Button
+                                                variant={ButtonVariant::Secondary}
+                                                label="In Netbox aktivieren"
+                                                disabled={self.saving}
+                                                onclick={ctx.link().callback(|_| Msg::AskNetboxActive)}
+                                            />
+                                        </div>
+                                    }
+                                }
+                            </FormGroup>
                         </Form>
 
                         if is_open {

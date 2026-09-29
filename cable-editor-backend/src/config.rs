@@ -1,7 +1,7 @@
 use cable_editor_common::limits::is_uid;
 use config::{Config, ConfigError, Environment, File};
 use serde::Deserialize;
-use std::{net::IpAddr, sync::LazyLock};
+use std::{net::IpAddr, sync::LazyLock, time::Duration};
 
 #[derive(Deserialize)]
 pub struct Settings {
@@ -71,6 +71,7 @@ pub struct NetboxSettings {
     token: String,
     provider_id: i64,
     type_id: i64,
+    sync_interval_h: Option<f64>,
 }
 
 impl NetboxSettings {
@@ -86,6 +87,12 @@ impl NetboxSettings {
     }
     pub fn type_id(&self) -> i64 {
         self.type_id
+    }
+    /// The automatic sync runs at least this often (`sync_interval_h`, default 4 hours), so it
+    /// also undoes changes made in Netbox by hand.
+    pub fn sync_interval(&self) -> Duration {
+        let hours = self.sync_interval_h.filter(|h| *h > 0.0).unwrap_or(4.0);
+        Duration::from_secs_f64(hours * 3600.0)
     }
 }
 

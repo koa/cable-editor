@@ -15,6 +15,7 @@ use reqwest::header::{AUTHORIZATION, HeaderMap};
 use std::{collections::BTreeMap, sync::OnceLock};
 use tokio::sync::Semaphore;
 
+pub mod auto_sync;
 pub mod fetch;
 #[cynic::schema("netbox")]
 mod schema {}

@@ -15,6 +15,7 @@ pub struct PlanListEntry {
     pub id: i32,
     pub name: String,
     pub is_baseline: bool,
+    pub netbox_active: bool,
 }
 
 /// The plan holding the current state (`Plan.isBaseline`); the others plan changes to it.

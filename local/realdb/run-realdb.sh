@@ -64,7 +64,8 @@ oauth:
   planner_groups: "planners"
   admin_groups: "admins"
 netbox:
-  url: http://127.0.0.1:1/
+  # The mock's Netbox without circuits, for the automatic sync
+  url: http://localhost:8099/netbox/
   token: none
   provider_id: 1
   type_id: 1

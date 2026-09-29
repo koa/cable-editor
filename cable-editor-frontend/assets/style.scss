@@ -734,6 +734,41 @@ body {
   color: var(--pf-t--global--icon--color--status--danger--default);
 }
 
+// components/netbox.rs: the hint in the breadcrumb bar
+.netbox-hint__icon--warning {
+  color: var(--pf-t--global--icon--color--status--warning--default);
+}
+
+.netbox-hint__icon--danger {
+  color: var(--pf-t--global--icon--color--status--danger--default);
+}
+
+.netbox-hint__message {
+  padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
+  max-width: 24rem;
+  overflow-wrap: anywhere;
+  font-size: var(--pf-t--global--font--size--body--sm);
+
+  > * + * {
+    margin-block-start: var(--pf-t--global--spacer--xs);
+  }
+
+  ul {
+    padding-inline-start: var(--pf-t--global--spacer--md);
+    list-style: disc;
+  }
+}
+
+.netbox-issues {
+  padding-inline-start: var(--pf-t--global--spacer--lg);
+  list-style: disc;
+
+  ul {
+    padding-inline-start: var(--pf-t--global--spacer--md);
+    list-style: circle;
+  }
+}
+
 .menu-error__message {
   padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
   max-width: 24rem;
@@ -799,7 +834,8 @@ body {
   }
 
   // The icon is enough on phones, the breadcrumb needs the room
-  .user-menu__name {
+  .user-menu__name,
+  .netbox-hint__text {
     display: none;
   }
 
