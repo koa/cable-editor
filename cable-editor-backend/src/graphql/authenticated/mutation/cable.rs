@@ -12,7 +12,7 @@ use crate::{
 use async_graphql::{Context, InputObject, Object};
 use cable_editor_common::{UserError, error::PlanPorts};
 use diesel::{ExpressionMethods, OptionalExtension, QueryDsl, dsl::count_star};
-use diesel_async::{AsyncConnection, RunQueryDsl};
+use diesel_async::RunQueryDsl;
 
 #[derive(Default)]
 pub struct CableMutation;
@@ -60,47 +60,38 @@ impl CableMutation {
             faser_anz,
         };
 
-        let updated_db_cable = connection
-            .transaction(async move |conn| {
-                if let Some(ref path_ids) = path {
-                    diesel::delete(
-                        schema::kabel_trasse::table
-                            .filter(schema::kabel_trasse::kabel.eq(cable_id)),
-                    )
-                    .execute(conn)
-                    .await?;
-
-                    for (sequenz, &trasse_id) in path_ids.iter().enumerate() {
-                        diesel::insert_into(schema::kabel_trasse::table)
-                            .values((
-                                schema::kabel_trasse::kabel.eq(cable_id),
-                                schema::kabel_trasse::trasse.eq(trasse_id),
-                                schema::kabel_trasse::sequenz.eq(sequenz as i32),
-                            ))
-                            .execute(conn)
-                            .await?;
-                    }
-                }
-
-                let updated = if changeset.any() {
-                    diesel::update(schema::kabel::table.find(cable_id))
-                        .set(&changeset)
-                        .get_result::<Cable>(conn)
-                        .await
-                        .optional()?
-                } else {
-                    schema::kabel::table
-                        .find(cable_id)
-                        .first::<Cable>(conn)
-                        .await
-                        .optional()?
-                };
-
-                Ok::<Option<Cable>, diesel::result::Error>(updated)
-            })
+        if let Some(path_ids) = path {
+            diesel::delete(
+                schema::kabel_trasse::table.filter(schema::kabel_trasse::kabel.eq(cable_id)),
+            )
+            .execute(&mut connection)
             .await?;
 
-        Ok(updated_db_cable)
+            for (sequenz, trasse_id) in path_ids.into_iter().enumerate() {
+                diesel::insert_into(schema::kabel_trasse::table)
+                    .values((
+                        schema::kabel_trasse::kabel.eq(cable_id),
+                        schema::kabel_trasse::trasse.eq(trasse_id),
+                        schema::kabel_trasse::sequenz.eq(sequenz as i32),
+                    ))
+                    .execute(&mut connection)
+                    .await?;
+            }
+        }
+
+        Ok(if changeset.any() {
+            diesel::update(schema::kabel::table.find(cable_id))
+                .set(&changeset)
+                .get_result::<Cable>(&mut connection)
+                .await
+                .optional()?
+        } else {
+            schema::kabel::table
+                .find(cable_id)
+                .first::<Cable>(&mut connection)
+                .await
+                .optional()?
+        })
     }
     /// Refused while its fibers are attached to ports, in the current state or in a plan.
     #[graphql(guard = "RoleGuard(Role::Admin)")]
@@ -121,19 +112,15 @@ impl CableMutation {
                 .collect();
             return Err(UserError::CableAttached { plans }.into());
         }
-        connection
-            .transaction(async move |conn| {
-                diesel::delete(
-                    schema::kabel_trasse::table.filter(schema::kabel_trasse::kabel.eq(cable_id)),
-                )
-                .execute(conn)
-                .await?;
-                diesel::delete(schema::kabel::table.filter(schema::kabel::id.eq(cable_id)))
-                    .execute(conn)
-                    .await?;
-                Ok(true)
-            })
-            .await
+        diesel::delete(
+            schema::kabel_trasse::table.filter(schema::kabel_trasse::kabel.eq(cable_id)),
+        )
+        .execute(&mut connection)
+        .await?;
+        diesel::delete(schema::kabel::table.filter(schema::kabel::id.eq(cable_id)))
+            .execute(&mut connection)
+            .await?;
+        Ok(true)
     }
 }
 

@@ -1,7 +1,7 @@
 //! Panels, their ports and the ports' usage by fibres.
 
 use crate::db::entity::plan::BASELINE_PLAN_ID;
-use crate::graphql::error::{ApiError, ApiResult};
+use crate::graphql::error::ApiResult;
 use crate::{
     db::{
         entity::panel::{InsertPanel, InsertPanelPort, PanelPortType, PortSide, PortUsage},
@@ -17,7 +17,7 @@ use diesel::{
     AsChangeset, BoolExpressionMethods, ExpressionMethods, QueryDsl, associations::HasTable,
     dsl::max,
 };
-use diesel_async::{AsyncConnection, AsyncPgConnection, RunQueryDsl};
+use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use std::collections::HashMap;
 
 #[derive(Default)]
@@ -32,52 +32,46 @@ impl PanelMutation {
         panel: CreatePanel,
         parent_panel: Option<i32>,
     ) -> ApiResult<bool> {
-        authenticated::get_connection(ctx)
-            .await?
-            .transaction(async move |conn| {
-                let parent_order = if let Some(parent_id) = parent_panel {
-                    let max_order: Option<i32> = schema::panel::table
-                        .filter(schema::panel::parent_panel.eq(parent_id))
-                        .select(max(schema::panel::parent_order))
-                        .first(conn)
-                        .await?;
-                    Some(max_order.unwrap_or(0) + 1)
-                } else {
-                    None
-                };
-                insert_panel_tree_recursive(conn, panel, parent_panel, parent_order).await?;
-                Ok(true)
-            })
-            .await
+        let mut connection = authenticated::get_connection(ctx).await?;
+        let conn: &mut AsyncPgConnection = &mut connection;
+        let parent_order = if let Some(parent_id) = parent_panel {
+            let max_order: Option<i32> = schema::panel::table
+                .filter(schema::panel::parent_panel.eq(parent_id))
+                .select(max(schema::panel::parent_order))
+                .first(conn)
+                .await?;
+            Some(max_order.unwrap_or(0) + 1)
+        } else {
+            None
+        };
+        insert_panel_tree_recursive(conn, panel, parent_panel, parent_order).await?;
+        Ok(true)
     }
     #[graphql(guard = "RoleGuard(Role::Planner)")]
     async fn update_panels(&self, ctx: &Context<'_>, updates: Vec<PanelUpdate>) -> ApiResult<bool> {
-        authenticated::get_connection(ctx)
-            .await?
-            .transaction(async move |conn| {
-                for PanelUpdate {
-                    panel_id,
-                    name,
-                    order,
-                    parent,
-                    netbox_device_id,
-                } in updates
-                {
-                    diesel::update(schema::panel::table)
-                        .filter(schema::panel::id.eq(panel_id))
-                        .set(UpdatePanelChangeset {
-                            name: name.map(|n| n.value),
-                            parent_panel: order.map(|o| Some(o.order)),
-                            parent_order: parent.map(|p| p.parent),
-                            netbox_device_id: netbox_device_id.map(|n| n.device_id),
-                        })
-                        .execute(conn)
-                        .await?;
-                }
+        let mut connection = authenticated::get_connection(ctx).await?;
+        let conn: &mut AsyncPgConnection = &mut connection;
+        for PanelUpdate {
+            panel_id,
+            name,
+            order,
+            parent,
+            netbox_device_id,
+        } in updates
+        {
+            diesel::update(schema::panel::table)
+                .filter(schema::panel::id.eq(panel_id))
+                .set(UpdatePanelChangeset {
+                    name: name.map(|n| n.value),
+                    parent_panel: order.map(|o| Some(o.order)),
+                    parent_order: parent.map(|p| p.parent),
+                    netbox_device_id: netbox_device_id.map(|n| n.device_id),
+                })
+                .execute(conn)
+                .await?;
+        }
 
-                Ok(true)
-            })
-            .await
+        Ok(true)
     }
     #[graphql(guard = "RoleGuard(Role::Planner)")]
     async fn update_cabinet_panels(
@@ -89,72 +83,67 @@ impl PanelMutation {
     ) -> ApiResult<bool> {
         let mut connection = authenticated::get_connection(ctx).await?;
 
-        connection
-            .transaction(async move |conn| {
-                // 1. Zuerst Löschungen verarbeiten
-                if !deletes.is_empty() {
-                    diesel::delete(schema::panel::table.filter(schema::panel::id.eq_any(&deletes)))
-                        .execute(conn)
-                        .await?;
-                }
+        let conn: &mut AsyncPgConnection = &mut connection;
+        // 1. The deletions first
+        if !deletes.is_empty() {
+            diesel::delete(schema::panel::table.filter(schema::panel::id.eq_any(&deletes)))
+                .execute(conn)
+                .await?;
+        }
 
-                // Mapping von temporären Frontend-UUIDs zu echten Datenbank-IDs
-                let mut temp_id_map: HashMap<String, i32> = HashMap::new();
+        // The temporary ids of the frontend and the database ids they got
+        let mut temp_id_map: HashMap<String, i32> = HashMap::new();
 
-                // 2. Erstellungen und Updates verarbeiten (Reihenfolge ist dank Frontend korrekt)
-                for change in changes {
-                    // Parent-ID auflösen (entweder echte ID oder aus der Mapping-Tabelle)
-                    let resolved_parent_id = match change.parent_id {
-                        Some(p_id) => {
-                            if let Some(id) = p_id.id {
-                                Some(id)
-                            } else if let Some(temp) = p_id.temporary {
-                                // The frontend sends parents before their children
-                                Some(*temp_id_map.get(&temp).ok_or(UserError::InvalidRequest)?)
-                            } else {
-                                None
-                            }
-                        }
-                        None => None,
-                    };
-
-                    if let Some(panel_id) = change.id.id {
-                        // UPDATE: Bestehendes Panel
-                        diesel::update(schema::panel::table.find(panel_id))
-                            .set((
-                                schema::panel::name.eq(change.name),
-                                schema::panel::parent_panel.eq(resolved_parent_id),
-                                schema::panel::parent_order.eq(change.order),
-                                schema::panel::netbox_device_id.eq(change.netbox_device_id),
-                            ))
-                            .execute(conn)
-                            .await?;
-                    } else if let Some(temp_id) = change.id.temporary {
-                        // CREATE: Neues Panel
-                        let new_panel = InsertPanel {
-                            name: change.name,
-                            schacht_id: cabinet_id,
-                            parent_panel: resolved_parent_id,
-                            parent_order: Some(change.order), // Das Schema erwartet Option<i32>
-                        };
-
-                        let inserted_id: i32 = diesel::insert_into(schema::panel::table)
-                            .values(new_panel)
-                            .returning(schema::panel::id)
-                            .get_result(conn)
-                            .await?;
-
-                        // Die neue DB-ID für potenziell folgende Kinder-Panels merken
-                        temp_id_map.insert(temp_id, inserted_id);
+        // 2. Creations and updates (the frontend sends them in the right order)
+        for change in changes {
+            // The parent's id: stored, or from the map of temporary ids
+            let resolved_parent_id = match change.parent_id {
+                Some(p_id) => {
+                    if let Some(id) = p_id.id {
+                        Some(id)
+                    } else if let Some(temp) = p_id.temporary {
+                        // The frontend sends parents before their children
+                        Some(*temp_id_map.get(&temp).ok_or(UserError::InvalidRequest)?)
                     } else {
-                        // Either id or temporary id
-                        return Err(UserError::InvalidRequest.into());
+                        None
                     }
                 }
+                None => None,
+            };
 
-                Ok::<bool, ApiError>(true)
-            })
-            .await?;
+            if let Some(panel_id) = change.id.id {
+                // UPDATE: a stored panel
+                diesel::update(schema::panel::table.find(panel_id))
+                    .set((
+                        schema::panel::name.eq(change.name),
+                        schema::panel::parent_panel.eq(resolved_parent_id),
+                        schema::panel::parent_order.eq(change.order),
+                        schema::panel::netbox_device_id.eq(change.netbox_device_id),
+                    ))
+                    .execute(conn)
+                    .await?;
+            } else if let Some(temp_id) = change.id.temporary {
+                // CREATE: a new panel
+                let new_panel = InsertPanel {
+                    name: change.name,
+                    schacht_id: cabinet_id,
+                    parent_panel: resolved_parent_id,
+                    parent_order: Some(change.order), // Das Schema erwartet Option<i32>
+                };
+
+                let inserted_id: i32 = diesel::insert_into(schema::panel::table)
+                    .values(new_panel)
+                    .returning(schema::panel::id)
+                    .get_result(conn)
+                    .await?;
+
+                // The new id, for its children that follow
+                temp_id_map.insert(temp_id, inserted_id);
+            } else {
+                // Either id or temporary id
+                return Err(UserError::InvalidRequest.into());
+            }
+        }
 
         Ok(true)
     }
@@ -168,67 +157,62 @@ impl PanelMutation {
     ) -> ApiResult<bool> {
         let mut connection = authenticated::get_connection(ctx).await?;
 
-        connection
-            .transaction(async move |conn| {
-                // 1. Zuerst Löschungen verarbeiten
-                if !deletes.is_empty() {
-                    diesel::delete(
-                        schema::panel_port::table.filter(schema::panel_port::id.eq_any(&deletes)),
-                    )
+        let conn: &mut AsyncPgConnection = &mut connection;
+        // 1. The deletions first
+        if !deletes.is_empty() {
+            diesel::delete(
+                schema::panel_port::table.filter(schema::panel_port::id.eq_any(&deletes)),
+            )
+            .execute(conn)
+            .await?;
+        }
+
+        // 2. Creations and updates
+        for change in changes {
+            // An empty label from the UI is NULL
+            let label_opt = if change.label.trim().is_empty() {
+                None
+            } else {
+                Some(change.label)
+            };
+
+            if let Some(port_id) = change.id.id {
+                // UPDATE: a stored port
+                // Only a port of this panel, so no other panel's ports can be changed
+                diesel::update(
+                    schema::panel_port::table.filter(
+                        schema::panel_port::id
+                            .eq(port_id)
+                            .and(schema::panel_port::panel_id.eq(panel_id)),
+                    ),
+                )
+                .set((
+                    schema::panel_port::port_order.eq(change.order),
+                    schema::panel_port::label.eq(label_opt),
+                    schema::panel_port::port_type.eq(change.port_type),
+                    schema::panel_port::netbox_port_id.eq(change.netbox_port_id),
+                ))
+                .execute(conn)
+                .await?;
+            } else if change.id.temporary.is_some() {
+                // CREATE: a new port
+                let new_port = InsertPanelPort {
+                    panel_id,
+                    port_order: change.order,
+                    port_type: change.port_type,
+                    label: label_opt,
+                    netbox_port_id: change.netbox_port_id,
+                };
+
+                diesel::insert_into(schema::panel_port::table)
+                    .values(new_port)
                     .execute(conn)
                     .await?;
-                }
-
-                // 2. Erstellungen und Updates verarbeiten
-                for change in changes {
-                    // Leere Strings aus dem UI in echte SQL-NULL Werte umwandeln
-                    let label_opt = if change.label.trim().is_empty() {
-                        None
-                    } else {
-                        Some(change.label)
-                    };
-
-                    if let Some(port_id) = change.id.id {
-                        // UPDATE: Bestehender Port
-                        // Wir prüfen zur Sicherheit panel_id mit, damit niemand fremde Ports manipuliert
-                        diesel::update(
-                            schema::panel_port::table.filter(
-                                schema::panel_port::id
-                                    .eq(port_id)
-                                    .and(schema::panel_port::panel_id.eq(panel_id)),
-                            ),
-                        )
-                        .set((
-                            schema::panel_port::port_order.eq(change.order),
-                            schema::panel_port::label.eq(label_opt),
-                            schema::panel_port::port_type.eq(change.port_type),
-                            schema::panel_port::netbox_port_id.eq(change.netbox_port_id),
-                        ))
-                        .execute(conn)
-                        .await?;
-                    } else if change.id.temporary.is_some() {
-                        // CREATE: Neuer Port
-                        let new_port = InsertPanelPort {
-                            panel_id,
-                            port_order: change.order,
-                            port_type: change.port_type,
-                            label: label_opt,
-                            netbox_port_id: change.netbox_port_id,
-                        };
-
-                        diesel::insert_into(schema::panel_port::table)
-                            .values(new_port)
-                            .execute(conn)
-                            .await?;
-                    } else {
-                        // Either id or temporary id
-                        return Err(UserError::InvalidRequest.into());
-                    }
-                }
-
-                Ok::<bool, ApiError>(true)
-            })
-            .await?;
+            } else {
+                // Either id or temporary id
+                return Err(UserError::InvalidRequest.into());
+            }
+        }
 
         Ok(true)
     }
@@ -243,73 +227,70 @@ impl PanelMutation {
             return Err(UserError::BaselineUnchangeable.into());
         }
         let mut connection = authenticated::get_connection(ctx).await?;
-        connection
-            .transaction(async move |conn| {
-                for PortUsageInput {
-                    port_id,
-                    side,
+        let conn: &mut AsyncPgConnection = &mut connection;
+        for PortUsageInput {
+            port_id,
+            side,
+            fiber,
+        } in changes
+        {
+            let (port_update, remove_plan) = match fiber {
+                PortUsageUpdateAction::Remove(_) => (
+                    Some(PortUsage {
+                        port_id,
+                        plan_id,
+                        side,
+                        cable: None,
+                        fiber: None,
+                        bundle: None,
+                    }),
+                    false,
+                ),
+                PortUsageUpdateAction::Reset(_) => (None, true),
+                PortUsageUpdateAction::Attach(FiberKeyInput {
+                    cable_id,
+                    bundle,
                     fiber,
-                } in changes
-                {
-                    let (port_update, remove_plan) = match fiber {
-                        PortUsageUpdateAction::Remove(_) => (
-                            Some(PortUsage {
-                                port_id,
-                                plan_id,
-                                side,
-                                cable: None,
-                                fiber: None,
-                                bundle: None,
-                            }),
-                            false,
-                        ),
-                        PortUsageUpdateAction::Reset(_) => (None, true),
-                        PortUsageUpdateAction::Attach(FiberKeyInput {
-                            cable_id,
-                            bundle,
-                            fiber,
-                        }) => (
-                            Some(PortUsage {
-                                port_id,
-                                plan_id,
-                                side,
-                                cable: Some(cable_id),
-                                fiber: Some(fiber),
-                                bundle: Some(bundle),
-                            }),
-                            false,
-                        ),
-                    };
-                    if let Some(usage) = port_update {
-                        diesel::insert_into(schema::port_usage::dsl::port_usage::table())
-                            .values(&usage)
-                            .on_conflict((
-                                schema::port_usage::port_id,
-                                schema::port_usage::plan_id,
-                                schema::port_usage::side,
-                            ))
-                            .do_update()
-                            .set((
-                                schema::port_usage::cable.eq(usage.cable),
-                                schema::port_usage::fiber.eq(usage.fiber),
-                                schema::port_usage::bundle.eq(usage.bundle),
-                            ))
-                            .execute(conn)
-                            .await?;
-                    }
-                    if remove_plan {
-                        diesel::delete(schema::port_usage::dsl::port_usage::table())
-                            .filter(schema::port_usage::port_id.eq(port_id))
-                            .filter(schema::port_usage::plan_id.eq(plan_id))
-                            .filter(schema::port_usage::side.eq(side))
-                            .execute(conn)
-                            .await?;
-                    }
-                }
+                }) => (
+                    Some(PortUsage {
+                        port_id,
+                        plan_id,
+                        side,
+                        cable: Some(cable_id),
+                        fiber: Some(fiber),
+                        bundle: Some(bundle),
+                    }),
+                    false,
+                ),
+            };
+            if let Some(usage) = port_update {
+                diesel::insert_into(schema::port_usage::dsl::port_usage::table())
+                    .values(&usage)
+                    .on_conflict((
+                        schema::port_usage::port_id,
+                        schema::port_usage::plan_id,
+                        schema::port_usage::side,
+                    ))
+                    .do_update()
+                    .set((
+                        schema::port_usage::cable.eq(usage.cable),
+                        schema::port_usage::fiber.eq(usage.fiber),
+                        schema::port_usage::bundle.eq(usage.bundle),
+                    ))
+                    .execute(conn)
+                    .await?;
+            }
+            if remove_plan {
+                diesel::delete(schema::port_usage::dsl::port_usage::table())
+                    .filter(schema::port_usage::port_id.eq(port_id))
+                    .filter(schema::port_usage::plan_id.eq(plan_id))
+                    .filter(schema::port_usage::side.eq(side))
+                    .execute(conn)
+                    .await?;
+            }
+        }
 
-                Ok::<bool, ApiError>(true)
-            })
-            .await
+        Ok(true)
     }
 }
 
@@ -386,7 +367,7 @@ async fn insert_panel_tree_recursive(
     parent_id: Option<i32>,
     parent_order_val: Option<i32>,
 ) -> ApiResult<()> {
-    // 1. Das aktuelle Panel speichern
+    // 1. The panel itself
     let new_panel = InsertPanel {
         name: node.name.clone(),
         schacht_id: node.schacht_id,
@@ -400,7 +381,7 @@ async fn insert_panel_tree_recursive(
         .get_result(conn)
         .await?;
 
-    // 2. Rekursiv alle Kinder dieses Panels speichern
+    // 2. Its children, recursively
     for (index, child) in node.children.into_iter().enumerate() {
         insert_panel_tree_recursive(
             conn,

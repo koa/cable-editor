@@ -21,7 +21,7 @@ use diesel::{
     Associations, BoolExpressionMethods, ExpressionMethods, HasQuery, Identifiable, Insertable,
     OptionalExtension, QueryDsl, QueryableByName, pg::Pg, sql_query, sql_types::Integer,
 };
-use diesel_async::{AsyncConnection, AsyncPgConnection, RunQueryDsl, pooled_connection::deadpool};
+use diesel_async::{AsyncPgConnection, RunQueryDsl, pooled_connection::deadpool};
 use diesel_derive_enum::DbEnum;
 use log::{error, info};
 use std::borrow::Cow;
@@ -159,7 +159,7 @@ impl PortUsage {
     async fn side(&self) -> PortSide {
         self.side
     }
-    // Löst das Kabel/die Faser auf, falls belegt (Tombstones haben hier None)
+    // The cable and fiber, if used (tombstones have None here)
     async fn fiber(&self) -> Option<Fiber> {
         if let (Some(cable), Some(bundle), Some(fiber)) = (self.cable, self.bundle, self.fiber) {
             Some(Fiber {
@@ -234,12 +234,8 @@ impl PortUsage {
             trace_fiber_to_end(connection, &next_fiber_start_port, plan_id, visited).await
         }
 
-        connection
-            .transaction(async move |conn| {
-                let mut visited = HashSet::new();
-                trace_fiber_to_end(conn, self, plan_id, &mut visited).await
-            })
-            .await
+        let mut visited = HashSet::new();
+        trace_fiber_to_end(&mut connection, self, plan_id, &mut visited).await
     }
     async fn panel_side_end_port(
         &self,
@@ -279,12 +275,8 @@ impl PortUsage {
             trace_fiber_to_end(connection, &next_fiber_start_port, plan_id, visited).await
         }
 
-        connection
-            .transaction(async move |conn| {
-                let mut visited = HashSet::new();
-                trace_fiber_to_end(conn, self, plan_id, &mut visited).await
-            })
-            .await
+        let mut visited = HashSet::new();
+        trace_fiber_to_end(&mut connection, self, plan_id, &mut visited).await
     }
 }
 
@@ -371,13 +363,9 @@ impl Panel {
         }
         if self.parent_panel.is_some() {
             let mut connection = get_connection(ctx).await?;
-            connection
-                .transaction(async |conn| {
-                    let mut result = Vec::new();
-                    fetch_parent_chain(conn, self, &mut result).await?;
-                    Ok(result)
-                })
-                .await
+            let mut result = Vec::new();
+            fetch_parent_chain(&mut connection, self, &mut result).await?;
+            Ok(result)
         } else {
             Ok(Vec::default())
         }

@@ -1,7 +1,7 @@
 //! Plans: creating, renaming, implementing (implement.rs) and choosing the one Netbox shows
 //! (synced by the backend's worker, `netbox::auto_sync`).
 
-use crate::graphql::error::{ApiError, ApiResult};
+use crate::graphql::error::ApiResult;
 use crate::{
     db::{
         entity::plan::{InsertPlan, Plan},
@@ -14,7 +14,7 @@ use async_graphql::{Context, InputObject, Object};
 use cable_editor_common::{ObjectKind, UserError};
 use chrono::{DateTime, Utc};
 use diesel::{ExpressionMethods, HasQuery, OptionalExtension, QueryDsl};
-use diesel_async::{AsyncConnection, RunQueryDsl};
+use diesel_async::{AsyncPgConnection, RunQueryDsl};
 
 #[derive(Default)]
 pub struct PlanMutation;
@@ -34,21 +34,18 @@ impl PlanMutation {
     #[graphql(guard = "RoleGuard(Role::Planner)")]
     async fn update_plan(&self, ctx: &Context<'_>, plan_id: i32, name: String) -> ApiResult<Plan> {
         let mut connection = authenticated::get_connection(ctx).await?;
-        connection
-            .transaction::<_, ApiError, _>(async move |conn| {
-                let mut plan = Plan::query()
-                    .for_update()
-                    .filter(schema::plan::id.eq(plan_id))
-                    .first(conn)
-                    .await?;
-                if plan.is_baseline() {
-                    return Err(UserError::BaselineUnchangeable.into());
-                }
-                plan.name = name;
-                diesel::update(&plan).set(&plan).execute(conn).await?;
-                Ok(plan)
-            })
-            .await
+        let conn: &mut AsyncPgConnection = &mut connection;
+        let mut plan = Plan::query()
+            .for_update()
+            .filter(schema::plan::id.eq(plan_id))
+            .first(conn)
+            .await?;
+        if plan.is_baseline() {
+            return Err(UserError::BaselineUnchangeable.into());
+        }
+        plan.name = name;
+        diesel::update(&plan).set(&plan).execute(conn).await?;
+        Ok(plan)
     }
     #[graphql(guard = "RoleGuard(Role::Admin)")]
     async fn implement_plan(&self, ctx: &Context<'_>, plan_id: i32) -> ApiResult<Plan> {
