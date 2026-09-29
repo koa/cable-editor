@@ -113,6 +113,15 @@ pub enum PanelView {
 }
 
 impl PanelView {
+    pub fn title(&self) -> &'static str {
+        match self {
+            PanelView::Show => "Übersicht",
+            PanelView::Edit => "Ports ändern",
+            PanelView::Attach => "Fasern auflegen",
+            PanelView::Loop => "Loops verbinden",
+        }
+    }
+
     pub fn content(&self, plan_id: i32, panel_id: i32) -> Html {
         match self {
             PanelView::Edit => {

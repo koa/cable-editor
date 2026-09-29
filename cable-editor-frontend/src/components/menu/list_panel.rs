@@ -1,4 +1,4 @@
-use crate::components::menu::list_cabinet::ListCabinet;
+use crate::components::menu::list_cabinet::{ListCabinet, view_entries};
 use crate::components::menu::{
     BreadcrumbDivider, MenuDropdown, MenuEntry, MenuEntryGroup, MenuError, MenuErrorProps,
 };
@@ -94,61 +94,42 @@ impl Component for ListPanel {
                     let current_view = &ctx.props().view;
                     let mut elements = Vec::new();
 
-                    // 0. Schacht, zu dem das Panel gehört
+                    // The Schächte
                     elements.push(html!(<ListCabinet {plan_id} cabinet_id={panel.schacht.id}/>));
 
-                    // 1. Parent Chain durchgehen:
-                    for parent in &panel.parent_chain {
-                        let p_id = parent.id;
-                        let p_name = parent
-                            .name
-                            .clone()
-                            .unwrap_or_else(|| format!("Panel {}", p_id));
-                        if !elements.is_empty() {
-                            elements.push(divider.clone());
-                        }
-                        elements.push(self.render_panel_dropdown(
-                            plan_id,
-                            p_id,
-                            p_name,
-                            "Panels",
-                            &with_self(&parent.siblings, p_id, &parent.name, parent.parent_order),
-                        ));
-                    }
-
-                    // 2. Aktuelles Panel (Mit Child-Panels für Vorwärtsnavigation)
-                    let c_id = panel.id;
-                    let c_name = panel
-                        .name
-                        .clone()
-                        .unwrap_or_else(|| format!("Panel {}", c_id));
-                    if !elements.is_empty() {
+                    // One menu per level, offering what lies below the level above (the
+                    // Schacht's views and root panels, then a panel's views and children) with
+                    // the way to the current page selected
+                    let levels = panel
+                        .parent_chain
+                        .iter()
+                        .map(|p| (p.id, &p.name, p.parent_order, &p.siblings))
+                        .chain([(panel.id, &panel.name, panel.parent_order, &panel.siblings)]);
+                    let mut views = view_entries(plan_id, panel.schacht.id, None);
+                    let mut group_title = "Panels";
+                    for (id, name, parent_order, siblings) in levels {
                         elements.push(divider.clone());
+                        elements.push(panel_menu(
+                            plan_id,
+                            panel_name(id, name),
+                            views,
+                            group_title,
+                            &with_self(siblings, id, name, parent_order),
+                            Some(id),
+                        ));
+                        views = panel_view_entries(plan_id, id, None);
+                        group_title = "Unterpanels";
                     }
-                    elements.push(self.render_panel_dropdown(
-                        plan_id,
-                        c_id,
-                        c_name,
-                        "Panels",
-                        &with_self(&panel.siblings, c_id, &panel.name, panel.parent_order),
-                    ));
 
-                    // 3. View Dropdown
-                    let view_title: Cow<'static, str> = match current_view {
-                        PanelView::Show => "Übersicht",
-                        PanelView::Edit => "Ports ändern",
-                        PanelView::Attach => "Fasern auflegen",
-                        PanelView::Loop => "Loops verbinden",
-                    }
-                    .into();
-
+                    // The current panel's views and children
                     elements.push(divider.clone());
-                    elements.push(self.render_panel_dropdown(
+                    elements.push(panel_menu(
                         plan_id,
-                        c_id,
-                        view_title.into(),
-                        "Unterpanels",
+                        current_view.title().into(),
+                        panel_view_entries(plan_id, panel.id, Some(current_view)),
+                        group_title,
                         &panel.children,
+                        None,
                     ));
 
                     html! {
@@ -168,94 +149,69 @@ impl Component for ListPanel {
     }
 }
 
-impl ListPanel {
-    /// Menu with the views of the panel and, in a group titled `others_title`, the panels at its
-    /// level including itself, marked (on a panel), or its children (on the view).
-    fn render_panel_dropdown(
-        &self,
-        plan_id: i32,
-        panel_id: i32,
-        name: String,
-        others_title: &'static str,
-        others: &[ChildPanelNav],
-    ) -> Html {
-        let title: Cow<'static, str> = name.into();
-        let mut entries = vec![
-            MenuEntry {
-                selected: false,
-                text: "Übersicht".into(),
-                target: AppRoute::Plan {
-                    plan_id,
-                    view: PlanView::Panel {
-                        id: panel_id,
-                        view: PanelView::Show,
-                    },
+/// Menu with `views` and, in a group titled `panels_title`, `panels`; `selected` is the panel
+/// the current page lies in (none: a view is selected).
+fn panel_menu(
+    plan_id: i32,
+    title: Cow<'static, str>,
+    entries: Box<[MenuEntry]>,
+    panels_title: &'static str,
+    panels: &[ChildPanelNav],
+    selected: Option<i32>,
+) -> Html {
+    let panels = panels
+        .iter()
+        .map(|panel| MenuEntry {
+            selected: Some(panel.id) == selected,
+            text: panel_name(panel.id, &panel.name).into_owned().into(),
+            target: AppRoute::Plan {
+                plan_id,
+                view: PlanView::Panel {
+                    id: panel.id,
+                    view: PanelView::Show,
                 },
             },
-            MenuEntry {
-                selected: false,
-                text: "Ports ändern".into(),
-                target: AppRoute::Plan {
-                    plan_id,
-                    view: PlanView::Panel {
-                        id: panel_id,
-                        view: PanelView::Edit,
-                    },
-                },
-            },
-        ];
-        if plan_id != BASELINE_PLAN_ID {
-            entries.extend([
-                MenuEntry {
-                    selected: false,
-                    text: "Fasern auflegen".into(),
-                    target: AppRoute::Plan {
-                        plan_id,
-                        view: PlanView::Panel {
-                            id: panel_id,
-                            view: PanelView::Attach,
-                        },
-                    },
-                },
-                MenuEntry {
-                    selected: false,
-                    text: "Loops verbinden".into(),
-                    target: AppRoute::Plan {
-                        plan_id,
-                        view: PlanView::Panel {
-                            id: panel_id,
-                            view: PanelView::Loop,
-                        },
-                    },
-                },
-            ]);
-        }
+        })
+        .collect();
+    let groups: Box<[MenuEntryGroup]> = Box::new([MenuEntryGroup {
+        title: panels_title,
+        entries: panels,
+    }]);
+    html!(<MenuDropdown {title} {entries} {groups}/>)
+}
 
-        let others = others
-            .iter()
-            .map(|other| MenuEntry {
-                selected: other.id == panel_id,
-                text: other
-                    .name
-                    .clone()
-                    .unwrap_or_else(|| format!("Panel {}", other.id))
-                    .into_boxed_str(),
-                target: AppRoute::Plan {
-                    plan_id,
-                    view: PlanView::Panel {
-                        id: other.id,
-                        view: PanelView::Show,
-                    },
-                },
-            })
-            .collect();
-        let groups: Box<[MenuEntryGroup]> = Box::new([MenuEntryGroup {
-            title: others_title,
-            entries: others,
-        }]);
-        let entries = entries.into_boxed_slice();
-        html!(<MenuDropdown {title} {entries} {groups}/>)
+fn panel_name(id: i32, name: &Option<String>) -> Cow<'static, str> {
+    match name {
+        Some(name) => Cow::Owned(name.clone()),
+        None => Cow::Owned(format!("Panel {id}")),
     }
+}
+
+/// The views of a panel in its menu, `current` selected; planned changes only exist off the
+/// baseline.
+fn panel_view_entries(
+    plan_id: i32,
+    panel_id: i32,
+    current: Option<&PanelView>,
+) -> Box<[MenuEntry]> {
+    let planned = plan_id != BASELINE_PLAN_ID;
+    [
+        (PanelView::Show, true),
+        (PanelView::Edit, true),
+        (PanelView::Attach, planned),
+        (PanelView::Loop, planned),
+    ]
+    .into_iter()
+    .filter(|(_, available)| *available)
+    .map(|(view, _)| MenuEntry {
+        selected: current == Some(&view),
+        text: view.title().into(),
+        target: AppRoute::Plan {
+            plan_id,
+            view: PlanView::Panel { id: panel_id, view },
+        },
+    })
+    .collect()
 }
 
 /// The siblings of a panel (which the backend returns without it) plus the panel, in panel order.

@@ -99,8 +99,9 @@ impl Component for ListCabinet {
 }
 
 impl ListCabinet {
-    /// The Schacht (its views, other Schächte) and, on its own pages, the view shown (the views,
-    /// its root panels), following the panels in the breadcrumb (`list_panel.rs`).
+    /// The Schächte with this one selected and, on its own pages, the menu one level down: its
+    /// views and root panels, the view shown selected. On a panel's pages that menu comes from
+    /// `list_panel.rs`, with the root panel selected.
     fn view_menus(&self, ctx: &Context<Self>, cabinets: &[SchachtListEntry]) -> Html {
         let ListCabinetProps {
             plan_id,
@@ -112,20 +113,6 @@ impl ListCabinet {
             .map(|c| c.name.clone())
             .unwrap_or_else(|| format!("Schacht {cabinet_id}"))
             .into();
-        let view_entries = CabinetView::ALL
-            .iter()
-            .map(|view| MenuEntry {
-                selected: false,
-                text: view.title().into(),
-                target: AppRoute::Plan {
-                    plan_id,
-                    view: PlanView::Cabinet {
-                        id: cabinet_id,
-                        view: view.clone(),
-                    },
-                },
-            })
-            .collect::<Box<[_]>>();
         let mut cabinet_entries = cabinets
             .iter()
             .map(|c| MenuEntry {
@@ -141,11 +128,7 @@ impl ListCabinet {
             })
             .collect::<Box<[_]>>();
         cabinet_entries.sort_by(|a, b| a.text.cmp(&b.text));
-        let groups: Box<[MenuEntryGroup]> = Box::new([MenuEntryGroup {
-            title: "Schächte",
-            entries: cabinet_entries,
-        }]);
-        let cabinet_menu = html!(<MenuDropdown {title} entries={view_entries.clone()} {groups}/>);
+        let cabinet_menu = html!(<MenuDropdown {title} entries={cabinet_entries}/>);
 
         let Some(view) = view else {
             return cabinet_menu;
@@ -171,6 +154,7 @@ impl ListCabinet {
             })
             .collect();
         let title: Cow<'static, str> = view.title().into();
+        let entries = view_entries(plan_id, cabinet_id, Some(view));
         let groups: Box<[MenuEntryGroup]> = Box::new([MenuEntryGroup {
             title: "Panels",
             entries: panels,
@@ -179,8 +163,30 @@ impl ListCabinet {
             <span class="breadcrumb-path">
                 {cabinet_menu}
                 <BreadcrumbDivider/>
-                <MenuDropdown {title} entries={view_entries} {groups}/>
+                <MenuDropdown {title} {entries} {groups}/>
             </span>
         }
     }
+}
+
+/// The views of a Schacht in its menu, `current` selected.
+pub fn view_entries(
+    plan_id: i32,
+    cabinet_id: i32,
+    current: Option<&CabinetView>,
+) -> Box<[MenuEntry]> {
+    CabinetView::ALL
+        .iter()
+        .map(|view| MenuEntry {
+            selected: current == Some(view),
+            text: view.title().into(),
+            target: AppRoute::Plan {
+                plan_id,
+                view: PlanView::Cabinet {
+                    id: cabinet_id,
+                    view: view.clone(),
+                },
+            },
+        })
+        .collect()
 }

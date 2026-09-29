@@ -9,3 +9,8 @@ Stand: 27.09.2026.
 - Jede Art von Element ist ein Bereich im Bereichsmenü des Breadcrumbs (heute „Ändern“,
   „Schacht“, „Kabel“, „Trasse“, „Karte“); neue Arten (z. B. „Eigentümer“, „Schachttyp“)
   kommen als weitere Bereiche dazu.
+- Jedes Menü im Breadcrumb bietet genau eine Ebene an, und genau ein Eintrag ist aktiv: das
+  Menü einer Elementart nur die Elemente (z. B. die Schächte), das nächste Menü die Ansichten
+  des Elements darüber und die Elemente eine Ebene tiefer (bei einem Schacht seine Ansichten
+  und Root-Panels, bei einem Panel seine Ansichten und Unterpanels). Auf einer Ansicht ist
+  die Ansicht aktiv, auf einem Panel das Panel.

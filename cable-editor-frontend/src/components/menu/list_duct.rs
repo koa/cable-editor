@@ -1,5 +1,5 @@
 use crate::components::menu::{
-    BreadcrumbDivider, MenuDropdown, MenuEntry, MenuEntryGroup, MenuError, MenuErrorProps,
+    BreadcrumbDivider, MenuDropdown, MenuEntry, MenuError, MenuErrorProps,
 };
 use crate::error::FrontendError;
 use crate::graphql::authenticated::list_ducts::{DuctListEntry, fetch_duct_list};
@@ -102,24 +102,6 @@ impl ListDuct {
             .and_then(|id| ducts.iter().find(|duct| duct.id == id))
             .map(|duct| Cow::Owned(duct.title()))
             .unwrap_or(Cow::Borrowed(" - "));
-        let view_entries = duct_id
-            .map(|id| {
-                DuctView::ALL
-                    .iter()
-                    .map(|view| MenuEntry {
-                        selected: false,
-                        text: view.title().into(),
-                        target: AppRoute::Plan {
-                            plan_id,
-                            view: PlanView::Duct {
-                                id,
-                                view: view.clone(),
-                            },
-                        },
-                    })
-                    .collect::<Box<[_]>>()
-            })
-            .unwrap_or_default();
         let mut duct_entries = ducts
             .iter()
             .map(|duct| MenuEntry {
@@ -135,20 +117,33 @@ impl ListDuct {
             })
             .collect::<Box<[_]>>();
         duct_entries.sort_by(|a, b| a.text.cmp(&b.text));
-        let groups: Box<[MenuEntryGroup]> = Box::new([MenuEntryGroup {
-            title: "Trassen",
-            entries: duct_entries,
-        }]);
-        let duct_menu = html!(<MenuDropdown {title} entries={view_entries.clone()} {groups}/>);
+        let duct_menu = html!(<MenuDropdown {title} entries={duct_entries}/>);
         let Some(view) = view else {
             return duct_menu;
         };
+        let Some(id) = duct_id else {
+            return duct_menu;
+        };
         let title: Cow<'static, str> = view.title().into();
+        let entries = DuctView::ALL
+            .iter()
+            .map(|entry| MenuEntry {
+                selected: entry == view,
+                text: entry.title().into(),
+                target: AppRoute::Plan {
+                    plan_id,
+                    view: PlanView::Duct {
+                        id,
+                        view: entry.clone(),
+                    },
+                },
+            })
+            .collect::<Box<[_]>>();
         html! {
             <span class="breadcrumb-path">
                 {duct_menu}
                 <BreadcrumbDivider/>
-                <MenuDropdown {title} entries={view_entries}/>
+                <MenuDropdown {title} {entries}/>
             </span>
         }
     }
