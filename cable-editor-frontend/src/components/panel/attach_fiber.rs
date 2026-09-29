@@ -352,7 +352,7 @@ impl AttachFiber {
         }
     }
 
-    fn validate(&self) -> Vec<String> {
+    fn validate(&self) -> Box<[String]> {
         let mut errors = Vec::new();
 
         if let Some(situation) = &self.current_situation {
@@ -393,7 +393,7 @@ impl AttachFiber {
             }
         }
 
-        errors
+        errors.into_boxed_slice()
     }
 
     fn has_changes(&self) -> bool {

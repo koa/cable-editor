@@ -5,12 +5,12 @@ use std::{net::IpAddr, sync::LazyLock, time::Duration};
 
 #[derive(Deserialize)]
 pub struct Settings {
-    auth_client_id: String,
-    auth_issuer: String,
-    user_info_url: Option<String>,
-    auth_scopes: Option<String>,
-    planner_groups: Option<String>,
-    admin_groups: Option<String>,
+    auth_client_id: Box<str>,
+    auth_issuer: Box<str>,
+    user_info_url: Option<Box<str>>,
+    auth_scopes: Option<Box<str>>,
+    planner_groups: Option<Box<str>>,
+    admin_groups: Option<Box<str>>,
 
     server_port: Option<u16>,
     server_mgmt_port: Option<u16>,
@@ -27,12 +27,12 @@ impl Settings {
 
     /// OIDC scopes the frontend requests, space separated like the `scope` parameter.
     /// `groups` needs a matching scope at the provider.
-    pub fn auth_scopes(&self) -> Vec<String> {
+    pub fn auth_scopes(&self) -> Box<[Box<str>]> {
         self.auth_scopes
             .as_deref()
             .unwrap_or("openid profile groups")
             .split_whitespace()
-            .map(String::from)
+            .map(Box::from)
             .collect()
     }
     /// OIDC groups whose members may plan and change the master data, space separated.
@@ -67,8 +67,8 @@ impl Settings {
 }
 #[derive(Deserialize)]
 pub struct NetboxSettings {
-    url: String,
-    token: String,
+    url: Box<str>,
+    token: Box<str>,
     provider_id: i64,
     type_id: i64,
     sync_interval_h: Option<f64>,
@@ -100,8 +100,8 @@ impl NetboxSettings {
 /// the export needs it.
 #[derive(Deserialize)]
 pub struct LkmapSettings {
-    datenlieferant_uid: String,
-    oid_prefix: String,
+    datenlieferant_uid: Box<str>,
+    oid_prefix: Box<str>,
     perimeter_puffer_m: Option<f64>,
 }
 

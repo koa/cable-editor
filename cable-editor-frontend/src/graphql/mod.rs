@@ -165,7 +165,7 @@ where
                         .into_iter()
                         .map(|e| ServerError {
                             origin: e.extensions.as_ref().and_then(ErrorExtensions::origin),
-                            message: e.message,
+                            message: e.message.into(),
                         })
                         .collect(),
                 ),

@@ -161,7 +161,7 @@ impl SchachtTypInput {
         if taken.is_some() {
             return Err(UserError::NameTaken {
                 kind: ObjectKind::SchachtTyp,
-                name: self.name,
+                name: self.name.into(),
             }
             .into());
         }

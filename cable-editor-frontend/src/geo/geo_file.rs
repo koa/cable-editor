@@ -11,13 +11,13 @@ use web_sys::{DomParser, Element, SupportedType};
 pub struct FileLine {
     pub name: String,
     /// East (or longitude) first, as in the file
-    pub points: Vec<CoordinateInput>,
+    pub points: Box<[CoordinateInput]>,
 }
 
 /// The lines of a file and the coordinate system it uses (declared or guessed).
 #[derive(Debug, Clone, PartialEq)]
 pub struct GeoFile {
-    pub lines: Vec<FileLine>,
+    pub lines: Box<[FileLine]>,
     pub system: CoordinateSystem,
 }
 
@@ -44,7 +44,10 @@ fn read_geojson(text: &str) -> Result<GeoFile, String> {
         .or_else(|| lines.first()?.points.first().map(guess_system))
         // RFC 7946: without other declaration GeoJSON is WGS84
         .unwrap_or(CoordinateSystem::Wgs84);
-    Ok(GeoFile { lines, system })
+    Ok(GeoFile {
+        lines: lines.into(),
+        system,
+    })
 }
 
 /// The system of the `crs` member (GeoJSON 2008, still written by QGIS for other systems).
@@ -113,7 +116,7 @@ fn collect_geojson(json: &Value, name: &str, lines: &mut Vec<FileLine>) {
             if let Some(points) = json.get("coordinates").and_then(positions) {
                 lines.push(FileLine {
                     name: name.to_string(),
-                    points,
+                    points: points.into(),
                 });
             }
         }
@@ -129,13 +132,13 @@ fn collect_geojson(json: &Value, name: &str, lines: &mut Vec<FileLine>) {
             match join_parts(&parts) {
                 Some(points) => lines.push(FileLine {
                     name: name.to_string(),
-                    points,
+                    points: points.into(),
                 }),
                 None => {
                     for (index, points) in parts.into_iter().enumerate() {
                         lines.push(FileLine {
                             name: format!("{name} (Teil {})", index + 1),
-                            points,
+                            points: points.into(),
                         });
                     }
                 }
@@ -205,12 +208,15 @@ fn read_gpx(text: &str) -> Result<GeoFile, String> {
                 })
                 .collect::<Vec<_>>();
             if !points.is_empty() {
-                lines.push(FileLine { name, points });
+                lines.push(FileLine {
+                    name,
+                    points: points.into(),
+                });
             }
         }
     }
     Ok(GeoFile {
-        lines,
+        lines: lines.into(),
         system: CoordinateSystem::Wgs84,
     })
 }

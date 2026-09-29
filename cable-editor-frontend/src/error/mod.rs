@@ -12,7 +12,7 @@ use yew::{Html, html, html::IntoPropValue};
 /// An error of a GraphQL response that isn't a refusal.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ServerError {
-    pub message: String,
+    pub message: Box<str>,
     /// Where it came from, if the backend knows (errors of its resolvers)
     pub origin: Option<ErrorOrigin>,
 }
@@ -26,7 +26,7 @@ impl ServerError {
                 location,
                 id,
             }) => format!("{} ({library}, {location}, Fehler-ID {id})", self.message),
-            None => self.message.clone(),
+            None => self.message.to_string(),
         }
     }
 }
@@ -48,7 +48,7 @@ pub enum FrontendError {
     User(UserError),
     /// A technical error of the backend (database, Netbox), its messages
     #[error("Unerwarteter Fehler vom Server: {}", .0.iter().map(ServerError::detail).collect::<Vec<_>>().join("; "))]
-    Graphql(Vec<ServerError>),
+    Graphql(Box<[ServerError]>),
     /// The data of a response doesn't fit the query (e.g. a new version changed the schema)
     #[error("Invalid response of the server: {0}")]
     InvalidResponse(serde_json::Error),
@@ -121,10 +121,10 @@ impl FrontendError {
     }
 
     /// Further details, the messages of an unexpected server error with where they came from.
-    pub fn details(&self) -> Vec<String> {
+    pub fn details(&self) -> Box<[String]> {
         match self {
             FrontendError::Graphql(errors) => errors.iter().map(ServerError::detail).collect(),
-            _ => Vec::new(),
+            _ => Box::default(),
         }
     }
 }

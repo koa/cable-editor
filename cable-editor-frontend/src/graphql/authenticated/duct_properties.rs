@@ -66,8 +66,8 @@ pub struct OwnerChoice {
 /// The choices of a duct's properties: the Schächte and the owners.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DuctChoices {
-    pub schaechte: Vec<SchachtChoice>,
-    pub owners: Vec<OwnerChoice>,
+    pub schaechte: Box<[SchachtChoice]>,
+    pub owners: Box<[OwnerChoice]>,
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
@@ -105,16 +105,16 @@ pub async fn fetch_duct_properties(
                 query::<DuctPropertiesQuery, _>(DuctPropertiesVariables { duct_id }, credentials)
                     .await?;
             let choices = DuctChoices {
-                schaechte: result.list_schacht,
-                owners: result.list_owner,
+                schaechte: result.list_schacht.into(),
+                owners: result.list_owner.into(),
             };
             Ok((result.duct, choices))
         }
         None => {
             let result = query::<ChoicesQuery, _>((), credentials).await?;
             let choices = DuctChoices {
-                schaechte: result.list_schacht,
-                owners: result.list_owner,
+                schaechte: result.list_schacht.into(),
+                owners: result.list_owner.into(),
             };
             Ok((None, choices))
         }

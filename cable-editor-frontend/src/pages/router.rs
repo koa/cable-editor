@@ -224,7 +224,7 @@ impl PlanView {
                 text: text.into(),
                 target: AppRoute::Plan { plan_id, view },
             })
-            .collect::<Vec<_>>();
+            .collect::<Box<[_]>>();
         item_contents.push(html!(<MenuDropdown {title} {entries}/>));
 
         match self {

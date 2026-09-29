@@ -28,9 +28,9 @@ pub struct LkmapMutation;
 /// A file to save.
 #[derive(SimpleObject)]
 pub struct DownloadFile {
-    pub file_name: String,
+    pub file_name: Box<str>,
     /// The content in base64
-    pub content: String,
+    pub content: Box<str>,
 }
 
 /// An owner's transfer files, each in a ZIP of the same name, and the delivery logged for them.
@@ -38,7 +38,7 @@ pub struct DownloadFile {
 pub struct LkmapDownload {
     pub delivery: LkLieferung,
     /// LKMap and Zuständigkeitsperimeter
-    pub files: Vec<DownloadFile>,
+    pub files: Box<[DownloadFile]>,
 }
 
 #[Object]
@@ -53,7 +53,7 @@ impl LkmapMutation {
         let files = export.deliverable()?;
         let pending = LkLieferung::query()
             .filter(schema::lk_lieferung::eigentuemer_id.eq(owner_id))
-            .filter(schema::lk_lieferung::pruefsumme.eq(&files.checksum))
+            .filter(schema::lk_lieferung::pruefsumme.eq(&*files.checksum))
             .filter(schema::lk_lieferung::geliefert_am.is_null())
             .order(schema::lk_lieferung::id.desc())
             .first(&mut connection)
@@ -69,7 +69,7 @@ impl LkmapMutation {
                         schema::lk_lieferung::anzahl_schaechte
                             .eq(i32::try_from(export.schaechte.len())?),
                         schema::lk_lieferung::anzahl_trassen.eq(i32::try_from(export.ducts.len())?),
-                        schema::lk_lieferung::pruefsumme.eq(&files.checksum),
+                        schema::lk_lieferung::pruefsumme.eq(&*files.checksum),
                     ))
                     .returning(LkLieferung::as_returning())
                     .get_result(&mut connection)
@@ -81,7 +81,7 @@ impl LkmapMutation {
             .map(|file| {
                 Ok(DownloadFile {
                     file_name: file.zip_name(),
-                    content: STANDARD.encode(file.zip()?),
+                    content: STANDARD.encode(file.zip()?).into(),
                 })
             })
             .collect::<ApiResult<_>>()?;

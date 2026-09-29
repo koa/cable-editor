@@ -86,14 +86,14 @@ impl Duct {
     async fn description(&self) -> Option<&str> {
         self.description.as_deref()
     }
-    async fn cables(&self, ctx: &Context<'_>) -> ApiResult<Vec<Cable>> {
+    async fn cables(&self, ctx: &Context<'_>) -> ApiResult<Box<[Cable]>> {
         Ok(get_loader(ctx)?
             .load_one(DuctCables(self.id))
             .await?
             .unwrap_or_default())
     }
     /// Line in WGS84 for the map, from Schacht A to Schacht Z
-    async fn line(&self, ctx: &Context<'_>) -> ApiResult<Option<Vec<GeoPoint>>> {
+    async fn line(&self, ctx: &Context<'_>) -> ApiResult<Option<Box<[GeoPoint]>>> {
         get_loader(ctx)?.load_one(DuctLine(self.id)).await
     }
     async fn schacht_a(&self, ctx: &Context<'_>) -> ApiResult<Schacht> {

@@ -161,7 +161,10 @@ impl OwnerInput {
         if let Some(uid) = &uid
             && !is_uid(uid)
         {
-            return Err(UserError::InvalidUid { uid: uid.clone() }.into());
+            return Err(UserError::InvalidUid {
+                uid: uid.as_str().into(),
+            }
+            .into());
         }
         let others = || {
             let mut others = schema::eigentuemer::table
@@ -180,7 +183,7 @@ impl OwnerInput {
         {
             return Err(UserError::NameTaken {
                 kind: ObjectKind::Owner,
-                name: other,
+                name: other.into(),
             }
             .into());
         }
@@ -192,8 +195,8 @@ impl OwnerInput {
                 .optional()?
         {
             return Err(UserError::UidTaken {
-                uid: uid.clone(),
-                owner: other,
+                uid: uid.as_str().into(),
+                owner: other.into(),
             }
             .into());
         }

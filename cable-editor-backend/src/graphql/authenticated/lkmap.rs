@@ -21,9 +21,9 @@ use diesel_async::{AsyncPgConnection, RunQueryDsl};
 #[derive(SimpleObject)]
 pub struct TransferFile {
     /// `<uid>-kommunikation-lkmap.xtf`, `<uid>-zustaendigkeit-peri.xtf`
-    pub file_name: String,
+    pub file_name: Box<str>,
     /// The XTF, UTF-8
-    pub xtf: String,
+    pub xtf: Box<str>,
 }
 
 impl TryFrom<lkmap::TransferFile> for TransferFile {
@@ -32,7 +32,7 @@ impl TryFrom<lkmap::TransferFile> for TransferFile {
     fn try_from(file: lkmap::TransferFile) -> Result<Self, Self::Error> {
         Ok(TransferFile {
             file_name: file.file_name,
-            xtf: String::from_utf8(file.xtf)?,
+            xtf: String::from_utf8(file.xtf.into_vec())?.into(),
         })
     }
 }
@@ -49,20 +49,20 @@ pub struct LkmapExport {
     /// The area they lie in, missing like `lkmap`
     pub perimeter: Option<TransferFile>,
     /// The perimeter's outline, for the map
-    pub perimeter_area: Option<Vec<GeoPoint>>,
+    pub perimeter_area: Option<Box<[GeoPoint]>>,
     /// SHA-256 of both files; differs from the last delivery's after a change
-    pub checksum: Option<String>,
+    pub checksum: Option<Box<str>>,
     /// The delivered Schächte, ducts
-    pub schaechte: Vec<Schacht>,
-    pub ducts: Vec<Duct>,
+    pub schaechte: Box<[Schacht]>,
+    pub ducts: Box<[Duct]>,
     /// Schächte without position: neither they nor their ducts can be delivered
-    pub schaechte_without_position: Vec<Schacht>,
+    pub schaechte_without_position: Box<[Schacht]>,
     /// Delivered ducts ending at a Schacht without position
-    pub ducts_without_line: Vec<Duct>,
+    pub ducts_without_line: Box<[Duct]>,
     #[graphql(skip)]
-    schacht_ids: Vec<i32>,
+    schacht_ids: Box<[i32]>,
     #[graphql(skip)]
-    duct_ids: Vec<i32>,
+    duct_ids: Box<[i32]>,
 }
 
 #[ComplexObject]
@@ -89,8 +89,8 @@ impl LkmapExport {
             return Ok(None);
         };
         Ok(sql_query(FIRST_CHANGE)
-            .bind::<Array<Integer>, _>(&self.duct_ids)
-            .bind::<Array<Integer>, _>(&self.schacht_ids)
+            .bind::<Array<Integer>, _>(&*self.duct_ids)
+            .bind::<Array<Integer>, _>(&*self.schacht_ids)
             .bind::<Timestamptz, _>(last_delivered.erstellt_am)
             .get_result::<FirstChange>(&mut connection)
             .await?
@@ -185,11 +185,12 @@ async fn to_graphql(
         perimeter,
         perimeter_area,
         checksum,
-        schaechte: schaechte(connection, &export.schaechte).await?,
-        ducts: ducts(connection, &export.ducts).await?,
+        schaechte: schaechte(connection, &export.schaechte).await?.into(),
+        ducts: ducts(connection, &export.ducts).await?.into(),
         schaechte_without_position: schaechte(connection, &export.schaechte_without_position)
-            .await?,
-        ducts_without_line: ducts(connection, &export.ducts_without_line).await?,
+            .await?
+            .into(),
+        ducts_without_line: ducts(connection, &export.ducts_without_line).await?.into(),
         schacht_ids: export.schaechte,
         duct_ids: export.ducts,
     })

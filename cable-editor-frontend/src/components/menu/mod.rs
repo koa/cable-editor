@@ -20,10 +20,10 @@ pub struct MenuDropdownProps {
     pub title: Cow<'static, str>,
     /// Entries without a group title, shown first
     #[prop_or_default]
-    pub entries: Vec<MenuEntry>,
+    pub entries: Box<[MenuEntry]>,
     /// Titled groups after the entries; empty groups are left out
     #[prop_or_default]
-    pub groups: Vec<MenuEntryGroup>,
+    pub groups: Box<[MenuEntryGroup]>,
 }
 
 #[derive(PartialEq, Clone)]
@@ -38,7 +38,7 @@ pub struct MenuEntry {
 #[derive(PartialEq, Clone)]
 pub struct MenuEntryGroup {
     pub title: &'static str,
-    pub entries: Vec<MenuEntry>,
+    pub entries: Box<[MenuEntry]>,
 }
 
 /// Divider between the menus of a path inside one breadcrumb item (`.breadcrumb-path`).
@@ -102,7 +102,7 @@ pub struct MenuErrorProps {
     pub title: AttrValue,
     /// `FrontendError::details`
     #[prop_or_default]
-    pub details: Vec<String>,
+    pub details: Box<[String]>,
 }
 
 /// Breadcrumb item whose menu couldn't be loaded: instead of an alert, which doesn't fit into

@@ -192,7 +192,7 @@ fn view_error(error: &NetboxSyncError) -> Html {
     let detail = match extensions.user_error {
         Some(user_error) => FrontendError::User(user_error).title(),
         None => ServerError {
-            message: error.message.clone(),
+            message: error.message.clone().into(),
             origin: extensions.origin,
         }
         .detail(),

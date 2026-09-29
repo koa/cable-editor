@@ -24,21 +24,21 @@ const DUCT_OBJEKTART: &str = "Kommunikation.Trasse.unterirdisch";
 #[derive(Debug, Clone, PartialEq)]
 pub struct Delivery {
     /// BID of the basket
-    pub basket_id: String,
+    pub basket_id: Box<str>,
     /// UID of the owner
-    pub datenherr: String,
+    pub datenherr: Box<str>,
     /// UID of whoever delivers (configuration)
-    pub datenlieferant: String,
+    pub datenlieferant: Box<str>,
     /// `Eigentuemer` of every object: the owner's name in the delivery
-    pub eigentuemer: String,
-    pub schaechte: Vec<LkPunkt>,
-    pub ducts: Vec<LkLinie>,
+    pub eigentuemer: Box<str>,
+    pub schaechte: Box<[LkPunkt]>,
+    pub ducts: Box<[LkLinie]>,
 }
 
 /// A Schacht.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LkPunkt {
-    pub oid: String,
+    pub oid: Box<str>,
     pub letzte_aenderung: NaiveDate,
     pub lagebestimmung: Genauigkeit,
     pub dimension1_mm: Option<i32>,
@@ -51,12 +51,12 @@ pub struct LkPunkt {
 /// A duct.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LkLinie {
-    pub oid: String,
+    pub oid: Box<str>,
     pub letzte_aenderung: NaiveDate,
     pub lagebestimmung: Genauigkeit,
     pub breite_mm: Option<i32>,
     /// LV95 (east, north), from Schacht A to Z
-    pub line: Vec<(f64, f64)>,
+    pub line: Box<[(f64, f64)]>,
 }
 
 /// A model of a transfer file.
@@ -79,7 +79,7 @@ pub(super) fn transfer(
     topic: &str,
     basket_id: &str,
     objects: impl FnOnce(&mut Xtf) -> io::Result<()>,
-) -> io::Result<Vec<u8>> {
+) -> io::Result<Box<[u8]>> {
     let mut xtf = Xtf(Writer::new_with_indent(Vec::new(), b' ', 1));
     xtf.0
         .write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)))?;
@@ -110,11 +110,11 @@ pub(super) fn transfer(
     xtf.end("TRANSFER")?;
     let mut bytes = xtf.0.into_inner();
     bytes.push(b'\n');
-    Ok(bytes)
+    Ok(bytes.into_boxed_slice())
 }
 
 /// The transfer file of the delivery.
-pub fn write(delivery: &Delivery) -> io::Result<Vec<u8>> {
+pub fn write(delivery: &Delivery) -> io::Result<Box<[u8]>> {
     transfer(&LKMAP, TOPIC, &delivery.basket_id, |xtf| {
         write_objects(xtf, delivery)
     })
@@ -168,8 +168,8 @@ fn write_objects(xtf: &mut Xtf, delivery: &Delivery) -> io::Result<()> {
 }
 
 /// `Letzte_Aenderung` (`INTERLIS_1_DATE`)
-pub(super) fn interlis_date(date: NaiveDate) -> String {
-    date.format("%Y%m%d").to_string()
+pub(super) fn interlis_date(date: NaiveDate) -> Box<str> {
+    date.format("%Y%m%d").to_string().into()
 }
 
 pub(super) struct Xtf(Writer<Vec<u8>>);
@@ -243,19 +243,21 @@ mod tests {
                 dimension2_mm: None,
                 objektart: LkmapPunktObjektart::SchachtRund,
                 position: (2709223.5604, 1253098.3196),
-            }],
+            }]
+            .into(),
             ducts: vec![LkLinie {
                 oid: "ch4711abt0000007".into(),
                 letzte_aenderung: date(),
                 lagebestimmung: Genauigkeit::Unbekannt,
                 breite_mm: None,
-                line: vec![(2709223.56, 1253098.32), (2709228.27, 1253125.88)],
-            }],
+                line: vec![(2709223.56, 1253098.32), (2709228.27, 1253125.88)].into(),
+            }]
+            .into(),
         }
     }
 
     fn xtf() -> String {
-        String::from_utf8(write(&delivery()).expect("writes")).expect("UTF-8")
+        String::from_utf8(write(&delivery()).expect("writes").into_vec()).expect("UTF-8")
     }
 
     #[test]

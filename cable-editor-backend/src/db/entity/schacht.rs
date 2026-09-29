@@ -123,7 +123,7 @@ impl Schacht {
             })
             .collect()
     }
-    async fn root_panels(&self, ctx: &Context<'_>) -> ApiResult<Vec<Panel>> {
+    async fn root_panels(&self, ctx: &Context<'_>) -> ApiResult<Box<[Panel]>> {
         Ok(get_loader(ctx)?
             .load_one(SchachtRootPanels(self.id))
             .await?

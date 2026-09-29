@@ -24,7 +24,7 @@ pub enum ObjectKind {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PlanPorts {
-    pub plan: String,
+    pub plan: Box<str>,
     pub ports: i64,
 }
 
@@ -59,7 +59,7 @@ pub enum UserError {
     },
     NameTaken {
         kind: ObjectKind,
-        name: String,
+        name: Box<str>,
     },
     DescriptionTooLong {
         max: usize,
@@ -76,7 +76,7 @@ pub enum UserError {
     /// The Schächte of a duct lie at the same place, the direction of its course is unknown
     SchaechteAtSamePlace,
     SchachtWithoutPosition {
-        schacht: String,
+        schacht: Box<str>,
     },
     /// An end of the course lies far from its Schacht and wasn't confirmed
     LineNeedsConfirmation {
@@ -104,7 +104,7 @@ pub enum UserError {
     // Cables
     CableWithoutSegment,
     CableAttached {
-        plans: Vec<PlanPorts>,
+        plans: Box<[PlanPorts]>,
     },
     DuctsNotConnected {
         duct: i32,
@@ -133,11 +133,11 @@ pub enum UserError {
         max: usize,
     },
     InvalidUid {
-        uid: String,
+        uid: Box<str>,
     },
     UidTaken {
-        uid: String,
-        owner: String,
+        uid: Box<str>,
+        owner: Box<str>,
     },
 
     // Schacht types
@@ -166,7 +166,7 @@ pub enum UserError {
     LkmapNotConfigured,
     /// The owner has no UID, so nothing of it can be delivered
     OwnerWithoutUid {
-        owner: String,
+        owner: Box<str>,
     },
     /// An id doesn't fit into the 7 digits of an OID
     LkmapIdTooLarge {
@@ -175,20 +175,20 @@ pub enum UserError {
     },
     /// The owner has no delivered duct and no Schacht where one ends
     NothingToDeliver {
-        owner: String,
+        owner: Box<str>,
     },
 
     // Netbox sync
     /// Netbox refused a step; `detail` is Netbox's answer, for support
     NetboxFailed {
         step: NetboxStep,
-        object: String,
-        detail: String,
+        object: Box<str>,
+        detail: Box<str>,
     },
     /// Netbox answered without the id of what it created
     NetboxWithoutId {
         step: NetboxStep,
-        object: String,
+        object: Box<str>,
     },
 }
 
@@ -198,10 +198,10 @@ pub enum UserError {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct ErrorOrigin {
     /// The crate whose error it is, e.g. `diesel`
-    pub library: String,
+    pub library: Box<str>,
     /// `file:line` of the code that got it
-    pub location: String,
-    pub id: String,
+    pub location: Box<str>,
+    pub id: Box<str>,
 }
 
 #[cfg(feature = "async-graphql")]

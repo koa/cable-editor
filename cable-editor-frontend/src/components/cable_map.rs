@@ -217,7 +217,7 @@ fn clickable<'a>(
     path: Option<&CablePath>,
     path_ducts: &[i32],
     data: &'a MapData,
-) -> Vec<(&'a MapDuct, PathEdit, &'static str)> {
+) -> Box<[(&'a MapDuct, PathEdit, &'static str)]> {
     let Some(path) = path.filter(|path| !path.segments.is_empty()) else {
         return data
             .ducts
@@ -271,7 +271,7 @@ fn clickable<'a>(
             break;
         }
     }
-    result
+    result.into_boxed_slice()
 }
 
 fn cable_duct(duct: &MapDuct) -> CableDuct {

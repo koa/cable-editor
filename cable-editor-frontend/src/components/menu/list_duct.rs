@@ -117,7 +117,7 @@ impl ListDuct {
                             },
                         },
                     })
-                    .collect::<Vec<_>>()
+                    .collect::<Box<[_]>>()
             })
             .unwrap_or_default();
         let mut duct_entries = ducts
@@ -133,12 +133,12 @@ impl ListDuct {
                     },
                 },
             })
-            .collect::<Vec<_>>();
+            .collect::<Box<[_]>>();
         duct_entries.sort_by(|a, b| a.text.cmp(&b.text));
-        let groups = vec![MenuEntryGroup {
+        let groups: Box<[MenuEntryGroup]> = Box::new([MenuEntryGroup {
             title: "Trassen",
             entries: duct_entries,
-        }];
+        }]);
         let duct_menu = html!(<MenuDropdown {title} entries={view_entries.clone()} {groups}/>);
         let Some(view) = view else {
             return duct_menu;

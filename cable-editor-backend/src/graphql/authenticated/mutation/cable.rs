@@ -108,7 +108,10 @@ impl CableMutation {
         if !usages.is_empty() {
             let plans = usages
                 .into_iter()
-                .map(|(plan, ports)| PlanPorts { plan, ports })
+                .map(|(plan, ports)| PlanPorts {
+                    plan: plan.into(),
+                    ports,
+                })
                 .collect();
             return Err(UserError::CableAttached { plans }.into());
         }

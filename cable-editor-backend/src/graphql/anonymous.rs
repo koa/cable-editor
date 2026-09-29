@@ -11,7 +11,7 @@ pub fn create_anonymous_schema() -> AnonymousGraphqlSchema {
 struct AuthenticationData {
     client_id: &'static str,
     issuer_url: &'static str,
-    scopes: Vec<String>,
+    scopes: Box<[Box<str>]>,
 }
 
 #[Object]

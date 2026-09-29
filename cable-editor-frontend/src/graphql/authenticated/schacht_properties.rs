@@ -45,8 +45,8 @@ pub struct SchachtOwnerRef {
 /// What a Schacht's properties choose from.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SchachtChoices {
-    pub types: Vec<SchachtTypeEntry>,
-    pub owners: Vec<OwnerChoice>,
+    pub types: Box<[SchachtTypeEntry]>,
+    pub owners: Box<[OwnerChoice]>,
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone, Copy, PartialEq)]
@@ -75,8 +75,8 @@ pub async fn fetch_schacht_choices(
 ) -> Result<SchachtChoices, FrontendError> {
     let result = query::<SchachtChoicesQuery, _>((), credentials).await?;
     Ok(SchachtChoices {
-        types: result.list_schacht_typ,
-        owners: result.list_owner,
+        types: result.list_schacht_typ.into(),
+        owners: result.list_owner.into(),
     })
 }
 
@@ -89,8 +89,8 @@ pub async fn fetch_schacht_properties(
         query::<SchachtPropertiesQuery, _>(SchachtPropertiesVariables { schacht_id }, credentials)
             .await?;
     let choices = SchachtChoices {
-        types: result.list_schacht_typ,
-        owners: result.list_owner,
+        types: result.list_schacht_typ.into(),
+        owners: result.list_owner.into(),
     };
     Ok((result.schacht, choices))
 }

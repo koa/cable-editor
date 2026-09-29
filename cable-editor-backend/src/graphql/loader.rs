@@ -169,6 +169,14 @@ fn ids<K>(keys: &[K], id: impl Fn(&K) -> i32) -> Vec<i32> {
     keys.iter().map(id).collect()
 }
 
+/// The lists grouped while loading, done.
+fn boxed<K: std::hash::Hash + Eq, V>(groups: HashMap<K, Vec<V>>) -> HashMap<K, Box<[V]>> {
+    groups
+        .into_iter()
+        .map(|(key, values)| (key, values.into_boxed_slice()))
+        .collect()
+}
+
 impl Loader<SchachtId> for DbLoader {
     type Value = Schacht;
     type Error = ApiError;
@@ -327,13 +335,13 @@ impl Loader<SchachtLocation> for DbLoader {
 }
 
 impl Loader<DuctLine> for DbLoader {
-    type Value = Vec<GeoPoint>;
+    type Value = Box<[GeoPoint]>;
     type Error = ApiError;
 
     async fn load(
         &self,
         keys: &[DuctLine],
-    ) -> Result<HashMap<DuctLine, Vec<GeoPoint>>, Self::Error> {
+    ) -> Result<HashMap<DuctLine, Box<[GeoPoint]>>, Self::Error> {
         let mut connection = self.connection.lock().await;
         let list: Vec<(i32, Option<LineString<Point>>)> = schema::trassen_mit_endpunkten::table
             .filter(schema::trassen_mit_endpunkten::id.eq_any(ids(keys, |k| k.0)))
@@ -354,13 +362,13 @@ impl Loader<DuctLine> for DbLoader {
 }
 
 impl Loader<DuctCables> for DbLoader {
-    type Value = Vec<Cable>;
+    type Value = Box<[Cable]>;
     type Error = ApiError;
 
     async fn load(
         &self,
         keys: &[DuctCables],
-    ) -> Result<HashMap<DuctCables, Vec<Cable>>, Self::Error> {
+    ) -> Result<HashMap<DuctCables, Box<[Cable]>>, Self::Error> {
         let mut connection = self.connection.lock().await;
         let list: Vec<(i32, Cable)> = schema::kabel_trasse::table
             .inner_join(schema::kabel::table)
@@ -373,7 +381,7 @@ impl Loader<DuctCables> for DbLoader {
         for (duct, cable) in list {
             cables.entry(DuctCables(duct)).or_default().push(cable);
         }
-        Ok(cables)
+        Ok(boxed(cables))
     }
 }
 
@@ -399,13 +407,13 @@ impl Loader<DuctLength> for DbLoader {
 }
 
 impl Loader<SchachtRootPanels> for DbLoader {
-    type Value = Vec<Panel>;
+    type Value = Box<[Panel]>;
     type Error = ApiError;
 
     async fn load(
         &self,
         keys: &[SchachtRootPanels],
-    ) -> Result<HashMap<SchachtRootPanels, Vec<Panel>>, Self::Error> {
+    ) -> Result<HashMap<SchachtRootPanels, Box<[Panel]>>, Self::Error> {
         let mut connection = self.connection.lock().await;
         let list: Vec<Panel> = Panel::query()
             .filter(schema::panel::schacht_id.eq_any(ids(keys, |k| k.0)))
@@ -420,7 +428,7 @@ impl Loader<SchachtRootPanels> for DbLoader {
                 .or_default()
                 .push(panel);
         }
-        Ok(panels)
+        Ok(boxed(panels))
     }
 }
 
@@ -448,13 +456,13 @@ impl Loader<CableLength> for DbLoader {
 }
 
 impl Loader<CableDucts> for DbLoader {
-    type Value = Vec<(Duct, i32)>;
+    type Value = Box<[(Duct, i32)]>;
     type Error = ApiError;
 
     async fn load(
         &self,
         keys: &[CableDucts],
-    ) -> Result<HashMap<CableDucts, Vec<(Duct, i32)>>, Self::Error> {
+    ) -> Result<HashMap<CableDucts, Box<[(Duct, i32)]>>, Self::Error> {
         let mut connection = self.connection.lock().await;
         let list: Vec<(i32, Duct, i32)> = schema::trasse::table
             .inner_join(schema::kabel_trasse::table)
@@ -477,19 +485,19 @@ impl Loader<CableDucts> for DbLoader {
                 .or_default()
                 .push((duct, sequence));
         }
-        Ok(ducts)
+        Ok(boxed(ducts))
     }
 }
 
 impl Loader<CableEndUsages> for DbLoader {
-    type Value = Vec<PortUsage>;
+    type Value = Box<[PortUsage]>;
     type Error = ApiError;
 
     /// One query per cable end (instead of per fiber); a page shows few cable ends.
     async fn load(
         &self,
         keys: &[CableEndUsages],
-    ) -> Result<HashMap<CableEndUsages, Vec<PortUsage>>, Self::Error> {
+    ) -> Result<HashMap<CableEndUsages, Box<[PortUsage]>>, Self::Error> {
         let mut connection = self.connection.lock().await;
         let mut usages = HashMap::new();
         for key in keys {

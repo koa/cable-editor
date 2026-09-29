@@ -70,9 +70,9 @@ impl SyncIssue {
 #[derive(SimpleObject, Serialize, Deserialize, Debug, Clone)]
 pub struct NetboxPortRef {
     pub id: u32,
-    pub name: String,
-    pub device_name: Option<String>,
-    pub location_name: Option<String>,
+    pub name: Box<str>,
+    pub device_name: Option<Box<str>>,
+    pub location_name: Option<Box<str>>,
 }
 
 impl NetboxPortRef {
@@ -84,9 +84,11 @@ impl NetboxPortRef {
         let device = fetch_device_with_ports(port.device.id).await?;
         Ok(NetboxPortRef {
             id: port.id.into(),
-            name: port.name,
-            device_name: device.as_ref().and_then(|d| d.name.clone()),
-            location_name: device.and_then(|d| d.location.map(|l| l.name)),
+            name: port.name.into(),
+            device_name: device
+                .as_ref()
+                .and_then(|d| d.name.as_deref().map(Into::into)),
+            location_name: device.and_then(|d| d.location.map(|l| l.name.into())),
         })
     }
 }
@@ -164,7 +166,7 @@ pub struct NameCollisionError {
     #[graphql(skip)]
     pub panel_id: i32,
     /// The generated name, already taken in Netbox
-    pub circuit_name: String,
+    pub circuit_name: Box<str>,
 }
 
 #[ComplexObject]
@@ -177,7 +179,7 @@ impl NameCollisionError {
 #[derive(SimpleObject, Serialize, Deserialize, Debug, Clone)]
 pub struct MissingNetboxMasterDataError {
     /// What is missing (e.g. "Provider" or "CircuitType")
-    pub entity_type: String,
+    pub entity_type: Box<str>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -214,7 +216,7 @@ pub struct CircuitMember {
 pub struct PlannedCircuit {
     pub start_netbox_id: i32,
     pub end_netbox_id: i32,
-    pub members: Vec<CircuitMember>,
+    pub members: Box<[CircuitMember]>,
     pub distance: f64,
 }
 impl PlannedCircuit {
@@ -231,16 +233,16 @@ impl PlannedCircuit {
         self
     }
     /// A circuit id (CID) for Netbox that stays the same from sync to sync
-    pub fn cid(&self) -> String {
+    pub fn cid(&self) -> Box<str> {
         if let Some(first) = <[_]>::first(&self.members) {
-            format!("FIBER-{:05}-{:05}", first.start_port.id, first.end_port.id)
+            format!("FIBER-{:05}-{:05}", first.start_port.id, first.end_port.id).into()
         } else {
-            "FIBER-EMPTY".to_string()
+            "FIBER-EMPTY".into()
         }
     }
 
     /// A readable description of the circuit, of all its members
-    pub fn description(&self) -> String {
+    pub fn description(&self) -> Box<str> {
         let starts = self
             .members
             .iter()
@@ -254,7 +256,7 @@ impl PlannedCircuit {
             .collect::<Vec<_>>()
             .join(", ");
 
-        format!("LWL Crossconnect: [{}] ↔ [{}]", starts, ends)
+        format!("LWL Crossconnect: [{}] ↔ [{}]", starts, ends).into()
     }
 }
 
@@ -435,7 +437,7 @@ pub async fn sync_plan_to_netbox(
         let cid = planned.cid();
         let expected_ports = vec![planned.start_netbox_id, planned.end_netbox_id];
 
-        if let Some(idx) = existing_circuits.iter().position(|c| c.cid == cid) {
+        if let Some(idx) = existing_circuits.iter().position(|c| *c.cid == *cid) {
             let existing = existing_circuits.remove(idx);
 
             let mut actual_ports = existing.connected_rear_port_ids();
@@ -479,7 +481,7 @@ pub async fn sync_plan_to_netbox(
             .await?;
 
         if !res.status().is_success() {
-            return Err(netbox_failed(NetboxStep::DeleteCircuit, id.to_string(), res).await);
+            return Err(netbox_failed(NetboxStep::DeleteCircuit, id.to_string().into(), res).await);
         }
     }
 
@@ -557,7 +559,9 @@ pub async fn sync_plan_to_netbox(
 
             if !term_res.status().is_success() {
                 let object = format!("{} {side}", circuit.cid());
-                return Err(netbox_failed(NetboxStep::CreateTermination, object, term_res).await);
+                return Err(
+                    netbox_failed(NetboxStep::CreateTermination, object.into(), term_res).await,
+                );
             }
 
             let created_term: serde_json::Value = term_res.json().await?;
@@ -566,7 +570,7 @@ pub async fn sync_plan_to_netbox(
                     .as_i64()
                     .ok_or_else(|| UserError::NetboxWithoutId {
                         step: NetboxStep::CreateTermination,
-                        object: format!("{} {side}", circuit.cid()),
+                        object: format!("{} {side}", circuit.cid()).into(),
                     })?;
 
             // Remove a cable blocking the port, if any
@@ -595,7 +599,7 @@ pub async fn sync_plan_to_netbox(
 
             if !cable_res.status().is_success() {
                 let object = format!("{} {side}", circuit.cid());
-                return Err(netbox_failed(NetboxStep::PatchCable, object, cable_res).await);
+                return Err(netbox_failed(NetboxStep::PatchCable, object.into(), cable_res).await);
             }
         }
     }
@@ -632,11 +636,15 @@ pub async fn sync_plan_to_netbox(
 }
 
 /// Netbox refused `step`; its answer goes along for support.
-async fn netbox_failed(step: NetboxStep, object: String, response: reqwest::Response) -> ApiError {
+async fn netbox_failed(
+    step: NetboxStep,
+    object: Box<str>,
+    response: reqwest::Response,
+) -> ApiError {
     UserError::NetboxFailed {
         step,
         object,
-        detail: response.text().await.unwrap_or_default(),
+        detail: response.text().await.unwrap_or_default().into(),
     }
     .into()
 }
@@ -681,7 +689,7 @@ mod tests {
     fn issues_survive_storing() {
         let port = |id| NetboxPortRef {
             id,
-            name: format!("RP {id}"),
+            name: format!("RP {id}").into(),
             device_name: Some("ODF".into()),
             location_name: None,
         };

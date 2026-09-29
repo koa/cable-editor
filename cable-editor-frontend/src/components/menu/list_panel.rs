@@ -249,10 +249,11 @@ impl ListPanel {
                 },
             })
             .collect();
-        let groups = vec![MenuEntryGroup {
+        let groups: Box<[MenuEntryGroup]> = Box::new([MenuEntryGroup {
             title: others_title,
             entries: others,
-        }];
+        }]);
+        let entries = entries.into_boxed_slice();
         html!(<MenuDropdown {title} {entries} {groups}/>)
     }
 }
@@ -263,7 +264,7 @@ fn with_self(
     id: i32,
     name: &Option<String>,
     parent_order: Option<i32>,
-) -> Vec<ChildPanelNav> {
+) -> Box<[ChildPanelNav]> {
     let mut panels = siblings.to_vec();
     panels.push(ChildPanelNav {
         id,
@@ -271,5 +272,5 @@ fn with_self(
         parent_order,
     });
     panels.sort_by_key(|panel| panel.parent_order);
-    panels
+    panels.into_boxed_slice()
 }

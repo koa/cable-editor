@@ -21,7 +21,7 @@ pub type ApiResult<T> = Result<T, ApiError>;
 pub enum ApiError {
     /// A library failed, at `location`
     Failed {
-        message: String,
+        message: Box<str>,
         library: &'static str,
         location: &'static Location<'static>,
     },
@@ -83,7 +83,7 @@ impl ApiError {
     #[track_caller]
     pub fn failed(library: &'static str, message: &str) -> Self {
         ApiError::Failed {
-            message: message.to_string(),
+            message: message.into(),
             library,
             location: Location::caller(),
         }
@@ -95,7 +95,7 @@ impl<E: Origin> From<E> for ApiError {
     #[track_caller]
     fn from(error: E) -> Self {
         ApiError::Failed {
-            message: error.to_string(),
+            message: error.to_string().into(),
             library: error.library(),
             location: Location::caller(),
         }
@@ -125,8 +125,8 @@ impl From<ApiError> for async_graphql::Error {
                 location,
             } => {
                 let origin = ErrorOrigin {
-                    library: library.to_string(),
-                    location: format!("{}:{}", short_path(location.file()), location.line()),
+                    library: library.into(),
+                    location: format!("{}:{}", short_path(location.file()), location.line()).into(),
                     id: next_id(),
                 };
                 log::error!(
@@ -164,10 +164,10 @@ fn short_path(file: &str) -> &str {
 
 /// Unique across restarts and replicas for all practical purposes: the time in milliseconds
 /// and a counter for errors within the same millisecond.
-fn next_id() -> String {
+fn next_id() -> Box<str> {
     static COUNTER: AtomicU32 = AtomicU32::new(0);
     let count = COUNTER.fetch_add(1, Ordering::Relaxed) % 256;
-    format!("{:x}{count:02x}", chrono::Utc::now().timestamp_millis())
+    format!("{:x}{count:02x}", chrono::Utc::now().timestamp_millis()).into()
 }
 
 #[cfg(test)]

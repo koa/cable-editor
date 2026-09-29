@@ -388,7 +388,7 @@ impl EditDuctProperties {
     fn schaechte(&self) -> &[SchachtChoice] {
         self.loaded
             .as_ref()
-            .map(|(_, choices)| choices.schaechte.as_slice())
+            .map(|(_, choices)| &*choices.schaechte)
             .unwrap_or_default()
     }
 
@@ -422,7 +422,7 @@ impl EditDuctProperties {
         let line = file.content.lines.get(file.line)?;
         Some(LineInput {
             system: file.system,
-            points: line.points.clone(),
+            points: line.points.to_vec(),
         })
     }
 

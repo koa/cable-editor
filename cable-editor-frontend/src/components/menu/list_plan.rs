@@ -98,7 +98,7 @@ impl Component for ListPlan {
                             view: view.clone(),
                         },
                     }))
-                    .collect::<Vec<_>>();
+                    .collect::<Box<[_]>>();
                     html! {
                         <MenuDropdown {title} {entries}/>
                     }

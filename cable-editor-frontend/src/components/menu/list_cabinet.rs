@@ -125,7 +125,7 @@ impl ListCabinet {
                     },
                 },
             })
-            .collect::<Vec<_>>();
+            .collect::<Box<[_]>>();
         let mut cabinet_entries = cabinets
             .iter()
             .map(|c| MenuEntry {
@@ -139,12 +139,12 @@ impl ListCabinet {
                     },
                 },
             })
-            .collect::<Vec<_>>();
+            .collect::<Box<[_]>>();
         cabinet_entries.sort_by(|a, b| a.text.cmp(&b.text));
-        let groups = vec![MenuEntryGroup {
+        let groups: Box<[MenuEntryGroup]> = Box::new([MenuEntryGroup {
             title: "Schächte",
             entries: cabinet_entries,
-        }];
+        }]);
         let cabinet_menu = html!(<MenuDropdown {title} entries={view_entries.clone()} {groups}/>);
 
         let Some(view) = view else {
@@ -171,10 +171,10 @@ impl ListCabinet {
             })
             .collect();
         let title: Cow<'static, str> = view.title().into();
-        let groups = vec![MenuEntryGroup {
+        let groups: Box<[MenuEntryGroup]> = Box::new([MenuEntryGroup {
             title: "Panels",
             entries: panels,
-        }];
+        }]);
         html! {
             <span class="breadcrumb-path">
                 {cabinet_menu}

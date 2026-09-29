@@ -102,7 +102,7 @@ impl SchachtCableEnd {
 
 impl SchachtCables {
     /// All panels, each followed by its children (depth first, in panel order).
-    pub fn panels(&self) -> Vec<SchachtPanelEntry> {
+    pub fn panels(&self) -> Box<[SchachtPanelEntry]> {
         fn push_children(
             root: &SchachtRootPanel,
             parent: i32,
@@ -142,7 +142,7 @@ impl SchachtCables {
                 &mut out,
             );
         }
-        out
+        out.into_boxed_slice()
     }
 
     pub async fn fetch(

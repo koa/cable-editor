@@ -60,7 +60,7 @@ pub struct LineInput {
 #[derive(Debug, Clone, PartialEq)]
 pub struct FittedLine {
     /// The points between the Schächte, LV95; empty: a straight line
-    pub points: Vec<Point>,
+    pub points: Box<[Point]>,
     /// The line ran from Schacht Z to Schacht A
     pub reversed: bool,
     /// Ends left out because they repeat their Schacht
@@ -114,7 +114,7 @@ pub fn fit(mut points: Vec<Point>, a: &Point, z: &Point) -> Result<FittedLine, U
     let points = if trimmed.len() == 1 { points } else { trimmed };
     let removed_ends = (before - points.len()) as u32;
     Ok(FittedLine {
-        points,
+        points: points.into(),
         reversed,
         removed_ends,
         start_distance,
@@ -174,7 +174,7 @@ pub async fn schacht_position(
         .await?;
     geom.ok_or_else(|| {
         UserError::SchachtWithoutPosition {
-            schacht: name.unwrap_or_else(|| schacht_id.to_string()),
+            schacht: name.unwrap_or_else(|| schacht_id.to_string()).into(),
         }
         .into()
     })
@@ -197,7 +197,7 @@ pub async fn fit_line(
 /// The line as stored (LV95, without the Schächte); `None` for a straight line.
 pub fn stored_line(fitted: &FittedLine) -> Option<LineString<Point>> {
     (fitted.points.len() >= 2).then(|| LineString {
-        points: fitted.points.clone(),
+        points: fitted.points.to_vec(),
         srid: Some(LV95),
     })
 }
@@ -206,7 +206,7 @@ pub fn stored_line(fitted: &FittedLine) -> Option<LineString<Point>> {
 #[derive(SimpleObject, Debug, Clone, PartialEq)]
 pub struct DuctLineCheck {
     /// The whole course from Schacht A to Schacht Z, WGS84
-    pub line: Vec<GeoPoint>,
+    pub line: Box<[GeoPoint]>,
     pub reversed: bool,
     pub removed_ends: i32,
     /// Metres from the file's line to Schacht A and to Schacht Z

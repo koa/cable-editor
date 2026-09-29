@@ -72,9 +72,9 @@ impl NetboxSync {
 /// Why the last run failed, the GraphQL error it ended with.
 #[derive(SimpleObject)]
 pub struct NetboxSyncError {
-    pub message: String,
+    pub message: Box<str>,
     /// The error's extensions as JSON: `userError` (e.g. Netbox refused a step) or `origin`
-    pub extensions: Option<String>,
+    pub extensions: Option<Box<str>>,
 }
 
 #[Object]
@@ -153,11 +153,11 @@ impl NetboxSync {
     async fn error(&self) -> Option<NetboxSyncError> {
         let error = self.error.as_ref()?;
         Some(NetboxSyncError {
-            message: error["message"].as_str().unwrap_or_default().to_string(),
+            message: error["message"].as_str().unwrap_or_default().into(),
             extensions: error
                 .get("extensions")
                 .filter(|extensions| !extensions.is_null())
-                .map(serde_json::Value::to_string),
+                .map(|extensions| extensions.to_string().into()),
         })
     }
 }

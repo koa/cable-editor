@@ -57,7 +57,7 @@ pub struct CableDuct {
 }
 impl Cable {
     /// The cable's path from its ducts (with their sequence), `None` without ducts.
-    fn path_from_ducts(&self, ducts: Vec<(Duct, i32)>) -> ApiResult<Option<CablePath>> {
+    fn path_from_ducts(&self, ducts: Box<[(Duct, i32)]>) -> ApiResult<Option<CablePath>> {
         let segments = align_ducts(ducts.into_iter())
             .map(|r| {
                 r.map(|segment| CablePathSegment {
@@ -65,7 +65,7 @@ impl Cable {
                     segment,
                 })
             })
-            .collect::<Result<Vec<_>, _>>()
+            .collect::<Result<Box<[_]>, _>>()
             .map_err(|error| match error {
                 DuctAlignmentError::NoConnectionFoundOnPair { first, second } => {
                     UserError::DuctsNotConnected {
@@ -80,9 +80,8 @@ impl Cable {
                     }
                 }
             })?;
-        Ok(segments
-            .as_slice()
-            .first()
+        // Not `segments.first()`: diesel's FirstDsl is in scope
+        Ok(<[_]>::first(&segments)
             .map(|s| s.segment.schacht_a())
             .map(|first| CablePath {
                 cable: self.clone(),
@@ -137,7 +136,7 @@ impl Cable {
         self.load_path(ctx).await
     }
     /// Course in WGS84 for the map; missing without ducts or with a gap between them
-    async fn line(&self, ctx: &Context<'_>) -> ApiResult<Option<Vec<GeoPoint>>> {
+    async fn line(&self, ctx: &Context<'_>) -> ApiResult<Option<Box<[GeoPoint]>>> {
         let mut connection = get_connection(ctx).await?;
         // Unlike the view kabel_pfad, which fails on a gap (no LineString to cast to)
         let line: Option<CableLine> = sql_query(
@@ -177,7 +176,7 @@ pub async fn cable_usages_at(
     plan_id: i32,
     cable_id: i32,
     schacht_id: i32,
-) -> Result<Vec<PortUsage>, diesel::result::Error> {
+) -> Result<Box<[PortUsage]>, diesel::result::Error> {
     let raw_sql = r#"
         -- 1. Echte Belegungen für dieses Kabel im aktuellen Plan, direkt auf den Schacht gefiltert
         SELECT u.*
@@ -215,11 +214,12 @@ pub async fn cable_usages_at(
         .bind::<diesel::sql_types::Integer, _>(schacht_id)
         .load::<PortUsage>(connection)
         .await
+        .map(Vec::into_boxed_slice)
 }
 
 impl CableEnd {
     /// `cable_usages_at`, loaded in batches with the request's other cable ends.
-    async fn usages(&self, ctx: &Context<'_>, plan_id: i32) -> ApiResult<Vec<PortUsage>> {
+    async fn usages(&self, ctx: &Context<'_>, plan_id: i32) -> ApiResult<Box<[PortUsage]>> {
         Ok(get_loader(ctx)?
             .load_one(CableEndUsages {
                 cable: self.cable.id,
@@ -255,10 +255,10 @@ impl CableEnd {
         })
     }
 
-    async fn used_ports(&self, ctx: &Context<'_>, plan_id: i32) -> ApiResult<Vec<PortUsage>> {
+    async fn used_ports(&self, ctx: &Context<'_>, plan_id: i32) -> ApiResult<Box<[PortUsage]>> {
         self.usages(ctx, plan_id).await
     }
-    async fn fibers(&self) -> Vec<FiberEnd> {
+    async fn fibers(&self) -> Box<[FiberEnd]> {
         (1..=self.cable.buendel_anz)
             .flat_map(|bundle| {
                 (1..=self.cable.faser_anz).map(move |fiber| FiberEnd {
@@ -365,7 +365,7 @@ impl Fiber {
 pub struct CablePath {
     cable: Cable,
     near_schacht: i32,
-    segments: Vec<CablePathSegment>,
+    segments: Box<[CablePathSegment]>,
 }
 
 impl CablePath {
@@ -386,7 +386,7 @@ impl CablePath {
             CablePath {
                 cable: self.cable,
                 near_schacht: next_schacht,
-                segments: new_segments,
+                segments: new_segments.into_boxed_slice(),
             }
         }
     }

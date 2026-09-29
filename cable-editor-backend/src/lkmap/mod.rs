@@ -37,29 +37,29 @@ use zip::{CompressionMethod, ZipWriter, write::SimpleFileOptions};
 #[derive(Debug, Clone, PartialEq)]
 pub struct TransferFile {
     /// `<uid>-<content>.xtf`, the UID in lower case with `-` for `.`
-    pub file_name: String,
-    pub xtf: Vec<u8>,
+    pub file_name: Box<str>,
+    pub xtf: Box<[u8]>,
 }
 
 impl TransferFile {
     /// The ZIP of the same name holding the file, how the Checkservice takes it.
-    pub fn zip_name(&self) -> String {
+    pub fn zip_name(&self) -> Box<str> {
         let name = self
             .file_name
             .strip_suffix(".xtf")
             .unwrap_or(&self.file_name);
-        format!("{name}.zip")
+        format!("{name}.zip").into()
     }
 
     /// The file in a ZIP (see `zip_name`).
-    pub fn zip(&self) -> zip::result::ZipResult<Vec<u8>> {
+    pub fn zip(&self) -> zip::result::ZipResult<Box<[u8]>> {
         let mut zip = ZipWriter::new(Cursor::new(Vec::new()));
         zip.start_file(
-            self.file_name.as_str(),
+            &*self.file_name,
             SimpleFileOptions::default().compression_method(CompressionMethod::Deflated),
         )?;
         zip.write_all(&self.xtf)?;
-        Ok(zip.finish()?.into_inner())
+        Ok(zip.finish()?.into_inner().into())
     }
 }
 
@@ -70,12 +70,12 @@ pub struct Export {
     /// Missing without UID and when nothing to deliver has a position
     pub files: Option<Files>,
     /// The delivered Schächte and ducts
-    pub schaechte: Vec<i32>,
-    pub ducts: Vec<i32>,
+    pub schaechte: Box<[i32]>,
+    pub ducts: Box<[i32]>,
     /// Schächte without position: neither they nor their ducts can be delivered
-    pub schaechte_without_position: Vec<i32>,
+    pub schaechte_without_position: Box<[i32]>,
     /// Delivered ducts ending at a Schacht without position
-    pub ducts_without_line: Vec<i32>,
+    pub ducts_without_line: Box<[i32]>,
 }
 
 /// The transfer files of an owner's delivery.
@@ -86,10 +86,10 @@ pub struct Files {
     /// The Zuständigkeitsperimeter (`Perimeter_LK_ZH_V2_LV95`)
     pub perimeter: TransferFile,
     /// The perimeter's outline in WGS84 (lat, lng), for the map
-    pub perimeter_wgs84: Vec<(f64, f64)>,
+    pub perimeter_wgs84: Box<[(f64, f64)]>,
     /// SHA-256 of both files in hex: the same data give the same files (no export date in
     /// them), so a different checksum means a change since a delivery, deleted objects too.
-    pub checksum: String,
+    pub checksum: Box<str>,
 }
 
 impl Export {
@@ -97,13 +97,13 @@ impl Export {
     pub fn deliverable(&self) -> Result<&Files, UserError> {
         if self.owner.uid.is_none() {
             return Err(UserError::OwnerWithoutUid {
-                owner: self.owner.name.clone(),
+                owner: self.owner.name.as_str().into(),
             });
         }
         self.files
             .as_ref()
             .ok_or_else(|| UserError::NothingToDeliver {
-                owner: self.owner.name.clone(),
+                owner: self.owner.name.as_str().into(),
             })
     }
 }
@@ -286,27 +286,27 @@ pub async fn export(connection: &mut AsyncPgConnection, owner_id: i32) -> ApiRes
             let perimeter = Perimeter {
                 basket_id: oid(prefix, 'p', owner.id)?,
                 tid: oid(prefix, 'z', owner.id)?,
-                datenherr: uid.clone(),
-                datenlieferant: config.datenlieferant_uid().to_string(),
+                datenherr: uid.as_str().into(),
+                datenlieferant: config.datenlieferant_uid().into(),
                 letzte_aenderung,
                 boundary: perimeter::rounded_ring(outer.iter().map(|p| (p.x, p.y))),
             };
             let delivery = Delivery {
                 basket_id: oid(prefix, 'b', owner.id)?,
-                datenherr: uid.clone(),
-                datenlieferant: config.datenlieferant_uid().to_string(),
-                eigentuemer: owner.delivered_name().to_string(),
-                schaechte,
-                ducts,
+                datenherr: uid.as_str().into(),
+                datenlieferant: config.datenlieferant_uid().into(),
+                eigentuemer: owner.delivered_name().into(),
+                schaechte: schaechte.into(),
+                ducts: ducts.into(),
             };
             let file_name =
                 |content: &str| format!("{}-{content}.xtf", uid.to_lowercase().replace('.', "-"));
             let lkmap = TransferFile {
-                file_name: file_name("kommunikation-lkmap"),
+                file_name: file_name("kommunikation-lkmap").into(),
                 xtf: xtf::write(&delivery)?,
             };
             let perimeter = TransferFile {
-                file_name: file_name("zustaendigkeit-peri"),
+                file_name: file_name("zustaendigkeit-peri").into(),
                 xtf: perimeter::write(&perimeter)?,
             };
             let checksum = checksum(&[&lkmap, &perimeter]);
@@ -328,15 +328,15 @@ pub async fn export(connection: &mut AsyncPgConnection, owner_id: i32) -> ApiRes
     Ok(Export {
         owner,
         files,
-        schaechte: schacht_ids,
-        ducts: duct_ids,
-        schaechte_without_position,
-        ducts_without_line,
+        schaechte: schacht_ids.into(),
+        ducts: duct_ids.into(),
+        schaechte_without_position: schaechte_without_position.into(),
+        ducts_without_line: ducts_without_line.into(),
     })
 }
 
 /// SHA-256 over the files in hex.
-fn checksum(files: &[&TransferFile]) -> String {
+fn checksum(files: &[&TransferFile]) -> Box<str> {
     let mut hasher = Sha256::new();
     for file in files {
         hasher.update(&file.xtf);
@@ -351,7 +351,7 @@ fn checksum(files: &[&TransferFile]) -> String {
 /// The STANDARDOID of an object: the configured prefix (8 characters), a letter for its kind
 /// and its id in 7 digits; also `OBJ_ID`. `s`: Schacht, `t`: duct, of an owner's delivery `b`:
 /// the LKMap basket, `p`: the perimeter's basket, `z`: the perimeter.
-fn oid(prefix: &str, letter: char, id: i32) -> Result<String, UserError> {
+fn oid(prefix: &str, letter: char, id: i32) -> Result<Box<str>, UserError> {
     if !(0..10_000_000).contains(&id) {
         let kind = match letter {
             's' => ObjectKind::Schacht,
@@ -360,7 +360,7 @@ fn oid(prefix: &str, letter: char, id: i32) -> Result<String, UserError> {
         };
         return Err(UserError::LkmapIdTooLarge { kind, id });
     }
-    Ok(format!("{prefix}{letter}{id:07}"))
+    Ok(format!("{prefix}{letter}{id:07}").into())
 }
 
 #[cfg(test)]
@@ -388,27 +388,30 @@ mod tests {
     fn zipped() {
         let file = TransferFile {
             file_name: "che-123-456-789-kommunikation-lkmap.xtf".into(),
-            xtf: b"<TRANSFER/>".repeat(100),
+            xtf: b"<TRANSFER/>".repeat(100).into(),
         };
-        assert_eq!(file.zip_name(), "che-123-456-789-kommunikation-lkmap.zip");
+        assert_eq!(
+            file.zip_name(),
+            "che-123-456-789-kommunikation-lkmap.zip".into()
+        );
         let mut archive = zip::ZipArchive::new(Cursor::new(file.zip().unwrap())).unwrap();
         let mut entry = archive.by_index(0).unwrap();
-        assert_eq!(entry.name(), file.file_name);
+        assert_eq!(entry.name(), &*file.file_name);
         let mut xtf = Vec::new();
         std::io::Read::read_to_end(&mut entry, &mut xtf).unwrap();
-        assert_eq!(xtf, file.xtf);
+        assert_eq!(*xtf, *file.xtf);
     }
 
     #[test]
     fn checksums() {
         let file = |xtf: &str| TransferFile {
-            file_name: String::new(),
-            xtf: xtf.into(),
+            file_name: Box::default(),
+            xtf: xtf.as_bytes().into(),
         };
         assert_eq!(
             checksum(&[&file("a"), &file("b")]),
             // sha256("ab")
-            "fb8e20fc2e4c3f248c60c39bd652f3c1347298bb977b8b4d5903b85055620603"
+            "fb8e20fc2e4c3f248c60c39bd652f3c1347298bb977b8b4d5903b85055620603".into()
         );
         assert_ne!(
             checksum(&[&file("a"), &file("b")]),

@@ -98,7 +98,7 @@ impl Component for ListCable {
                                 },
                             },
                         })
-                        .collect::<Vec<_>>();
+                        .collect::<Box<[_]>>();
                     html! {
                         <MenuDropdown {title} {entries}/>
                     }

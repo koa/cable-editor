@@ -19,7 +19,7 @@ pub struct EditCabinetPanelsProps {
 pub struct EditCabinetPanels {
     /// Name of the Schacht for the title, `None` while loading or if it failed (the editor below
     /// reports errors itself)
-    name: Option<String>,
+    name: Option<Box<str>>,
 }
 
 pub enum Msg {
@@ -49,7 +49,7 @@ impl Component for EditCabinetPanels {
                 false
             }
             Msg::Name(Ok(name)) => {
-                self.name = Some(name);
+                self.name = Some(name.into());
                 true
             }
             Msg::Name(Err(error)) => {
