@@ -1,10 +1,15 @@
 # Konzept: Datenlieferung an den Leitungskataster Kanton Zürich
 
-Stand: 28.09.2026 – umgesetzt bis zum manuellen Upload beim Checkservice: die Datenbank mit
+Stand: 29.09.2026 – umgesetzt bis zum manuellen Upload beim Checkservice: die Datenbank mit
 den Feldern in GraphQL (Abschnitt 4), die Konfiguration (Abschnitt 3), der Export beider
 Dateien als ZIP mit dem Protokoll der Lieferungen (Abschnitt 5, `cable-editor-backend/src/lkmap/`)
 und die UI mit der Admin-Seite (Abschnitt 6, `pages/lkmap.rs`). Offen ist der automatische
-Upload (Abschnitt 7, Schritt 6).
+Upload (Abschnitt 7, Schritt 7).
+
+Umstellung beschlossen, noch nicht umgesetzt (Abschnitt 7, Schritt 6): der Kanton wünscht
+entgegen den Weisungen *eine* Lieferung pro Datenherr, also eine für das ganze Netz, egal wem
+die einzelnen Teile gehören. Dieses Dokument beschreibt bereits den Zielzustand; die
+Abschnitte 4 bis 6 gelten für den Code erst nach Schritt 6.
 
 ## 1. Anforderungen
 
@@ -30,13 +35,13 @@ rechtlich §19 KGeoIG und Leitungskatasterverordnung (LKV, LS 704.14, in Kraft s
   braucht, steht unten.
 - **Termin** (§4 lit. a LKV): innerhalb einer Woche nach Erfassung einer Änderung, mindestens
   am Ende jedes Quartals.
-- **Umfang**: pro Medium (hier *Kommunikation*) und Eigentümer immer der ganze Bestand, keine
-  Teil- oder inkrementellen Lieferungen. Keine Leitungen anderer Eigentümer („Fremddaten“).
+- **Umfang**: pro Medium (hier *Kommunikation*) und Datenherr immer der ganze Bestand, keine
+  Teil- oder inkrementellen Lieferungen.
 - **Zuständigkeitsperimeter**: Pflicht (§1 Abs. 3 LKV), eigenes Modell
   `Perimeter_LK_ZH_V2_LV95`, Version `2019-04-16` (vom Kanton, ohne Lizenzvorbehalt, im Repo:
   `docs/perimeter_lk_zh_v2_lv95.zip`, siehe unten). Einmalig vor der ersten LKMap-Lieferung,
   danach bei Änderungen. Der Checkservice warnt, wenn LKMap-Objekte ausserhalb liegen.
-- **Dateinamen**: klein geschrieben, in der UID `.` → `-`:
+- **Dateinamen**: klein geschrieben, in der UID des Datenherrn `.` → `-`:
   `<uid-datenherr>-kommunikation-lkmap.xtf` und `<uid-datenherr>-zustaendigkeit-peri.xtf`,
   je in einem ZIP gleichen Namens.
 - **Lieferweg**: Upload beim Checkservice von infoGrips
@@ -45,26 +50,27 @@ rechtlich §19 KGeoIG und Leitungskatasterverordnung (LKV, LS 704.14, in Kraft s
   Mail.
 - **Kontakt**: leitungskataster.support@bd.zh.ch, 043 259 51 33.
 
-### Eigentümer (LKV §1, §4, §8; Weisung 1.2–1.6, 1.9, 4)
+### Datenherr und Eigentümer (LKV §1, §4, §8; Weisung 1.2–1.6, 1.9, 4)
 
 - Der Kataster umfasst *alle* Leitungen und Trassen (§1 LKV); lieferpflichtig sind ihre
   Eigentümerinnen und Eigentümer (§4 LKV), eine Ausnahme für Private gibt es nicht. Entlassen
   werden nur einzelne Leitungen in „besonderen Gebieten“ auf begründetes Gesuch (§8 LKV,
   Weisung 4: vertraulich/geheim oder schützenswerte kritische Infrastruktur).
-- `Datenherr` = Eigentümer, als UID; `Eigentuemer` = sein Name; `Datenlieferant` = die liefernde
-  Stelle, darf eine andere sein (z. B. ein Ingenieurbüro im Auftrag).
-- Geliefert wird pro Medium und Eigentümer, Dateiname mit der UID des Datenherrn; pro Eigentümer
-  genau eine Zuständigkeitsperimeter-Datei. Die UID muss bei jeder Lieferung dieselbe sein.
-- **Fiktive UID** (Weisung 1.6): wer keine UID hat, beantragt bei der Geschäftsstelle eine
-  (Format `ZHE-100.100.101`). Genannt sind kleine Flurgenossenschaften und Vereine; natürliche
-  Personen erwähnt die Weisung nicht.
-- **Fremddaten** (Weisung 1.9): Leitungen anderer Eigentümer dürfen nicht in der eigenen
-  Lieferung stecken.
-- Einen Eigentümer „privat“ sehen die Vorschriften nicht vor: unter der eigenen UID wäre die
-  Trasse im Kataster die eigene (Fremddaten). Möglich ist die Lieferung *als Datenlieferant im
-  Auftrag*, in einer eigenen Datei unter der (fiktiven) UID des Eigentümers.
+- Nach den Weisungen wäre `Datenherr` der Eigentümer jeder Leitung (als UID), geliefert pro
+  Medium und Eigentümer, `Datenlieferant` die liefernde Stelle (z. B. ein Ingenieurbüro im
+  Auftrag). Wer keine UID hat, beantragt eine fiktive bei der Geschäftsstelle (Weisung 1.6,
+  Format `ZHE-100.100.101`; genannt sind kleine Flurgenossenschaften und Vereine).
+- **Abweichend davon wünscht der Kanton Zürich** (Mitteilung an uns, 29.09.2026) eine Lieferung
+  pro Datenherr. Für uns heisst das: *eine* Lieferung für das ganze Netz, unabhängig davon, was
+  dem Verein und was den Grundeigentümern gehört. `Datenherr` ist die UID des Vereins, der
+  das Netz betreibt (bei Bedarf eine andere als die des Datenlieferanten), und der Dateiname
+  trägt diese UID; es gibt genau eine LKMap- und eine Zuständigkeitsperimeter-Datei.
+- Wem ein Schacht oder eine Trasse gehört, steht im Attribut `Eigentuemer` jedes Objekts
+  (Name, `TEXT*80`). Die Eigentümer brauchen deshalb keine UID.
+- **Fremddaten** (Weisung 1.9) gibt es damit nicht mehr: alle gelieferten Objekte gehören zum
+  Netz des Datenherrn, auch wenn sie einem Grundeigentümer gehören.
 - **Name nicht freigegeben**: das Modell sieht dafür in `Eigentuemer` den Text `Keine_Angabe`
-  vor (Kommentar in `LKObjekt`). Der `Datenherr` (UID) bleibt trotzdem der des Eigentümers.
+  vor (Kommentar in `LKObjekt`).
 
 ### Modell `Perimeter_LK_ZH_V2_LV95`
 
@@ -77,8 +83,8 @@ Topic `Perimeter_LK_ZH` (Basket `Perimeter_LK_ZH_V2_LV95.Perimeter_LK_ZH`), eine
 | Attribut | Typ | Inhalt für uns |
 |---|---|---|
 | `Medium` | Pflicht, Aufzählung `Abwasser` … `Kommunikation` … `weitereMedien` | `Kommunikation` |
-| `Datenherr` | Pflicht, `TEXT*15` (UID) | UID des Eigentümers |
-| `Datenlieferant` | Pflicht, `TEXT*15` (UID) | aus der Konfiguration |
+| `Datenherr` | Pflicht, `TEXT*15` (UID) | `datenherr_uid` aus der Konfiguration |
+| `Datenlieferant` | Pflicht, `TEXT*15` (UID) | `datenlieferant_uid` aus der Konfiguration |
 | `Letzte_Aenderung` | Pflicht, `INTERLIS_1_DATE` (`JJJJMMTT`) | letzte Änderung, sonst Datum des Exports |
 | `Art` | Pflicht, `Zustaendigkeitsperimeter`, `Projektperimeter`, `Perimeter_entlassenes_Gebiet`, `Perimeter_eingeschraenkte_Nutzung` | `Zustaendigkeitsperimeter` (die beiden letzten erfasst die Katasterleitung) |
 | `Begleitdokument` | optional, `URI` | leer |
@@ -90,7 +96,7 @@ des Exports. Bei uns ist sie immer bekannt (`geaendert_am`).
 `Base_LV95.Surface` ist `SURFACE WITH (STRAIGHTS, ARCS) VERTEX LKoord WITHOUT OVERLAPS > 0.050`:
 eine *einzelne* Fläche (Aussenrand, allenfalls Löcher), obwohl der Kommentar im Modell
 „Multifläche“ sagt. Mehrere Teilflächen wären mehrere `Perimeter`-Objekte; die konvexe Hülle
-ist immer eine Fläche. Da `Medium` pro Objekt steht, gehören alle Medien eines Eigentümers in
+ist immer eine Fläche. Da `Medium` pro Objekt steht, gehören alle Medien eines Datenherrn in
 dieselbe Datei (Weisung 1.4) – für uns nur `Kommunikation`.
 
 ### Modell `SIA405_LKMap_2015_LV95` (Auszug für Kommunikation)
@@ -106,10 +112,10 @@ Allen gemeinsam (`SIA405_Base_LV95.SIA405_BaseClass`, `LKObjekt`):
 | OID (TID) | `STANDARDOID` (16 Zeichen: 8 Präfix + 8) | `oid_prefix` + `s`/`t` + 7 Ziffern |
 | `OBJ_ID` | `TEXT*16`, optional, `UNIQUE` | dieselbe Id wie die OID |
 | `Metaattribute` | Pflicht, Struktur `SIA405_Base_LV95.Metaattribute` | |
-| ↳ `Datenherr` | Pflicht, `OrganisationBezeichnung` (`TEXT*80`) | UID des Eigentümers (Weisung 1.2) |
-| ↳ `Datenlieferant` | Pflicht, `TEXT*80` | UID aus der Konfiguration |
+| ↳ `Datenherr` | Pflicht, `OrganisationBezeichnung` (`TEXT*80`) | UID des Datenherrn (Weisung 1.2) |
+| ↳ `Datenlieferant` | Pflicht, `TEXT*80` | UID des Datenlieferanten |
 | ↳ `Letzte_Aenderung` | Pflicht, `INTERLIS_1_DATE` (`JJJJMMTT`) | `geaendert_am` |
-| `Eigentuemer` | Pflicht, `TEXT*80` | `lk_name` bzw. `name`, nicht freigegeben: `Keine_Angabe` |
+| `Eigentuemer` | Pflicht, `TEXT*80` | Eigentümer des Objekts: `lk_name` bzw. `name`, nicht freigegeben: `Keine_Angabe` |
 | `Lagebestimmung` | Pflicht, `genau` (±10 cm, aus verschiedenen Messungen ±30 cm), `ungenau`, `unbekannt` | Spalte `lagebestimmung` |
 | `Status` | optional, `ausser_Betrieb`, `in_Betrieb`, `tot`, `unbekannt`, `weitere` | `in_Betrieb` |
 | `Eigenschaft` | optional, `BAG OF Eigenschaften` (`Bezeichnung`, `Wert`, je `TEXT*80`) | allenfalls Anzahl Kabel |
@@ -143,12 +149,13 @@ Kabel kommen in LKMap nicht vor, für Kommunikation nur Trassen, Schächte und B
 
 ## 2. Entscheide
 
-- **Datenlieferant** (UID) ist konfigurierbar und für alle Daten derselbe.
-- **Eigentümer** werden korrekt abgebildet: jede Trasse und jeder Schacht verweist auf einen
-  Eigentümer mit Name, Name in der Lieferung und UID (Datenherr). Heute gehört alles einem
-  Eigentümer, Dritte (auch Private) kommen hinzu.
-- **Lieferung pro Eigentümer mit UID** (als Datenlieferant im Auftrag, wo es nicht der eigene
-  ist); Eigentümer ohne UID werden nicht geliefert, die Admin-Seite warnt.
+- **Datenlieferant** und **Datenherr** (je eine UID) sind konfigurierbar und für alle Daten
+  dieselben; ohne eigene Angabe ist der Datenherr der Datenlieferant.
+- **Eine Lieferung für das ganze Netz** (Wunsch des Kantons, siehe 1.): eine LKMap- und eine
+  Perimeter-Datei, Dateiname mit der UID des Datenherrn.
+- **Eigentümer** werden weiterhin abgebildet: jede Trasse und jeder Schacht verweist auf einen
+  Eigentümer mit Name und Name in der Lieferung (`Eigentuemer`). Heute gehört alles einem
+  Eigentümer, Dritte (auch Private) kommen hinzu. Eine UID pro Eigentümer gibt es nicht.
 - **Geliefert** werden nur grundstücksübergreifende Verbindungen: pro Trasse ein Schalter,
   Standard **nicht geliefert**. Eine automatische Bestimmung (Grundstücksgrenzen der amtlichen
   Vermessung) ist nicht vorgesehen.
@@ -157,7 +164,7 @@ Kabel kommen in LKMap nicht vor, für Kommunikation nur Trassen, Schächte und B
 - **Objektart der Schächte** wird im Schachttyp konfiguriert; heute sind alle rund.
 - **Lagebestimmung** ist standardmässig `ungenau`, ausser sie wird ausdrücklich anders gesetzt.
 - **`geaendert_am`**: Standard *jetzt*, auch für bestehende Daten (alles ist noch im Bau).
-- **Zuständigkeitsperimeter** wird pro Eigentümer berechnet: konvexe Hülle seiner gelieferten
+- **Zuständigkeitsperimeter** ein einziger für das ganze Netz: konvexe Hülle der gelieferten
   Trassen und Schächte mit Puffer.
 - **Lieferung** zuerst als manueller Download (ZIPs) und manueller Upload beim Checkservice;
   Automatisierung später erwünscht.
@@ -169,23 +176,24 @@ Neuer Abschnitt in `config.yaml` (überschreibbar als `APP__LKMAP__…`, Helm-We
 ```yaml
 lkmap:
   datenlieferant_uid: "CHE-123.456.789"
+  datenherr_uid: "CHE-987.654.321"      # optional, sonst datenlieferant_uid
   oid_prefix: "ch4711ab"                # 8 Zeichen, Präfix der STANDARDOID
   perimeter_puffer_m: 10                # Puffer um die konvexe Hülle
 ```
 
-Datenherr und Eigentümer stehen nicht in der Konfiguration, sondern in der Tabelle
-`eigentuemer` (siehe 4.).
+Die Eigentümer stehen nicht in der Konfiguration, sondern in der Tabelle `eigentuemer`
+(siehe 4.).
 
 Umgesetzt in `config.rs` (`LKMAP_CONFIG`): der Abschnitt ist optional (ohne ihn kein Export,
-beim Start ein Hinweis im Log), ein ungültiger (UID nicht im Format `CHE-`/`ZHE-123.456.789`,
+beim Start ein Hinweis im Log), ein ungültiger (eine UID nicht im Format `CHE-`/`ZHE-123.456.789`,
 Präfix nicht 8 Buchstaben oder Ziffern mit einem Buchstaben vorne, Puffer nicht positiv)
-verhindert den Start. Helm: `config.lkmap` (`datenlieferantUid`, `oidPrefix`,
+verhindert den Start. Helm: `config.lkmap` (`datenlieferantUid`, `datenherrUid`, `oidPrefix`,
 `perimeterPufferM`), ohne `datenlieferantUid` kein Abschnitt.
 
 **OID / `OBJ_ID`** ohne eigene Spalte, stabil aus Präfix, Objektart und Datenbank-Id:
 Schacht 42 → `ch4711ab` + `s0000042`, Trasse 7 → `ch4711ab` + `t0000007`.
-Der Basket (`BID`) jeder Datei erhält eine OID nach demselben Schema, pro Eigentümer: LKMap
-`b` + Id des Eigentümers, Perimeter `p` + Id des Eigentümers.
+Der Basket (`BID`) jeder Datei erhält eine OID nach demselben Schema: LKMap `b0000001`,
+Perimeter `p0000001`.
 
 Das Präfix wird **zentral vergeben**, bestellt per Webformular auf
 <https://www.interlis.ch/dienste/oid-bestellen>. Regelung: INTERLIS 2.3 Referenzhandbuch, Anhang D
@@ -209,8 +217,10 @@ Referenzhandbuch 2.4 Anhang F):
 
 ## 4. Datenbank (umgesetzt)
 
-Zwei Migrationen in `cable-editor-backend/migrations`: `…_eigentuemer` (Stammdaten, auch ohne
-Leitungskataster sinnvoll) und `…_leitungskataster`; Schema in `src/db/schema.rs`, die Enums
+Migrationen in `cable-editor-backend/migrations`: `…_eigentuemer` (Stammdaten, auch ohne
+Leitungskataster sinnvoll), `…_leitungskataster` und `…_lieferung-ein-datenherr` (die
+Umstellung auf eine Lieferung für das ganze Netz: die Spalten `eigentuemer.uid` und
+`lk_lieferung.eigentuemer_id` entfallen, bestehende Protokolleinträge bleiben); Schema in `src/db/schema.rs`, die Enums
 als `db/entity/lkmap.rs` (`Genauigkeit`, `LkmapPunktObjektart`). Geprüft mit PostgreSQL 16 und
 PostGIS 3.6 an den Beispieldaten (`local/data.sql`), auch down und wieder up.
 
@@ -220,11 +230,10 @@ Neue Tabelle `eigentuemer` (Stammdaten):
 |---|---|---|
 | `id` | serial | |
 | `name` | `text not null unique` | intern, der echte Name |
-| `lk_name` | `varchar(80) null` | `Eigentuemer` in der Lieferung, sonst `name`; `Keine_Angabe`, wenn nicht freigegeben |
-| `uid` | `varchar(15) null unique`, Format `CHE-`/`ZHE-123.456.789` | `Datenherr`, echte oder fiktive UID; ohne keine Lieferung |
+| `lk_name` | `varchar(80) null` | `Eigentuemer` der Objekte in der Lieferung, sonst `name`; `Keine_Angabe`, wenn nicht freigegeben |
 | `standard` | `boolean not null default false`, höchstens einer (partieller Unique-Index) | Eigentümer neuer Schächte und Trassen |
 
-Die Migration legt den heutigen Eigentümer als Standard an (`Eigentümer`, Name und UID danach
+Die Migration legt den heutigen Eigentümer als Standard an (`Eigentümer`, den Namen danach
 in der Admin-Seite setzen) und lässt alle bestehenden Schächte und Trassen auf ihn verweisen.
 Ein Insert ohne `eigentuemer_id` erhält den Standard-Eigentümer (Trigger, ein Spalten-Default
 kann keine Abfrage sein); so bleiben `createSchacht`/`createDuct` ohne Eigentümer gültig.
@@ -238,7 +247,7 @@ Neue Enums:
 
 | Spalte | Typ | Zweck |
 |---|---|---|
-| `eigentuemer_id` | `integer not null references eigentuemer` | `Datenherr`, `Eigentuemer`, Datei |
+| `eigentuemer_id` | `integer not null references eigentuemer` | `Eigentuemer` |
 | `leitungskataster` | `boolean not null default false` | wird geliefert (grundstücksübergreifend) |
 | `lagebestimmung` | `genauigkeit_enum not null default 'ungenau'` (erst `unbekannt`, siehe 7.) | `Lagebestimmung` |
 | `breite_mm` | `integer null`, 0–4000 | optional `Breite` |
@@ -248,14 +257,13 @@ Neue Enums:
 
 | Spalte | Typ | Zweck |
 |---|---|---|
-| `eigentuemer_id` | `integer not null references eigentuemer` | `Datenherr`, `Eigentuemer`, Datei |
+| `eigentuemer_id` | `integer not null references eigentuemer` | `Eigentuemer` |
 | `lagebestimmung` | `genauigkeit_enum not null default 'ungenau'` (erst `unbekannt`, siehe 7.) | `Lagebestimmung` |
 | `geaendert_am` | `timestamptz not null default now()` | `Letzte_Aenderung` |
 
 Ein Schacht wird geliefert, wenn mindestens eine gelieferte Trasse an ihm endet (kein eigener
-Schalter), egal wem die Trasse gehört – und zwar in der Datei *seines* Eigentümers: so gibt es
-keine gelieferte Trasse ohne ihre Schächte, und keine Fremddaten. Gehört ein solcher Schacht
-einem Eigentümer ohne UID, fehlt er in der Lieferung; die Admin-Seite weist darauf hin.
+Schalter), egal wem Schacht und Trasse gehören: so gibt es keine gelieferte Trasse ohne ihre
+Schächte.
 
 `schacht_typ`:
 
@@ -270,8 +278,8 @@ Trigger für `geaendert_am` (`now()`, also der Beginn der Transaktion):
 - Ändert sich die Position eines Schachts, auch seine Trassen: die gelieferte Linie (View
   `trassen_mit_endpunkten`) beginnt und endet an den Schächten.
 - Ändern von `lkmap_objektart` oder den Massen eines Schachttyps: seine Schächte.
-- Ändern von `name`, `lk_name` oder `uid` eines Eigentümers: seine Schächte und Trassen
-  (`Eigentuemer`, `Datenherr`).
+- Ändern von `name` oder `lk_name` eines Eigentümers: seine Schächte und Trassen
+  (`Eigentuemer`).
 
 Neue Tabelle `lk_lieferung` (Protokoll):
 
@@ -280,9 +288,8 @@ Neue Tabelle `lk_lieferung` (Protokoll):
 | `id` | serial |
 | `erstellt_am` | `timestamptz not null default now()` |
 | `erstellt_von` | `text not null` (Benutzername) |
-| `eigentuemer_id` | `integer not null references eigentuemer` |
 | `anzahl_schaechte`, `anzahl_trassen` | `integer not null` |
-| `pruefsumme` | `char(64) not null` – SHA-256 der gelieferten LKMap-Objekte |
+| `pruefsumme` | `char(64) not null` – SHA-256 der beiden Dateien |
 | `geliefert_am` | `timestamptz null` – beim manuellen Upload von Hand bestätigt, später vom automatischen Upload |
 
 Ob sich seit der letzten Lieferung etwas geändert hat, sagt der Vergleich der Prüfsumme mit
@@ -291,7 +298,7 @@ der des aktuellen Exports – `geaendert_am` allein erkennt gelöschte Trassen n
 Rust-Seite: die Spalten sind Felder von `Duct`, `Schacht` und `SchachtTyp`, `eigentuemer` die
 Entität `Eigentuemer` (`db/entity/eigentuemer.rs`, über den Loader `EigentuemerId`); die
 Zeitstempel als `chrono::DateTime<Utc>` (Feature `chrono` von diesel und async-graphql).
-GraphQL (lesend): `listOwner`, `Owner { id name lkName uid isDefault }`, bei `Duct` `owner`,
+GraphQL (lesend): `listOwner`, `Owner { id name lkName isDefault }`, bei `Duct` `owner`,
 `leitungskataster`, `lagebestimmung`, `widthMm`, `changedAt`, bei `Schacht` `owner`,
 `lagebestimmung`, `changedAt`, bei `SchachtTyp` `lkmapObjektart`, `dimension1Mm`,
 `dimension2Mm`. Die Mutationen dazu kommen mit der UI (7., Schritt 2).
@@ -303,9 +310,9 @@ Im Export konstant, ohne Spalte:
 
 ## 5. Export
 
-- Pro Eigentümer mit UID und mindestens einer gelieferten Trasse ein LKMap- und ein
-  Perimeter-ZIP; `Datenherr` = seine UID, `Eigentuemer` = `lk_name` bzw. `name`,
-  `Datenlieferant` = Konfiguration.
+- Für das ganze Netz ein LKMap- und ein Perimeter-ZIP; `Datenherr` = `datenherr_uid`,
+  `Datenlieferant` = `datenlieferant_uid`, `Eigentuemer` jedes Objekts = `lk_name` bzw. `name`
+  seines Eigentümers.
 - `SIA405_LKMap_2015_LV95`: Header mit Modell `SIA405_LKMap_2015_LV95`, Version `27.04.2018`,
   URI `http://www.sia.ch/405`; Basket `SIA405_LKMap_2015_LV95.SIA405_LKMap`; `LKPunkt` für
   die gelieferten Schächte (Objektart aus dem Schachttyp), `LKLinie` für die gelieferten
@@ -315,42 +322,42 @@ Im Export konstant, ohne Spalte:
 - XML über eine Bibliothek schreiben (Escaping), nicht per `format!` (umgesetzt mit
   `quick-xml`, `lkmap/xtf.rs`; die Attribute in der Reihenfolge des Modells, ein einzelner Punkt
   wie `SymbolPos` ebenfalls in `COORD`).
-- Umgesetzt (`lkmap/mod.rs`, GraphQL `lkmapExport(ownerId)`, nur Admin):
+- Umgesetzt (`lkmap/mod.rs`, GraphQL `lkmapExport`, nur Admin):
   - Geliefert wird eine Trasse mit gesetztem Schalter `leitungskataster`, ein Schacht, wenn eine
-    solche Trasse an ihm endet (egal wem die Trasse gehört), in der Datei seines Eigentümers.
+    solche Trasse an ihm endet (egal wem sie gehört).
   - Eine Trasse ohne eigenen Verlauf ist eine gerade Linie zwischen ihren Schächten und wird mit
     `Lagebestimmung` `unbekannt` geliefert, unabhängig vom gespeicherten Wert (die Trassen-Seite
     zeigt das so an).
   - Ein Schacht ohne Position wird nicht geliefert, ebenso eine gelieferte Trasse, die an ihm
     endet; beide meldet der Export als Bericht (`schaechteWithoutPosition`, `ductsWithoutLine`).
   - Keine `Eigenschaft` (auch nicht die Anzahl Kabel).
-  - Verweigert (`UserError`): ohne Abschnitt `lkmap`, Eigentümer ohne UID, nichts zu liefern,
-    eine Id mit mehr als 7 Stellen (OID).
+  - Verweigert (`UserError`): ohne Abschnitt `lkmap`, nichts zu liefern, eine Id mit mehr als
+    7 Stellen (OID).
 - `Perimeter_LK_ZH_V2_LV95` (Header: Modell `Perimeter_LK_ZH_V2_LV95`, Version `2019-04-16`,
   URI `http://models.geo.zh.ch`; Basket `Perimeter_LK_ZH_V2_LV95.Perimeter_LK_ZH`): ein
-  `Perimeter` pro Eigentümer, Medium `Kommunikation`, Art `Zustaendigkeitsperimeter`,
+  `Perimeter`, Medium `Kommunikation`, Art `Zustaendigkeitsperimeter`,
   `Datenherr`/`Datenlieferant` wie im LKMap, Geometrie aus PostGIS als `SURFACE`
   (`BOUNDARY`/`POLYLINE`/`COORD` mit `C1`/`C2`, auf mm gerundet):
-  `ST_Buffer(ST_ConvexHull(ST_Collect(<Linien der gelieferten Trassen des Eigentümers>)), perimeter_puffer_m)`,
+  `ST_Buffer(ST_ConvexHull(ST_Collect(<Linien der gelieferten Trassen>)), perimeter_puffer_m)`,
   Bögen als Geraden (`ST_Buffer` mit wenigen Segmenten pro Viertelkreis, z. B. `quad_segs=4`);
-  `Letzte_Aenderung` = spätestes `geaendert_am` der gelieferten Trassen des Eigentümers.
+  `Letzte_Aenderung` = spätestes `geaendert_am` der gelieferten Trassen.
   Umgesetzt (`lkmap/perimeter.rs`, in `lkmapExport` als `perimeter`): die Hülle genau der
   gelieferten Objekte (Linien der Trassen und Positionen der Schächte), `Letzte_Aenderung` das
   späteste ihrer Daten, die Koordinaten auf mm gerundet ohne doppelte Punkte; BID
-  `<prefix>p<Eigentümer>`, TID `<prefix>z<Eigentümer>` (das Modell hat keine OID).
+  `<prefix>p0000001`, TID `<prefix>z0000001` (das Modell hat keine OID).
 - Paketierung (umgesetzt): je ein ZIP gleichen Namens mit der XTF-Datei
-  (`<uid>-kommunikation-lkmap.zip`, `<uid>-zustaendigkeit-peri.zip`), gebaut vom Backend
+  (`<uid-datenherr>-kommunikation-lkmap.zip`, `<uid-datenherr>-zustaendigkeit-peri.zip`), gebaut vom Backend
   (`TransferFile::zip`) und von `downloadLkmap` in Base64 geliefert.
 - Prüfsumme: SHA-256 über beide Dateien. Sie enthalten kein Exportdatum, gleiche Daten ergeben
   also gleiche Dateien; so erkennt der Vergleich auch gelöschte Objekte und einen geänderten
   Puffer.
-- Protokoll (umgesetzt): `downloadLkmap(ownerId)` schreibt beim Herunterladen einen Eintrag in
+- Protokoll (umgesetzt): `downloadLkmap` schreibt beim Herunterladen einen Eintrag in
   `lk_lieferung` (wer, wann, Anzahl, Prüfsumme); ein noch nicht bestätigter Eintrag mit derselben
   Prüfsumme wird wiederverwendet. `setLkmapDelivered(deliveryId, delivered)` setzt
   `geliefert_am` nach dem Upload beim Checkservice oder nimmt es zurück (z. B. wenn der
-  Checkservice die Dateien ablehnt). Verweigert wird der Download ohne UID
-  (`OwnerWithoutUid`) und ohne etwas mit Position (`NothingToDeliver`); `lkmapExport` und
-  `lkmapExports` liefern in diesen Fällen den Bericht ohne Dateien.
+  Checkservice die Dateien ablehnt). Verweigert wird der Download ohne etwas
+  mit Position (`NothingToDeliver`); `lkmapExport` liefert in diesem Fall den Bericht ohne
+  Dateien.
 - Frist: `firstChangeSinceDelivery` ist das früheste `geaendert_am` eines gelieferten Objekts nach
   dem Herunterladen der zuletzt bestätigten Lieferung (Beginn der Wochenfrist); fehlt es trotz
   anderer Prüfsumme (nur gelöscht), ist die Lieferung ohne Datum fällig.
@@ -366,9 +373,8 @@ Im Export konstant, ohne Spalte:
 Was die Lieferung in der UI braucht; die Seiten für Eigentümer und Schachttypen selbst beschreibt
 `docs/stammdaten.md`.
 
-- **Eigentümer**: Name in der Lieferung („Name nicht freigeben“ setzt `Keine_Angabe`) und UID
-  (Datenherr) bearbeiten; die Liste warnt bei einem Eigentümer ohne UID mit gelieferten
-  Trassen. Ändern nur Admin, da der Eigentümer den Datenherrn der Lieferung bestimmt.
+- **Eigentümer**: Name in der Lieferung („Name nicht freigeben“ setzt `Keine_Angabe`)
+  bearbeiten. Ändern nur Admin, da der Name als `Eigentuemer` in die Lieferung geht.
 - **Schachttyp**: Objektart (`LKPunkt.Objektart`) und Masse (Dimension 1 ≥ Dimension 2, je
   0–4000 mm) bearbeiten; ändern nur Admin.
 - **Trassen-Eigenschaften**: Eigentümer (Planer; neu: der Standard-Eigentümer), Schalter „An
@@ -379,15 +385,13 @@ Was die Lieferung in der UI braucht; die Seiten für Eigentümer und Schachttype
 - **Lagebestimmung**: Standard immer `ungenau`, ausser man setzt sie ausdrücklich anders; kein
   automatischer Vorschlag (auch nicht aus der GPS-Genauigkeit).
 - **Admin-Seite „Leitungskataster“** (umgesetzt, `pages/lkmap.rs`, Bereich im Pfad hinter dem
-  Plan): eine Zeile pro Eigentümer mit etwas zu liefern oder früheren Lieferungen, mit Inhalt
-  (Trassen, Schächte), Zustand und Download der beiden ZIPs. Zustand, dringendster zuerst:
-  keine UID (wird nicht geliefert), nichts zu liefern, noch nie geliefert, geändert seit der
-  letzten bestätigten Lieferung (liefern bis eine Woche nach der ersten Änderung, danach rot),
-  in diesem Quartal nicht geliefert (bis Quartalsende, ab 14 Tagen davor als Warnung), aktuell.
-  Aufgeklappt: Warnungen (ohne UID, Schächte ohne Position, Trassen an solchen) mit Links und
-  die Lieferungen mit „Als geliefert bestätigen“ bzw. „Bestätigung zurücknehmen“. Darunter eine
-  Karte mit den Perimetern und den gelieferten Trassen und Schächten; Trassen von Eigentümern
-  ohne UID gestrichelt.
+  Plan): die Lieferung für das ganze Netz mit Inhalt (Trassen, Schächte), Datenherr, Zustand und
+  Download der beiden ZIPs. Zustand, dringendster zuerst: nichts zu liefern, noch nie geliefert,
+  geändert seit der letzten bestätigten Lieferung (liefern bis eine Woche nach der ersten
+  Änderung, danach rot), in diesem Quartal nicht geliefert (bis Quartalsende, ab 14 Tagen davor
+  als Warnung), aktuell. Warnungen (Schächte ohne Position, Trassen an solchen) mit Links, die
+  Lieferungen mit „Als geliefert bestätigen“ bzw. „Bestätigung zurücknehmen“. Darunter eine
+  Karte mit dem Perimeter und den gelieferten Trassen und Schächten.
 - GraphQL: Export und Protokoll mit `RoleGuard(Role::Admin)`; Eigentümer, Lieferung,
   Lagebestimmung und Breite einer Trasse oder eines Schachts setzen Planer (`DuctInput`,
   `SchachtInput`, Pflichtfelder).
@@ -406,18 +410,21 @@ Was die Lieferung in der UI braucht; die Seiten für Eigentümer und Schachttype
 3. ~~LKMap-Export mit Validierungstest~~ (erledigt).
 4. ~~Perimeter-Export~~ (erledigt).
 5. ~~Admin-Seite mit Download und Protokoll~~ (erledigt).
-6. Später: automatischer Upload zum Checkservice (infoGrips dokumentiert nur das Webformular;
+6. Eine Lieferung pro Datenherr statt pro Eigentümer (Wunsch des Kantons, siehe 1.):
+   `datenherr_uid` in der Konfiguration, `eigentuemer.uid` und `lk_lieferung.eigentuemer_id`
+   entfallen, ein Export und ein Perimeter für das ganze Netz, die Admin-Seite mit einer
+   Lieferung.
+7. Später: automatischer Upload zum Checkservice (infoGrips dokumentiert nur das Webformular;
    Schnittstelle abklären) und Hinweis per Mail vor Fristen.
 
 ## 8. Offen
 
 - Zugang zum Checkservice beantragen (leitungskataster@bd.zh.ch).
+- UID des Datenherrn (des Vereins) klären, falls sie nicht die des Datenlieferanten ist, und mit
+  der Katasterleitung abstimmen, ob `Keine_Angabe` in `Eigentuemer` akzeptiert wird.
 - OID-Präfix bestellen (<https://www.interlis.ch/dienste/oid-bestellen>, siehe 3.); `ch4711ab`
   ist ein Platzhalter.
 - Pufferbreite des Perimeters (Vorschlag 10 m) mit dem Kanton abstimmen.
-- Mit der Katasterleitung klären, wie Privatpersonen ohne UID behandelt werden (fiktive UID
-  für natürliche Personen? `Keine_Angabe` in `Eigentuemer` akzeptiert?) und ob die Lieferung
-  ihrer Trassen durch uns als Datenlieferant akzeptiert wird.
 - Ob private Anschlussleitungen in der Praxis geliefert werden müssen (die LKV macht keine
   Ausnahme).
 - Ob die Weisung inzwischen in einer finalen Fassung vorliegt (die geprüfte ist ein Entwurf).

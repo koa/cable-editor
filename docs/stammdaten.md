@@ -1,17 +1,17 @@
 # Konzept: Seiten für Eigentümer und Schachttypen
 
-Stand: 27.09.2026 – umgesetzt. Was davon der Leitungskataster braucht
-(UID, Name in der Lieferung, Objektart, Masse), steht in `docs/leitungskataster.md`; wo die
-Seiten liegen, in `docs/navigation.md`.
+Stand: 29.09.2026 – umgesetzt; die UID der Eigentümer entfällt mit der Lieferung pro Datenherr.
+Was davon der Leitungskataster braucht (Name in der Lieferung, Objektart, Masse), steht in
+`docs/leitungskataster.md`; wo die Seiten liegen, in `docs/navigation.md`.
 
 ## Eigentümer (umgesetzt)
 
 Eigentümer von Schächten und Trassen (Tabelle `eigentuemer`, GraphQL `Owner`, `listOwner`).
 
 - Seite `PlanView::ListOfOwners`, Bereich „Eigentümer“; für alle lesbar, ändern nur Admin.
-- Tabelle: Name, Name in der Lieferung, UID, Standard, Anzahl Schächte und Trassen (davon
+- Tabelle: Name, Name in der Lieferung, Standard, Anzahl Schächte und Trassen (davon
   geliefert).
-- Anlegen und Bearbeiten in einem Dialog (drei Felder), keine eigene Seite; die Aktionen im
+- Anlegen und Bearbeiten in einem Dialog (zwei Felder), keine eigene Seite; die Aktionen im
   Menü der Zeile.
 - „Als Standard setzen“: der Standard-Eigentümer wird neuen Schächten und Trassen vorgewählt;
   es gibt genau einen.
@@ -19,8 +19,8 @@ Eigentümer von Schächten und Trassen (Tabelle `eigentuemer`, GraphQL `Owner`, 
   Meldung, was noch auf ihn verweist.
 - Trassenliste: Spalte „Eigentümer“.
 
-GraphQL (Admin): `createOwner`, `updateOwner` (`OwnerInput`: `name`, `lkName`, `uid`; Name
-getrimmt und nicht leer, UID mit `config::is_uid`, doppelte UID mit klarer Meldung),
+GraphQL (Admin): `createOwner`, `updateOwner` (`OwnerInput`: `name`, `lkName`; Name
+getrimmt, nicht leer und eindeutig),
 `setDefaultOwner` (setzt `standard` in einer Transaktion um), `deleteOwner`; an `Owner` die
 Zählfelder `schachtCount`, `ductCount`, `deliveredDuctCount` über den Loader.
 

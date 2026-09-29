@@ -5,7 +5,7 @@ Stand: 28.09.2026 – umgesetzt.
 ## Grundsatz
 
 Texte für Benutzer entstehen nur im Frontend. Das Backend liefert, was eine Meldung braucht, in
-strukturierter Form; alle konstanten Texte und Muster (z. B. die Form einer UID) liegen im
+strukturierter Form; alle konstanten Texte und Muster (z. B. die Höchstlängen von Namen) liegen im
 Frontend an einem Ort.
 
 ## Zwei Arten von Problemen
@@ -27,7 +27,7 @@ ohnehin GraphQL-Fehler. Für Weigerungen ist die Fehlerstruktur deshalb einfache
 
 - Crate `cable-editor-common` (nur serde, läuft auch im wasm-Frontend): Enum `UserError`, ein
   Variant pro Grund, mit den Daten der Meldung (Namen, Ids, Anzahlen, Grenzen), ohne Text;
-  dazu die gemeinsamen Grenzen (`limits`) und Prüfungen (UID).
+  dazu die gemeinsamen Grenzen (`limits`) und Prüfungen (Format einer UID, geprüft beim Start).
 - Backend: Prüfungen geben `UserError` zurück; `From<UserError> for async_graphql::Error`
   (Feature `async-graphql` des Crates) legt ihn serialisiert in `extensions.userError` ab
   (`{"code": "NameTaken", "kind": "Owner", "name": …}`), `message` ist nur der Code (Hilfe
