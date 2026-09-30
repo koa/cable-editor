@@ -2,9 +2,9 @@ use crate::components::menu::popup::{MenuGroup, PopupMenu};
 use patternfly_yew::{
     ouia,
     prelude::{
-        Button, ButtonVariant, Caption, Cell, ComposableTable, ExpansionState, Icon,
-        MenuToggleVariant, Ouia, OuiaComponentType, OuiaSafe, StateModel, StateModelIter,
-        TableBody, TableData, TableDataModel, TableGridMode, TableHeader, TableMode, TableModel,
+        Caption, Cell, ComposableTable, ExpansionState, Icon, MenuToggleVariant, Ouia,
+        OuiaComponentType, OuiaSafe, StateModel, StateModelIter, TableBody, TableData,
+        TableDataModel, TableGridMode, TableHeader, TableMode, TableModel,
     },
 };
 use std::{
@@ -676,15 +676,22 @@ pub fn table_row(props: &TreeTableRowProperties) -> Html {
             let ontoggle = props.toggle_expand.clone();
             Callback::from(move |_| ontoggle.emit(()))
         };
+        let name = if props.expanded {
+            "Zuklappen"
+        } else {
+            "Aufklappen"
+        };
         html! {
-            <Button
-                variant={ButtonVariant::Plain}
-                class={button_class}
+            <button
+                type="button"
+                class={classes!("pf-v6-c-button", "pf-m-plain", button_class)}
                 {onclick}
-                aria_expanded={props.expanded.to_string()}
+                aria-expanded={props.expanded.to_string()}
+                aria-label={name}
+                title={name}
             >
                 <div class="pf-v6-c-table__toggle-icon">{ Icon::AngleDown }</div>
-            </Button>
+            </button>
         }
     } else {
         html! {}

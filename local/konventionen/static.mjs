@@ -52,13 +52,21 @@ const FORBIDDEN_LABELS = [
   ['Änderungen Speichern', 'Speichern'],
   ['Loops Verbinden', 'Loops verbinden'],
   ['Ports ändern', 'Ports bearbeiten'],
+  ['Ja', 'Löschen (Bestätigungsdialog, components/dialog.rs)'],
+  ['Nein', 'Abbrechen'],
+  ['Drucken / PDF', 'Seite drucken'],
+  ['Drucken', 'Etikett drucken oder Seite drucken'],
+  ['Drucker verbinden', 'Etikettendrucker verbinden'],
+  ['Drucker trennen', 'Etikettendrucker trennen'],
+  ['Planung eröffnen', 'Anlegen'],
+  ['Neue Planung erstellen', 'Neue Planung'],
+  ['Aktivieren', 'In Netbox aktivieren'],
 ];
 const TOAST_TITLE = /konnte(n)? nicht (gespeichert|angelegt|gelöscht|geladen|angestossen|geändert|abgeschlossen|aktiviert) werden/;
 
 const rules = [
   {
     id: 'verboten-beschriftung',
-    step: 2,
     message: 'Beschriftung nach Abschnitt 1 der Doku ändern',
     find: (f) =>
       FORBIDDEN_LABELS.flatMap(([bad, good]) =>
@@ -99,17 +107,14 @@ const rules = [
   },
   {
     id: 'symbolknopf-ohne-name',
-    step: 2,
-    message: 'Knopf mit Symbol ohne Text braucht aria_label und title',
+    message: 'Knopf nur mit Symbol: IconButton (components/icon_button.rs) mit name statt Button, der kein title kennt',
     find: (f) =>
       buttons(f)
         .filter((b) => /\bicon=/.test(b.tag) && !/\blabel=/.test(b.tag) && !b.children.trim())
-        .filter((b) => !/\baria_label=/.test(b.tag) || !/\btitle=/.test(b.tag))
         .map((b) => ({ line: b.line })),
   },
   {
     id: 'print-nur-ein-ort',
-    step: 2,
     message: 'Seite drucken (window().print()) nur im Knopf „Seite drucken“ (components/print_page.rs)',
     find: (f) => (f.rel === path.join('components', 'print_page.rs') ? [] : grep(f, /\.print\(\)/).map((line) => ({ line }))),
   },

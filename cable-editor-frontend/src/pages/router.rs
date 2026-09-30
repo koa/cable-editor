@@ -118,7 +118,7 @@ impl PanelView {
     pub fn title(&self) -> &'static str {
         match self {
             PanelView::Show => "Übersicht",
-            PanelView::Edit => "Ports ändern",
+            PanelView::Edit => "Ports bearbeiten",
             PanelView::Attach => "Fasern auflegen",
             PanelView::Loop => "Loops verbinden",
         }

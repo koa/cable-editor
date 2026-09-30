@@ -139,8 +139,10 @@ impl FrontendError {
                 "Die Panels des Schachts bilden keinen gültigen Baum".to_string()
             }
             FrontendError::Printer(e) => format!("Druckfehler: {e}"),
-            FrontendError::PrinterDisconnected => "Drucker nicht verbunden".to_string(),
-            FrontendError::PrinterNoSupply => "Drucker hat kein Etikett gemeldet".to_string(),
+            FrontendError::PrinterDisconnected => "Etikettendrucker nicht verbunden".to_string(),
+            FrontendError::PrinterNoSupply => {
+                "Etikettendrucker hat kein Etikett gemeldet".to_string()
+            }
             FrontendError::UnsupportedTape => {
                 "Etikettentyp wird nicht unterstützt (nur Endlosband)".to_string()
             }

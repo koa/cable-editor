@@ -1,5 +1,6 @@
 use crate::graphql::authenticated::list_plans::BASELINE_PLAN_ID;
 use crate::{
+    components::icon_button::IconButton,
     components::table::{TreeModel, TreeState, TreeTable, TreeTableColumn, TreeTableContext},
     create_simple_dialog,
     error::FrontendError,
@@ -118,7 +119,7 @@ impl TreeTableColumn<IdOrNew, PanelEntry, PanelEditAction> for PanelColumn {
                     let onclick =
                         Callback::from(move |_| callback.emit(PanelEditAction::MoveUp(key)));
 
-                    buttons.push(html!(<Button icon={Icon::AngleDoubleLeft} {onclick} variant={ButtonVariant::Secondary} />))
+                    buttons.push(html!(<IconButton icon={Icon::AngleDoubleLeft} name="Eine Ebene nach oben" {onclick} variant={ButtonVariant::Secondary} />))
                 }
                 if let Some(other_sibling) = context.previous_sibling {
                     let parent = context.parent.copied();
@@ -128,7 +129,7 @@ impl TreeTableColumn<IdOrNew, PanelEntry, PanelEditAction> for PanelColumn {
                         callback.emit(PanelEditAction::ExchangeSiblings { parent, siblings })
                     });
 
-                    buttons.push(html!(<Button icon={Icon::LongArrowAltUp} {onclick} variant={ButtonVariant::Secondary}/>))
+                    buttons.push(html!(<IconButton icon={Icon::LongArrowAltUp} name="Mit dem vorherigen Panel tauschen" {onclick} variant={ButtonVariant::Secondary}/>))
                 }
                 if let Some(previous_sibling) = context.previous_sibling {
                     let entry = *context.key;
@@ -137,7 +138,7 @@ impl TreeTableColumn<IdOrNew, PanelEntry, PanelEditAction> for PanelColumn {
                     let onclick = Callback::from(move |_| {
                         callback.emit(PanelEditAction::NewParent { entry, new_parent })
                     });
-                    buttons.push(html!(<Button icon={Icon::AngleDoubleRight} {onclick} variant={ButtonVariant::Secondary}/>))
+                    buttons.push(html!(<IconButton icon={Icon::AngleDoubleRight} name="Unter das vorherige Panel einordnen" {onclick} variant={ButtonVariant::Secondary}/>))
                 }
                 if context.children.is_empty() {
                     let key = *context.key;
@@ -145,7 +146,7 @@ impl TreeTableColumn<IdOrNew, PanelEntry, PanelEditAction> for PanelColumn {
                     let onclick =
                         Callback::from(move |_| callback.emit(PanelEditAction::Remove(key)));
 
-                    buttons.push(html!(<Button icon={Icon::Trash} {onclick} variant={ButtonVariant::DangerSecondary} />))
+                    buttons.push(html!(<IconButton icon={Icon::Trash} name="Entfernen" {onclick} variant={ButtonVariant::DangerSecondary} />))
                 }
                 if !*modified && let IdOrNew::Id(id) = &context.key {
                     let class = classes!("pf-v6-c-button", "pf-m-secondary");
@@ -157,7 +158,7 @@ impl TreeTableColumn<IdOrNew, PanelEntry, PanelEditAction> for PanelColumn {
                         },
                     };
                     buttons.push(
-                        html!(<Link<AppRoute>{to} class={class.clone()}>{format!("{} Ports ändern",context.row.port_count)}</Link<AppRoute>>),
+                        html!(<Link<AppRoute>{to} class={class.clone()}>{format!("{} Ports bearbeiten",context.row.port_count)}</Link<AppRoute>>),
                     );
                     let to = AppRoute::Plan {
                         plan_id: *plan_id,
@@ -176,7 +177,7 @@ impl TreeTableColumn<IdOrNew, PanelEntry, PanelEditAction> for PanelColumn {
                                     view: PanelView::Loop,
                                 },
                             };
-                            buttons.push(html!(<Link<AppRoute>{to} class={class.clone()}>{"Loops Verbinden"}</Link<AppRoute>>));
+                            buttons.push(html!(<Link<AppRoute>{to} class={class.clone()}>{"Loops verbinden"}</Link<AppRoute>>));
                         }
                         if context.row.port_count > 0 {
                             let to = AppRoute::Plan {

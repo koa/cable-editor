@@ -413,8 +413,12 @@ impl CabinetTypeProperties {
         }
         let is_new = self.is_new(ctx);
         let unused = self.stored().is_some_and(|typ| typ.schacht_count == 0);
+        let name = self
+            .stored()
+            .and_then(|typ| typ.name.clone())
+            .unwrap_or_default();
         let delete = (!is_new && unused).then(|| {
-            let onclick = confirm_delete(ctx.link(), ctx.link().callback(|()| Msg::Delete));
+            let onclick = confirm_delete(ctx.link(), "Schachttyp", &name, ctx.link().callback(|()| Msg::Delete));
             html_nested!(<Button variant={ButtonVariant::DangerSecondary} label="Löschen" {onclick}/>)
         });
         html! {

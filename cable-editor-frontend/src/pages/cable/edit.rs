@@ -487,6 +487,8 @@ impl EditCable {
                         let delete_button = (role >= Role::Admin).then(|| {
                             let onclick = confirm_delete(
                                 ctx.link(),
+                                "Kabel",
+                                &data.name,
                                 ctx.link().callback(|()| Msg::RemoveEntry),
                             );
                             html! {

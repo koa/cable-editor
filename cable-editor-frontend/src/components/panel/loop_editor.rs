@@ -1,3 +1,4 @@
+use crate::components::icon_button::IconButton;
 use crate::components::page_layout::{PageLayout, object_title};
 use crate::{
     components::{fiber::FiberLabel, table::ListModel},
@@ -156,7 +157,7 @@ impl TableEntryRenderer<LoopColumn> for FiberLoopEntry {
                     FiberStatus::UsedElsewhere => {
                         // Wenn blockiert, kann nicht geloopt werden
                         Cell::new(
-                            html!(<Button variant={ButtonVariant::Plain} disabled=true icon={Icon::Ban} />),
+                            html!(<IconButton icon={Icon::Ban} name="Faser anderweitig belegt" disabled=true onclick={Callback::noop()} />),
                         )
                     }
                 }
@@ -534,7 +535,7 @@ impl LoopPortEditor {
                             </div>
                             // class="pf-v6-u-mt-md"
                             <ActionGroup>
-                                <Button label="Änderungen Speichern" disabled={unmodified} variant={ButtonVariant::Primary} onclick={ctx.link().callback(|_| Msg::Save)} />
+                                <Button label="Speichern" disabled={unmodified} variant={ButtonVariant::Primary} onclick={ctx.link().callback(|_| Msg::Save)} />
                             </ActionGroup>
                         } else {
                             { self.render_cable_selection(ctx) }

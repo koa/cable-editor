@@ -1,3 +1,4 @@
+use crate::components::icon_button::IconButton;
 use crate::components::page_layout::{PageLayout, object_title};
 use crate::{
     error::FrontendError,
@@ -311,7 +312,7 @@ impl Component for PortEditor {
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         html! {
-            <PageLayout title={object_title("Ports ändern", self.panel_name.as_deref())}>{self.view_content(ctx)}</PageLayout>
+            <PageLayout title={object_title("Ports bearbeiten", self.panel_name.as_deref())}>{self.view_content(ctx)}</PageLayout>
         }
     }
 
@@ -394,9 +395,9 @@ impl PortEditor {
                         </FormSelect<i32>>
                     </td>
                     <td class="pf-v6-c-table__td">
-                        <Button icon={Icon::AngleUp} variant={ButtonVariant::Plain} onclick={on_up} disabled={is_first} />
-                        <Button icon={Icon::AngleDown} variant={ButtonVariant::Plain} onclick={on_down} disabled={is_last} />
-                        <Button icon={Icon::Trash} variant={ButtonVariant::DangerSecondary} onclick={on_delete} />
+                        <IconButton icon={Icon::AngleUp} name="Nach oben" onclick={on_up} disabled={is_first} />
+                        <IconButton icon={Icon::AngleDown} name="Nach unten" onclick={on_down} disabled={is_last} />
+                        <IconButton icon={Icon::Trash} name="Entfernen" variant={ButtonVariant::DangerSecondary} onclick={on_delete} />
                     </td>
                 </tr>
             }

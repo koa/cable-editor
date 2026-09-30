@@ -1,3 +1,4 @@
+use crate::components::icon_button::IconButton;
 use crate::components::menu::popup::{MenuActionItem, MenuGroup, PopupMenu};
 use crate::components::page_layout::{PageLayout, object_title};
 use crate::{
@@ -358,7 +359,7 @@ impl AttachFiber {
 
                         <div class="pf-v6-u-mt-md">
                             <Button
-                                label="Änderungen Speichern"
+                                label="Speichern"
                                 variant={ButtonVariant::Primary}
                                 disabled={!can_save}
                                 onclick={ctx.link().callback(|_| Msg::Save)}
@@ -506,7 +507,7 @@ impl AttachFiber {
         let reset_btn = if is_modified && !is_loop {
             let port_id = port.id;
             Some(html! {
-                <Button variant={ButtonVariant::Plain} icon={Icon::Redo} onclick={ctx.link().callback(move |_| Msg::ResetPort(port_id))} />
+                <IconButton icon={Icon::Redo} name="Änderung zurücksetzen" onclick={ctx.link().callback(move |_| Msg::ResetPort(port_id))} />
             })
         } else {
             None
@@ -579,7 +580,7 @@ impl AttachFiber {
                 let port_id = port.id;
                 let unlink_btn = if !is_loop {
                     Some(
-                        html!(<Button variant={ButtonVariant::Plain} icon={Icon::Times} onclick={ctx.link().callback(move |_| Msg::ClearSlot(port_id, side))} />),
+                        html!(<IconButton icon={Icon::Times} name="Faser lösen" onclick={ctx.link().callback(move |_| Msg::ClearSlot(port_id, side))} />),
                     )
                 } else {
                     None
@@ -723,7 +724,7 @@ impl AttachFiber {
                     {cable_bundle_select}
                     {fiber_select}
                 </div>
-                <Button variant={ButtonVariant::Plain} icon={Icon::Times} onclick={ctx.link().callback(|_| Msg::CancelEdit)} />
+                <IconButton icon={Icon::Times} name="Abbrechen" onclick={ctx.link().callback(|_| Msg::CancelEdit)} />
             </div>
         }
     }

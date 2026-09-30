@@ -114,7 +114,10 @@ const inspect = () => {
   const name = (el) =>
     (el.getAttribute('aria-label') ?? '') || (el.innerText ?? '').trim() || (el.getAttribute('title') ?? '') ||
     [...el.querySelectorAll('img[alt]')].map((i) => i.alt).join('').trim();
-  const describe = (el) => `<${el.tagName.toLowerCase()} class="${el.className}">`;
+  const describe = (el) => {
+    const icon = el.querySelector('i, svg, img');
+    return `<${el.tagName.toLowerCase()} class="${el.className}"> ${icon ? `Symbol ${icon.getAttribute('class') ?? icon.tagName.toLowerCase()}` : 'ohne Symbol'}, in „${(el.closest('tr, li, section, form')?.innerText ?? '').trim().replace(/\s+/g, ' ').slice(0, 40)}“`;
+  };
   // Leaflet's markers are labelled by their tooltip and belong to the map, not to the page's controls
   const controls = [...document.querySelectorAll('button, a[href], [role=button]')]
     .filter((el) => visible(el) && !el.classList.contains('leaflet-marker-icon'));
@@ -128,6 +131,8 @@ const inspect = () => {
     buttonTexts: controls.filter((el) => el.tagName === 'BUTTON').map((el) => (el.innerText ?? '').trim()).filter(Boolean),
   };
 };
+
+const FORBIDDEN_BUTTONS = /^(Ja|Nein|OK|Drucken|Drucken \/ PDF|Änderungen Speichern|Aktivieren|Planung eröffnen|Neue Planung erstellen)$/;
 
 // The menus of the breadcrumb bar: each offers one level, with exactly one entry selected
 async function checkBreadcrumb(page, where, route) {
@@ -176,8 +181,11 @@ async function checkRoute(browser, device, deviceName, route) {
     if (!allowed(route)) {
       if (!found.h1.includes('Keine Berechtigung')) report('rolle', undefined, where, `sollte „Keine Berechtigung“ zeigen, zeigt ${JSON.stringify(found.h1)}`);
     }
-    for (const el of found.unnamed) report('steuerelement-ohne-name', 2, where, `${el} hat keinen Namen`);
-    for (const el of found.symbolWithoutTitle) report('symbolknopf-ohne-name', 2, where, `${el} braucht aria-label und title`);
+    for (const el of found.unnamed) report('steuerelement-ohne-name', undefined, where, `${el} hat keinen Namen`);
+    for (const el of found.symbolWithoutTitle) report('symbolknopf-ohne-name', undefined, where, `${el} braucht aria-label und title`);
+    for (const text of new Set(found.buttonTexts)) {
+      if (FORBIDDEN_BUTTONS.test(text)) report('verboten-beschriftung', undefined, where, `Knopf „${text}“ heisst nicht so (Abschnitt 1 der Doku)`);
+    }
     await checkBreadcrumb(page, where, route);
   } catch (e) {
     report('seite-nicht-pruefbar', undefined, where, String(e).split('\n')[0]);

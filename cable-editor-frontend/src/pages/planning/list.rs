@@ -165,13 +165,13 @@ impl ListOfPlannings {
                                             <TextInput placeholder="Vorhaben" required=true {onchange}/>
                                         </FormGroup>
                                         <ActionGroup>
-                                            <Button label="Planung eröffnen" variant={ButtonVariant::Primary} {onclick} />
+                                            <Button label="Anlegen" variant={ButtonVariant::Primary} {onclick} />
                                         </ActionGroup>
                                     </Form>
                                 </Modal>
                             </Bullseye>
                     }))});
-                    html!(<Button label="Neue Planung erstellen" variant={ButtonVariant::Primary} {onclick}/>)
+                    html!(<Button label="Neue Planung" variant={ButtonVariant::Primary} {onclick}/>)
                 });
             html! {
                 <>

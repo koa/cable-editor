@@ -1,3 +1,4 @@
+use crate::components::icon_button::IconButton;
 use crate::{
     components::{
         links::{CableLink, DuctLink, SchachtLink},
@@ -15,8 +16,8 @@ use crate::{
 };
 use leaflet::MouseEvent;
 use patternfly_yew::prelude::{
-    Alert, AlertType, Button, ButtonVariant, Card, CardBody, CardHeader, CardHeaderActionsObject,
-    CardSize, CardTitle, DescriptionGroup, DescriptionList, Icon, Spinner,
+    Alert, AlertType, Card, CardBody, CardHeader, CardHeaderActionsObject, CardSize, CardTitle,
+    DescriptionGroup, DescriptionList, Icon, Spinner,
 };
 use wasm_bindgen::JsCast;
 use yew::{Component, Context, Html, Properties, html, html::IntoPropValue, platform::spawn_local};
@@ -167,10 +168,9 @@ fn view_duct(ctx: &Context<Map>, duct: &MapDuct) -> Html {
     );
     let actions = CardHeaderActionsObject {
         actions: html! {
-            <Button
-                variant={ButtonVariant::Plain}
+            <IconButton
                 icon={Icon::Times}
-                aria_label="Schliessen"
+                name="Schliessen"
                 onclick={ctx.link().callback(|_| Msg::SelectDuct(None))}
             />
         },

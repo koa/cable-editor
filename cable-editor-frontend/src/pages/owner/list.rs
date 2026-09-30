@@ -200,6 +200,7 @@ impl Component for ListOfOwners {
                 false
             }
             Msg::Action(Action::Delete, owner) => {
+                let name = owner.name.to_string();
                 let on_confirm = Callback::from(move |()| {
                     let scope = scope.clone();
                     let credentials = get_credentials(&scope);
@@ -215,7 +216,7 @@ impl Component for ListOfOwners {
                         }
                     });
                 });
-                ask_delete(ctx.link(), on_confirm);
+                ask_delete(ctx.link(), "Eigentümer", &name, on_confirm);
                 false
             }
             Msg::New => {

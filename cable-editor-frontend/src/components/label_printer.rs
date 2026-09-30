@@ -104,12 +104,16 @@ pub fn PrinterStatusBar() -> Html {
         .flatten()
         .collect::<Vec<_>>()
         .join(" | ");
-        ("Drucker trennen", html!(<IconUnlink/>), description)
+        (
+            "Etikettendrucker trennen",
+            html!(<IconUnlink/>),
+            description,
+        )
     } else {
         (
-            "Drucker verbinden",
+            "Etikettendrucker verbinden",
             html!(<IconLink/>),
-            "Kein Drucker verbunden".to_string(),
+            "Kein Etikettendrucker verbunden".to_string(),
         )
     };
     html! {
@@ -157,7 +161,7 @@ pub struct PrintLabelButtonProps {
     /// Ask for the cable diameter to cap the text height, else print the largest text.
     #[prop_or(true)]
     pub diameter: bool,
-    #[prop_or(AttrValue::Static("Drucken"))]
+    #[prop_or(AttrValue::Static("Etikett drucken"))]
     pub label: AttrValue,
 }
 
@@ -332,7 +336,7 @@ fn LabelForm(props: &LabelFormProps) -> Html {
                 {preview}
             </FormGroup>
             <ActionGroup>
-                <Button variant={ButtonVariant::Primary} r#type={ButtonType::Submit} label="Drucken" disabled={!valid}/>
+                <Button variant={ButtonVariant::Primary} r#type={ButtonType::Submit} label="Etikett drucken" disabled={!valid}/>
                 <Button variant={ButtonVariant::Secondary} label="Abbrechen" onclick={props.oncancel.reform(|_| ())}/>
             </ActionGroup>
         </Form>
@@ -592,6 +596,6 @@ pub fn PanelLabelButton(props: &PanelLabelButtonProps) -> Html {
         return Html::default();
     }
     html! {
-        <PrintLabelButton texts={(*texts).clone()} diameter=false label="Etikett drucken"/>
+        <PrintLabelButton texts={(*texts).clone()} diameter=false/>
     }
 }

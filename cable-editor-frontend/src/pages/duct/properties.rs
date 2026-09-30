@@ -739,9 +739,16 @@ impl EditDuctProperties {
         }
         let is_new = self.is_new(ctx);
         let can_save = self.input().is_some() && self.has_changes(ctx);
+        let name = self.stored().map_or_else(String::new, |duct| {
+            duct_title(
+                duct.description.as_deref(),
+                self.schacht_name(duct.schacht_a.id),
+                self.schacht_name(duct.schacht_z.id),
+            )
+        });
         let delete =
             (!is_new && !self.has_cables() && get_role(ctx.link()) >= Role::Admin).then(|| {
-                let onclick = confirm_delete(ctx.link(), ctx.link().callback(|()| Msg::Delete));
+                let onclick = confirm_delete(ctx.link(), "Trasse", &name, ctx.link().callback(|()| Msg::Delete));
                 html_nested!(<Button variant={ButtonVariant::DangerSecondary} label="Löschen" {onclick}/>)
             });
         html! {

@@ -810,7 +810,7 @@ impl CabinetProperties {
             && self.owner.is_some()
             && self.has_changes();
         let delete = (!is_new && get_role(ctx.link()) >= Role::Admin).then(|| {
-            let onclick = confirm_delete(ctx.link(), ctx.link().callback(|()| Msg::Delete));
+            let onclick = confirm_delete(ctx.link(), "Schacht", self.name.trim(), ctx.link().callback(|()| Msg::Delete));
             html_nested!(<Button variant={ButtonVariant::DangerSecondary} label="Löschen" {onclick}/>)
         });
         html! {

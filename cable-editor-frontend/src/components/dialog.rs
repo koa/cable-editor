@@ -3,28 +3,45 @@ use patternfly_yew::prelude::{
     Backdrop, Backdropper, Bullseye, Button, ButtonVariant, Modal, ModalVariant,
 };
 use web_sys::MouseEvent;
-use yew::{BaseComponent, Callback, Html, Properties, function_component, html, html::Scope};
+use yew::{
+    AttrValue, BaseComponent, Callback, Html, Properties, function_component, html, html::Scope,
+};
 
 /// The click handler of a delete button: asks in the page's backdrop and calls `on_confirm`
-/// only when confirmed.
+/// only when confirmed. `kind` is the kind of object ("Schacht"), `name` what it is called.
 pub fn confirm_delete(
     scope: &Scope<impl BaseComponent>,
+    kind: &'static str,
+    name: &str,
     on_confirm: Callback<()>,
 ) -> Callback<MouseEvent> {
     let Some(backdropper) = get_backdrop(scope) else {
         return Callback::noop();
     };
-    Callback::from(move |_| open_delete_confirmation(&backdropper, on_confirm.clone()))
+    let name = AttrValue::from(name.to_string());
+    Callback::from(move |_| {
+        open_delete_confirmation(&backdropper, kind, name.clone(), on_confirm.clone());
+    })
 }
 
 /// Like `confirm_delete`, for a deletion started elsewhere, e.g. from a menu item.
-pub fn ask_delete(scope: &Scope<impl BaseComponent>, on_confirm: Callback<()>) {
+pub fn ask_delete(
+    scope: &Scope<impl BaseComponent>,
+    kind: &'static str,
+    name: &str,
+    on_confirm: Callback<()>,
+) {
     if let Some(backdropper) = get_backdrop(scope) {
-        open_delete_confirmation(&backdropper, on_confirm);
+        open_delete_confirmation(&backdropper, kind, name.to_string().into(), on_confirm);
     }
 }
 
-fn open_delete_confirmation(backdropper: &Backdropper, on_confirm: Callback<()>) {
+fn open_delete_confirmation(
+    backdropper: &Backdropper,
+    kind: &'static str,
+    name: AttrValue,
+    on_confirm: Callback<()>,
+) {
     let on_confirm = {
         let backdropper = backdropper.clone();
         Callback::from(move |()| {
@@ -37,13 +54,15 @@ fn open_delete_confirmation(backdropper: &Backdropper, on_confirm: Callback<()>)
         Callback::from(move |()| backdropper.close())
     };
     backdropper.open(Backdrop::new(html! {
-        <DeleteConfirmationDialog {on_confirm} {on_cancel}/>
+        <DeleteConfirmationDialog {kind} {name} {on_confirm} {on_cancel}/>
     }));
 }
 
 /// Asks before deleting, opened by `confirm_delete`.
 #[derive(Debug, Clone, PartialEq, Properties)]
 pub struct DeleteConfirmationDialogProperties {
+    pub kind: &'static str,
+    pub name: AttrValue,
     #[prop_or_default]
     pub on_confirm: Callback<()>,
     #[prop_or_default]
@@ -55,25 +74,25 @@ pub fn DeleteConfirmationDialog(props: &DeleteConfirmationDialogProperties) -> H
     let footer = html! {
         <>
             <Button
-                label="Ja"
+                label="Löschen"
                 onclick={props.on_confirm.reform(|_| ())}
                 variant={ButtonVariant::Danger}
             />
             <Button
-                label="Nein"
+                label="Abbrechen"
                 onclick={props.on_cancel.reform(|_| ())}
-                variant={ButtonVariant::Secondary}
+                variant={ButtonVariant::Link}
             />
         </>
     };
     html! {
         <Bullseye>
             <Modal
-                title="Bestätigung"
+                title={format!("{} löschen?", props.kind)}
                 variant={ModalVariant::Small}
                 {footer}
             >
-                <p>{"Wirklich löschen?"}</p>
+                <p>{format!("{} „{}“ wird gelöscht. Das lässt sich nicht rückgängig machen.", props.kind, props.name)}</p>
             </Modal>
         </Bullseye>
     }

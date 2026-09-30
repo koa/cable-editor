@@ -127,7 +127,14 @@ impl Component for PopupMenu {
         }
     }
 
-    fn rendered(&mut self, _ctx: &Context<Self>, _first_render: bool) {
+    fn rendered(&mut self, ctx: &Context<Self>, _first_render: bool) {
+        // patternfly-yew's MenuToggle has no `title` prop; the tooltip names the toggle like its
+        // `aria-label` does, e.g. when a phone hides the text or it is only a symbol
+        if let Some(toggle) = self.toggle_ref.cast::<Element>()
+            && !ctx.props().aria_label.is_empty()
+        {
+            let _ = toggle.set_attribute("title", &ctx.props().aria_label);
+        }
         // Focus the selected entry, so the arrow keys work right away and leaving the menu with
         // the focus closes it. The last one: in the menu of a Schacht or panel the current view
         // comes before the Schacht or panel itself, the dropdown's title. Without one the menu

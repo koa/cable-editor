@@ -322,7 +322,7 @@ impl Component for EditPlan {
                                 variant={ModalVariant::Small}
                                 footer={html!{
                                     <>
-                                        <Button label="Aktivieren" variant={ButtonVariant::Danger} onclick={on_confirm}/>
+                                        <Button label="In Netbox aktivieren" variant={ButtonVariant::Danger} onclick={on_confirm}/>
                                         <Button label="Abbrechen" variant={ButtonVariant::Link} onclick={on_cancel}/>
                                     </>
                                 }}>
@@ -516,7 +516,7 @@ impl EditPlan {
                                 <div class="pf-v6-u-mt-xl">
                                     <ActionGroup>
                                         <Button
-                                            label="Planung abschliessen (Implementieren)"
+                                            label="Planung abschliessen"
                                             variant={ButtonVariant::Primary}
                                             disabled={self.saving}
                                             onclick={ctx.link().callback(|_| Msg::AskImplement)}

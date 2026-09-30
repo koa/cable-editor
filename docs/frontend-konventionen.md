@@ -1,6 +1,6 @@
 # Konzept: Einheitliche Bedienung im Frontend
 
-Stand: 30.09.2026 – offene Fragen entschieden; das Prüfgerüst steht, die Fehlerbehandlung (Schritt 1) ist umgesetzt, die übrigen Schritte unter „Umsetzung“ folgen.
+Stand: 30.09.2026 – offene Fragen entschieden; das Prüfgerüst steht, die Fehlerbehandlung (Schritt 1) und die Beschriftungen (Schritt 2) sind umgesetzt, die übrigen Schritte unter „Umsetzung“ folgen.
 
 Diese Regeln gelten für jede neue oder geänderte Seite. Sie stammen aus einer Durchsicht des
 ganzen Frontends; wo der Code noch abweicht, steht es unter „Umsetzung“. Wie Fehler entstehen
@@ -40,8 +40,7 @@ und was das Backend liefert, steht in `fehlermeldungen.md`, der Aufbau des Bread
   - „Etikett drucken“ druckt ein Etikett auf dem Etikettendrucker (Brady, per Bluetooth). Dazu
     gehören der Dialog („Etikett drucken“, Knopf „Etikett drucken“), die Statusleiste
     („Etikettendrucker verbinden“, „Etikettendrucker trennen“, „Kein Etikettendrucker
-    verbunden“) und der Knopf in Tabellenzeilen, wo aus dem Zusammenhang klar ist, welches
-    Etikett gemeint ist (Symbol Etikett, `aria_label` „Etikett drucken“).
+    verbunden“) und der Knopf, überall „Etikett drucken“, auch in Tabellenzeilen.
   - „Seite drucken“ öffnet den Druckdialog des Geräts für die ganze Seite (Drucker oder PDF,
     `window.print()`); Symbol Drucker, `title` „Druckdialog des Geräts öffnen (Drucker oder PDF)“.
   - Beide Knöpfe tragen unterschiedliche Symbole, damit sie auch ohne Text auseinanderzuhalten
@@ -142,7 +141,7 @@ noch nicht eingeschalteten Prüfungen einzeln. Drei Ebenen, von der strengsten z
 | Ebene | Werkzeug | Prüft |
 | --- | --- | --- |
 | Compiler | `cargo clippy -p cable-editor-frontend --target wasm32-unknown-unknown` (`cable-editor-frontend/clippy.toml`, `[lints.clippy]`) | keine Browser-Dialoge (`alert`, `confirm`, `prompt`), kein `log::error!` (Fehler gehören in die Oberfläche), keine Panics (`unwrap`, `expect`, `panic!`); ab Schritt 4 kein rohes `Link` |
-| Quelltext | `local/konventionen/static.mjs` | Beschriftungen (Abschnitt 1), Fehler als `FrontendError` und Toast-Titel (4), Symbolknöpfe mit `aria_label` und `title`, „Seite drucken“ nur an einer Stelle, `PlanLink` statt `Link<AppRoute>` (3) |
+| Quelltext | `local/konventionen/static.mjs` | Beschriftungen (Abschnitt 1), Fehler als `FrontendError` und Toast-Titel (4), Symbolknöpfe als `IconButton`, „Seite drucken“ nur an einer Stelle, `PlanLink` statt `Link<AppRoute>` (3) |
 | Browser | `local/konventionen/pages.mjs` (Playwright gegen den Mock) | jede Route als Handy und Desktop: keine Konsolenfehler, kein waagerechter Überlauf, genau eine sichtbare `h1`, höchstens ein aktiver Eintrag je Breadcrumb-Menü, „Keine Berechtigung“ ohne die nötige Rolle, jeder Knopf und Link hat einen Namen |
 
 - Eine Prüfung mit „ausstehend“ gehört zu einem Umsetzungsschritt, der noch fehlt; der Commit
@@ -176,8 +175,11 @@ Fehlerbehandlung, sind erledigt und werden geprüft):
    „nicht gefunden“-Texte, `expect` im Browserzustand, Fehler der Editoren als Toast.
    Ausnahmen mit `#[allow(clippy::expect_used)]`: fehlender Yew-Kontext, `build.rs`. Ein Toast
    zeigt den Titel des `FrontendError` (`util::ToastText`), nicht dessen englischen `Display`.
-2. Beschriftungen nach Abschnitt 1 (auch „Etikett drucken“ und „Seite drucken“), `aria_label` und
-   `title` der Symbolknöpfe, Bestätigungsdialog.
+2. (erledigt) Beschriftungen nach Abschnitt 1 (auch „Etikett drucken“ und „Seite drucken“),
+   `aria_label` und `title` der Symbolknöpfe (`components/icon_button.rs` `IconButton`, denn
+   patternfly-yew kennt kein `title`; `PopupMenu` setzt es aus seinem `aria_label`),
+   Bestätigungsdialog (`confirm_delete(scope, Art, Name, …)`, Titel „<Art> löschen?“).
+   „Seite drucken“ ist `components/print_page.rs`.
 3. Rückmeldung nach Abschnitt 5: Toasts in den Editoren, beim Löschen und beim Anlegen einer
    Planung; „Speichern“ nur aktiv bei Änderungen.
 4. Links für Schachttyp, Eigentümer und Plan; `PlanLink` statt `Link<AppRoute>`.

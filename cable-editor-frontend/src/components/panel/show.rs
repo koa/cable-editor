@@ -1,4 +1,5 @@
 use crate::components::page_layout::{PageLayout, object_title};
+use crate::components::print_page::PrintPageButton;
 use crate::graphql::authenticated::current_user::Role;
 use crate::graphql::authenticated::list_plans::BASELINE_PLAN_ID;
 use crate::util::{get_role, is_wide_screen};
@@ -21,7 +22,6 @@ use crate::{
     util::get_credentials,
 };
 use cable_editor_common::ObjectKind;
-use gloo_utils::window;
 use patternfly_yew::prelude::{
     Button, ButtonVariant, Card, CardBody, CardTitle, Divider, Icon, Level, Spinner, Title,
 };
@@ -40,7 +40,6 @@ pub enum Msg {
     FetchData,
     DataFetched(Option<PlannedPanelOverview>),
     Error(FrontendError),
-    Print,
 }
 
 pub struct ShowPanel {
@@ -98,10 +97,6 @@ impl Component for ShowPanel {
                 self.loading = false;
                 self.error = Some(err);
                 true
-            }
-            Msg::Print => {
-                window().print().ok();
-                false
             }
         }
     }
@@ -217,12 +212,7 @@ impl ShowPanel {
                     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
                         <div>
                             <div class="overview-action-buttons">
-                                <Button
-                                    variant={ButtonVariant::Secondary}
-                                    icon={Icon::Print}
-                                    label="Drucken / PDF"
-                                    onclick={ctx.link().callback(|_| Msg::Print)}
-                                />
+                                <PrintPageButton />
                                 <PanelLabelButton
                                     id={root_panel.id}
                                     name={root_panel.name.clone()}
