@@ -9,7 +9,7 @@ use crate::{
         current_user::Role,
         list_cables::{CableListEntry, create_cable, fetch_cables_list},
     },
-    util::{get_backdrop, get_credentials, get_role},
+    util::{get_backdrop, get_credentials, get_role, toast_success},
 };
 use patternfly_yew::prelude::{
     ActionGroup, Backdrop, Bullseye, Button, ButtonVariant, Cell, CellContext, ExpansionState,
@@ -81,6 +81,7 @@ pub enum Msg {
     Loaded(Result<Box<[CableListEntry]>, FrontendError>),
     Sort(TableHeaderSortBy<Columns>),
     AddCable,
+    Created,
 }
 
 impl Component for ListOfCables {
@@ -117,20 +118,30 @@ impl Component for ListOfCables {
                 self.sort_cables();
                 true
             }
+            Msg::Created => {
+                toast_success(ctx.link(), "Kabel angelegt");
+                // Reload, so the new cable shows up
+                ctx.link().send_message(Msg::Fetch);
+                false
+            }
             Msg::AddCable => {
                 if let Some(backdrop) = get_backdrop(ctx.link()) {
-                    // Reload afterwards, so a new cable shows up
                     let on_close = {
+                        let backdrop = backdrop.clone();
+                        Callback::from(move |()| backdrop.close())
+                    };
+                    // The dialog is rendered by the backdrop viewer, whose context has no toaster
+                    let on_created = {
                         let backdrop = backdrop.clone();
                         ctx.link().callback(move |()| {
                             backdrop.close();
-                            Msg::Fetch
+                            Msg::Created
                         })
                     };
                     backdrop.open(Backdrop::new(html! {
                         <Bullseye>
                             <Modal title="Neues Kabel" variant={ModalVariant::Small}>
-                                <AddCable {on_close}/>
+                                <AddCable {on_close} {on_created}/>
                             </Modal>
                         </Bullseye>
                     }));
@@ -229,6 +240,7 @@ enum AddCableMsg {
 #[derive(Properties, PartialEq)]
 struct AddCableProps {
     on_close: Callback<()>,
+    on_created: Callback<()>,
 }
 impl Component for AddCable {
     type Message = AddCableMsg;
@@ -246,12 +258,12 @@ impl Component for AddCable {
             AddCableMsg::Save => {
                 let name = self.cable_name.clone();
                 let scope = ctx.link().clone();
-                let on_close = ctx.props().on_close.clone();
+                let on_created = ctx.props().on_created.clone();
                 if let Some((credentials, _)) = scope.context::<OAuth2Context>(Callback::noop()) {
                     spawn_local(async move {
                         match create_cable(Some(&credentials), name).await {
                             Ok(_) => {
-                                on_close.emit(());
+                                on_created.emit(());
                             }
                             Err(error) => {
                                 scope.send_message(AddCableMsg::Error(error));
@@ -288,7 +300,7 @@ impl Component for AddCable {
                     <TextInput required=true {value} onchange={ctx.link().callback(|text|{AddCableMsg::UpdateText(text)})}/>
                 </FormGroup>
                 <ActionGroup>
-                    <Button variant={ButtonVariant::Primary} label="Speichern" onclick={ctx.link().callback(|_|{AddCableMsg::Save})} {disabled}/>
+                    <Button variant={ButtonVariant::Primary} label="Anlegen" onclick={ctx.link().callback(|_|{AddCableMsg::Save})} {disabled}/>
                     <Button variant={ButtonVariant::Secondary} label="Abbrechen" onclick={ctx.link().callback(|_|{AddCableMsg::Cancel})}/>
                 </ActionGroup>
             </Form>

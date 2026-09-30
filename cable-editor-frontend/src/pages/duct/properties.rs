@@ -283,7 +283,10 @@ impl Component for EditDuctProperties {
                     let plan_id = ctx.props().plan_id;
                     spawn_local(async move {
                         match delete_duct(credentials.as_ref(), id).await {
-                            Ok(()) => navigate(&scope, plan_id, PlanView::ListOfDucts),
+                            Ok(()) => {
+                                toast_success(&scope, "Trasse gelöscht");
+                                navigate(&scope, plan_id, PlanView::ListOfDucts)
+                            }
                             Err(error) => {
                                 toast_error(&scope, "Trasse konnte nicht gelöscht werden", error)
                             }

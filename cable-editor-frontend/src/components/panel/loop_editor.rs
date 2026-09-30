@@ -11,7 +11,7 @@ use crate::{
         },
     },
     icons::{IconFiberConnected, IconFiberCut, IconLink, IconUnlink},
-    util::{get_credentials, toast_error},
+    util::{get_credentials, toast_error, toast_success},
 };
 use cable_editor_common::ObjectKind;
 
@@ -434,6 +434,7 @@ impl Component for LoopPortEditor {
                 true
             }
             Msg::Saved => {
+                toast_success(ctx.link(), "Verbindungen gespeichert");
                 ctx.link().send_message(Msg::FetchData);
                 true
             }

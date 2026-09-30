@@ -6,7 +6,7 @@ use crate::{
     error::FrontendError,
     graphql::authenticated::{IdOrNew, cabinet_details::PanelTreeEntry},
     pages::router::{AppRoute, PanelView, PlanView},
-    util::get_credentials,
+    util::{get_credentials, toast_error, toast_success},
 };
 
 use crate::graphql::authenticated::edit_cabinet::{
@@ -50,6 +50,8 @@ pub enum Msg {
     PanelsFetched(Box<[PanelTreeEntry]>),
     CreatePanel,
     Error(FrontendError),
+    Saved,
+    SaveFailed(FrontendError),
     PanelEvent(PanelEditAction),
     Save,
     NetboxDevicesFetched(Rc<[OverviewNetboxDevice]>),
@@ -326,6 +328,16 @@ impl Component for EditCabinet {
                 self.loading = false;
                 true
             }
+            Msg::Saved => {
+                toast_success(ctx.link(), "Panels gespeichert");
+                ctx.link().send_message(Msg::FetchPanels);
+                true
+            }
+            Msg::SaveFailed(error) => {
+                self.loading = false;
+                toast_error(ctx.link(), "Panels konnten nicht gespeichert werden", error);
+                true
+            }
             Msg::PanelEvent(PanelEditAction::Remove(id)) => {
                 self.model = self.model.remove(&id);
                 true
@@ -446,7 +458,7 @@ impl Component for EditCabinet {
                     scope.send_message(
                         update_panels_in_cabinet(to_delete, changes, cabinet_id, credentials)
                             .await
-                            .map_or_else(Msg::Error, |_| Msg::FetchPanels),
+                            .map_or_else(Msg::SaveFailed, |_| Msg::Saved),
                     );
                 });
                 true

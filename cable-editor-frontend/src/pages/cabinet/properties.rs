@@ -305,7 +305,10 @@ impl Component for CabinetProperties {
                     let plan_id = ctx.props().plan_id;
                     spawn_local(async move {
                         match delete_schacht(credentials.as_ref(), id).await {
-                            Ok(()) => navigate(&scope, plan_id, PlanView::ListOfCabinets),
+                            Ok(()) => {
+                                toast_success(&scope, "Schacht gelöscht");
+                                navigate(&scope, plan_id, PlanView::ListOfCabinets)
+                            }
                             Err(error) => scope.send_message(Msg::DeleteFailed(error)),
                         }
                     });

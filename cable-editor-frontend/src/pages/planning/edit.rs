@@ -274,6 +274,7 @@ impl Component for EditPlan {
             Msg::Saved(data) => {
                 self.saving = false;
                 self.error = None;
+                toast_success(ctx.link(), "Planung umbenannt");
                 self.edit_name = data.name.clone();
                 self.details = Some(data);
                 true

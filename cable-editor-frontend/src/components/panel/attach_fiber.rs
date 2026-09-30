@@ -12,7 +12,7 @@ use crate::{
         },
     },
     icons::IconLink,
-    util::{get_credentials, toast_error},
+    util::{get_credentials, toast_error, toast_success},
 };
 use cable_editor_common::ObjectKind;
 use itertools::Itertools;
@@ -298,6 +298,7 @@ impl Component for AttachFiber {
                 true
             }
             Msg::Saved => {
+                toast_success(ctx.link(), "Verbindungen gespeichert");
                 ctx.link().send_message(Msg::FetchData);
                 true
             }

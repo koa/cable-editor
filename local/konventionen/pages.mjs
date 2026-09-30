@@ -70,6 +70,24 @@ const FAILING_CHANGES = [
   { path: '/plan/1/panel/22/edit', needs: 'PLANNER', input: 0, click: /Speichern$/, title: /(Ports|Panel) konnte(n)? nicht gespeichert werden/ },
   { path: '/plan/0/netbox', needs: 'ADMIN', click: /^Jetzt synchronisieren$/, title: /konnte nicht angestossen werden/ },
 ];
+
+// A change that works: a success toast titled "<Objekt> <Vergangenheit>" (Abschnitt 5) and the
+// page the doc says follows (`then`, default: stays); before the change the button is disabled
+// (`untouched`: "Speichern" only with changes). Deleting comes last, it changes what the mock has.
+const SUCCESSFUL_CHANGES = [
+  { path: '/plan/0/duct/711/properties', needs: 'PLANNER', input: 2, click: /^Speichern$/, untouched: true, title: /^Trasse gespeichert$/, then: '/plan/0/duct/711/show' },
+  { path: '/plan/0/cabinet/1/properties', needs: 'PLANNER', input: 0, click: /^Speichern$/, untouched: true, title: /^Schacht gespeichert$/, then: '/plan/0/cabinet/1/overview' },
+  { path: '/plan/1/edit', needs: 'PLANNER', input: 0, click: /^Umbenennen$/, untouched: true, title: /^Planung umbenannt$/ },
+  { path: '/plan/0/cabinettype/1', needs: 'ADMIN', input: 0, click: /^Speichern$/, untouched: true, title: /^Schachttyp gespeichert$/ },
+  { path: '/plan/1/panel/22/edit', needs: 'PLANNER', input: 0, click: /^Speichern$/, untouched: true, title: /^Ports gespeichert$/ },
+  { path: '/plan/0/netbox', needs: 'ADMIN', click: /^Jetzt synchronisieren$/, title: /^Sync angestossen$/ },
+  { path: '/listofplans', needs: 'PLANNER', click: /^Neue Planung$/, dialog: { input: 0, text: 'Konventionstest', click: /^Anlegen$/ }, title: /^Planung angelegt$/ },
+  { path: '/plan/0/listofcables', needs: 'PLANNER', click: /^Neues Kabel$/, dialog: { input: 0, text: 'Konventionstest', click: /^Anlegen$/ }, title: /^Kabel angelegt$/ },
+  // Creates a Schachttyp (its page follows) and deletes it again
+  { path: `/plan/0/newcabinettype/${NEW_ID}`, needs: 'ADMIN', input: 0, text: 'Konventionstest', click: /^Anlegen$/, title: /^Schachttyp angelegt$/, then: /^\/plan\/0\/cabinettype\/\d+$/,
+    next: { click: /^Löschen$/, confirm: /^(Ja|Löschen)$/, title: /^Schachttyp gelöscht$/, then: '/plan/0/listofcabinettypes' } },
+  { path: '/plan/0/cable/11/edit', needs: 'ADMIN', click: /^Löschen$/, confirm: /^(Ja|Löschen)$/, title: /^Kabel gelöscht$/, then: '/plan/0/listofcables' },
+];
 const RANK = { READER: 0, PLANNER: 1, ADMIN: 2 };
 const allowed = (route) => RANK[ROLE] >= RANK[route.needs ?? 'READER'];
 
@@ -250,6 +268,44 @@ async function checkFailingChange(browser, entry) {
   });
 }
 
+async function checkSuccessfulChange(browser, entry) {
+  if (RANK[ROLE] < RANK[entry.needs ?? 'READER']) return;
+  await withPage(browser, async (page) => {
+    await page.goto(ORIGIN + entry.path);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(800);
+    for (let step = entry; step; step = step.next) {
+      const where = `${page.url().replace(ORIGIN, '')} „${step.click.source}“ (Desktop, ${ROLE})`;
+      const button = page.locator('main button:visible', { hasText: step.click }).first();
+      if (step.untouched && !(await button.isDisabled())) {
+        report('speichern-ohne-aenderung', undefined, where, 'der Knopf ist ohne Änderung aktiv');
+      }
+      if (step.input !== undefined) {
+        const field = page.locator('main input[type=text]:visible').nth(step.input);
+        await field.fill(step.text ?? `${await field.inputValue()} x`);
+      }
+      await button.click();
+      if (step.dialog) {
+        await page.locator('.pf-v6-c-modal-box input[type=text]:visible').nth(step.dialog.input).fill(step.dialog.text);
+        await page.locator('.pf-v6-c-modal-box button', { hasText: step.dialog.click }).first().click();
+      }
+      if (step.confirm) {
+        await page.locator('.pf-v6-c-modal-box button', { hasText: step.confirm }).first().click();
+      }
+      await page.waitForTimeout(800);
+      const toasts = await page.locator('.pf-v6-c-alert-group .pf-v6-c-alert.pf-m-success').allInnerTexts();
+      if (!toasts.some((t) => t.split('\n').some((line) => step.title.test(line.trim())))) {
+        report('toast-nach-aenderung', undefined, where, `sollte einen Erfolgs-Toast ${step.title} zeigen, zeigt ${JSON.stringify(toasts)}`);
+      }
+      const now = new URL(page.url()).pathname;
+      const expected = step.then ?? step.path ?? entry.path;
+      if (!(expected instanceof RegExp ? expected.test(now) : now === expected)) {
+        report('wohin-danach', undefined, where, `sollte auf ${expected} stehen, steht auf ${now}`);
+      }
+    }
+  });
+}
+
 // ---------------------------------------------------------------- run
 const browser = await chromium.launch();
 try {
@@ -259,6 +315,7 @@ try {
     for (const route of ROUTES) await checkRoute(browser, device, deviceName, route);
   }
   for (const entry of NOT_FOUND) await checkNotFound(browser, entry);
+  for (const entry of SUCCESSFUL_CHANGES) await checkSuccessfulChange(browser, entry);
   await fetch(`${ORIGIN}/mock/fail?mutations=*`);
   try {
     for (const entry of FAILING_CHANGES) await checkFailingChange(browser, entry);

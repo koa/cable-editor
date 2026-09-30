@@ -17,7 +17,7 @@ use crate::{
         list_ducts::DuctListEntry,
     },
     pages::router::PlanView,
-    util::{get_backdrop, get_credentials, get_role, navigate, toast_error},
+    util::{get_backdrop, get_credentials, get_role, navigate, toast_error, toast_success},
 };
 use cable_editor_common::ObjectKind;
 use patternfly_yew::prelude::{
@@ -210,6 +210,7 @@ pub enum DataState {
 }
 pub enum Msg {
     Data(CableDetails),
+    Saved(CableDetails),
     Error(FrontendError),
     NotFound,
     SetName(String),
@@ -250,6 +251,10 @@ impl Component for EditCable {
                 self.state = DataState::Data(data);
                 self.saving = false;
                 true
+            }
+            Msg::Saved(data) => {
+                toast_success(ctx.link(), "Kabel gespeichert");
+                self.update(ctx, Msg::Data(data))
             }
             Msg::Error(error) => {
                 self.state = DataState::Error(error);
@@ -362,7 +367,10 @@ impl Component for EditCable {
                     let plan_id = ctx.props().plan_id;
                     spawn_local(async move {
                         match delete_cable(credentials.as_ref(), id).await {
-                            Ok(()) => navigate(&scope, plan_id, PlanView::ListOfCables),
+                            Ok(()) => {
+                                toast_success(&scope, "Kabel gelöscht");
+                                navigate(&scope, plan_id, PlanView::ListOfCables)
+                            }
                             Err(error) => {
                                 toast_error(&scope, "Kabel konnte nicht gelöscht werden", error)
                             }
@@ -782,7 +790,7 @@ fn update_cable(
             )
             .await
             {
-                Ok(Some(updated)) => Msg::Data(updated),
+                Ok(Some(updated)) => Msg::Saved(updated),
                 // A toast: an error page would drop the unsaved changes
                 Err(error) => Msg::SaveFailed(error),
                 Ok(None) => Msg::NotFound,

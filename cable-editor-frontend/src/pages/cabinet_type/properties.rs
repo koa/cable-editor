@@ -132,11 +132,14 @@ impl Component for CabinetTypeProperties {
             Msg::Done(result) => {
                 self.saving = false;
                 match result {
-                    Ok(Some(id)) => navigate(
-                        ctx.link(),
-                        ctx.props().plan_id,
-                        PlanView::CabinetType { id },
-                    ),
+                    Ok(Some(id)) => {
+                        toast_success(ctx.link(), "Schachttyp angelegt");
+                        navigate(
+                            ctx.link(),
+                            ctx.props().plan_id,
+                            PlanView::CabinetType { id },
+                        )
+                    }
                     Ok(None) => {
                         toast_success(ctx.link(), "Schachttyp gespeichert");
                         Self::fetch(ctx);
@@ -155,7 +158,10 @@ impl Component for CabinetTypeProperties {
                     let plan_id = ctx.props().plan_id;
                     spawn_local(async move {
                         match delete_schacht_typ(credentials.as_ref(), id).await {
-                            Ok(()) => navigate(&scope, plan_id, PlanView::ListOfCabinetTypes),
+                            Ok(()) => {
+                                toast_success(&scope, "Schachttyp gelöscht");
+                                navigate(&scope, plan_id, PlanView::ListOfCabinetTypes)
+                            }
                             Err(error) => toast_error(
                                 &scope,
                                 "Schachttyp konnte nicht gelöscht werden",

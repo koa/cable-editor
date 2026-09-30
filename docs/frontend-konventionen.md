@@ -1,6 +1,6 @@
 # Konzept: Einheitliche Bedienung im Frontend
 
-Stand: 30.09.2026 – offene Fragen entschieden; das Prüfgerüst steht, die Fehlerbehandlung (Schritt 1) und die Beschriftungen (Schritt 2) sind umgesetzt, die übrigen Schritte unter „Umsetzung“ folgen.
+Stand: 30.09.2026 – offene Fragen entschieden; das Prüfgerüst steht, die Fehlerbehandlung (Schritt 1), die Beschriftungen (Schritt 2) und die Rückmeldung (Schritt 3) sind umgesetzt, die übrigen Schritte unter „Umsetzung“ folgen.
 
 Diese Regeln gelten für jede neue oder geänderte Seite. Sie stammen aus einer Durchsicht des
 ganzen Frontends; wo der Code noch abweicht, steht es unter „Umsetzung“. Wie Fehler entstehen
@@ -168,8 +168,7 @@ Was sich nicht automatisch prüfen lässt, geht der Reviewer bei jeder Änderung
 
 ## Umsetzung
 
-Schrittweise, je ein Commit, jeder vor dem Commit durchgesehen (0, das Prüfgerüst, und 1, die
-Fehlerbehandlung, sind erledigt und werden geprüft):
+Schrittweise, je ein Commit, jeder vor dem Commit durchgesehen (0 bis 3 sind erledigt und werden geprüft):
 
 1. (erledigt) Fehler als `FrontendError`: Alerts mit `to_string()`, Debug-Ausgaben, eigene
    „nicht gefunden“-Texte, `expect` im Browserzustand, Fehler der Editoren als Toast.
@@ -180,8 +179,12 @@ Fehlerbehandlung, sind erledigt und werden geprüft):
    patternfly-yew kennt kein `title`; `PopupMenu` setzt es aus seinem `aria_label`),
    Bestätigungsdialog (`confirm_delete(scope, Art, Name, …)`, Titel „<Art> löschen?“).
    „Seite drucken“ ist `components/print_page.rs`.
-3. Rückmeldung nach Abschnitt 5: Toasts in den Editoren, beim Löschen und beim Anlegen einer
-   Planung; „Speichern“ nur aktiv bei Änderungen.
+3. (erledigt) Rückmeldung nach Abschnitt 5: Toasts in den Editoren, beim Löschen und beim Anlegen
+   einer Planung oder eines Kabels; „Speichern“ und „Anlegen“ nur aktiv bei Änderungen. Ein
+   Dialog im Backdrop kennt den Toaster nicht (der `BackdropViewer` liegt ausserhalb des
+   `ToastViewer`): er meldet Erfolg und Fehler der Seite, die ihn geöffnet hat, und die zeigt den
+   Toast (`NewPlanDialog`, `AddCable`). Beim Löschen kommt der Toast vor dem Wechsel auf die
+   Liste.
 4. Links für Schachttyp, Eigentümer und Plan; `PlanLink` statt `Link<AppRoute>`.
 5. Bereichsmenü gruppieren; „Planung“ statt „Plan“ in der Oberfläche; das Kabel auf eine Seite für
    Ansehen, Anlegen und Bearbeiten (`NewCable` mit `IdOrNew`, kein Dialog).

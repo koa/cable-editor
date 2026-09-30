@@ -6,7 +6,7 @@ use crate::{
         IdOrNew, PortType,
         edit_ports::{FetchedPanelWithPorts, FlatPortInput, NetboxDevicePort, update_panel_ports},
     },
-    util::{get_credentials, toast_error},
+    util::{get_credentials, toast_error, toast_success},
 };
 use patternfly_yew::prelude::{
     ActionGroup, Button, ButtonVariant, FormSelect, FormSelectOption, Icon, Spinner, TextInput,
@@ -39,6 +39,7 @@ pub enum Msg {
     UpdateType(usize, PortType),
     MarkDeleted(usize),
     Save,
+    Saved,
     Error(FrontendError),
     /// Saving failed: the input stays, the error is a toast
     SaveFailed(FrontendError),
@@ -58,6 +59,7 @@ pub struct PortEditorProps {
 
 pub struct PortEditor {
     ports: Vec<EditablePort>,
+    stored: Vec<EditablePort>,
     loading: bool,
     error: Option<FrontendError>,
     panel_name: Option<Box<str>>,
@@ -83,6 +85,7 @@ impl Component for PortEditor {
     fn create(_ctx: &Context<Self>) -> Self {
         Self {
             ports: Vec::new(),
+            stored: Vec::new(),
             loading: true,
             error: None,
             panel_name: None,
@@ -138,6 +141,7 @@ impl Component for PortEditor {
                 panel_name,
                 netbox_device_id,
             } => {
+                self.stored.clone_from(&ports);
                 self.ports = ports;
                 self.panel_name = panel_name;
                 self.netbox_device_id = netbox_device_id;
@@ -291,9 +295,14 @@ impl Component for PortEditor {
                     scope.send_message(
                         update_panel_ports(credentials.as_ref(), panel_id, changes, deletes)
                             .await
-                            .map_or_else(Msg::SaveFailed, |_| Msg::FetchPorts),
+                            .map_or_else(Msg::SaveFailed, |_| Msg::Saved),
                     );
                 });
+                true
+            }
+            Msg::Saved => {
+                toast_success(ctx.link(), "Ports gespeichert");
+                ctx.link().send_message(Msg::FetchPorts);
                 true
             }
             Msg::SaveFailed(error) => {
@@ -412,7 +421,7 @@ impl PortEditor {
                         {error}
                         <ActionGroup>
                             <Button label="Port hinzufügen" variant={ButtonVariant::Secondary} onclick={ctx.link().callback(|_| Msg::AddPort)} />
-                            <Button label="Speichern" variant={ButtonVariant::Primary} onclick={ctx.link().callback(|_| Msg::Save)} />
+                            <Button label="Speichern" variant={ButtonVariant::Primary} onclick={ctx.link().callback(|_| Msg::Save)} disabled={self.ports == self.stored} />
                         </ActionGroup>
                         <table class="pf-v6-c-table pf-m-grid-md pf-m-compact" role="grid">
                             <thead>

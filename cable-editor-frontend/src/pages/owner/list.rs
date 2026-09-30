@@ -309,13 +309,14 @@ impl ListOfOwners {
         let Some(backdrop) = get_backdrop(ctx.link()) else {
             return;
         };
+        let is_new = owner_id.is_none();
         let onsave = ctx.link().callback(move |input| Msg::Save(owner_id, input));
         let oncancel = {
             let backdrop = backdrop.clone();
             Callback::from(move |()| backdrop.close())
         };
         backdrop.open(Backdrop::new(html! {
-            <OwnerDialog {title} {owner} {onsave} {oncancel}/>
+            <OwnerDialog {title} {is_new} {owner} {onsave} {oncancel}/>
         }));
     }
 }
@@ -323,6 +324,8 @@ impl ListOfOwners {
 #[derive(Properties, PartialEq)]
 pub struct OwnerDialogProps {
     pub title: &'static str,
+    /// Labels the button "Anlegen" instead of "Speichern"
+    pub is_new: bool,
     /// The stored values, empty for a new owner
     pub owner: OwnerInput,
     pub onsave: Callback<OwnerInput>,
@@ -344,6 +347,28 @@ pub enum DialogMsg {
     LkName(String),
     NotReleased(bool),
     Save,
+}
+
+impl OwnerDialog {
+    fn input(&self) -> OwnerInput {
+        let optional = |value: &str| {
+            let value = value.trim();
+            (!value.is_empty()).then(|| value.to_string())
+        };
+        OwnerInput {
+            name: self.name.trim().to_string(),
+            lk_name: if self.not_released {
+                Some(NAME_NOT_RELEASED.to_string())
+            } else {
+                optional(&self.lk_name)
+            },
+        }
+    }
+
+    fn can_save(&self, ctx: &Context<Self>) -> bool {
+        let input = self.input();
+        !input.name.is_empty() && input != ctx.props().owner
+    }
 }
 
 impl Component for OwnerDialog {
@@ -370,18 +395,9 @@ impl Component for OwnerDialog {
             DialogMsg::LkName(lk_name) => self.lk_name = lk_name,
             DialogMsg::NotReleased(not_released) => self.not_released = not_released,
             DialogMsg::Save => {
-                let optional = |value: &str| {
-                    let value = value.trim();
-                    (!value.is_empty()).then(|| value.to_string())
-                };
-                ctx.props().onsave.emit(OwnerInput {
-                    name: self.name.trim().to_string(),
-                    lk_name: if self.not_released {
-                        Some(NAME_NOT_RELEASED.to_string())
-                    } else {
-                        optional(&self.lk_name)
-                    },
-                });
+                if self.can_save(ctx) {
+                    ctx.props().onsave.emit(self.input());
+                }
                 return false;
             }
         }
@@ -430,7 +446,7 @@ impl Component for OwnerDialog {
                             />
                         </FormGroup>
                         <ActionGroup>
-                            <Button label="Speichern" variant={ButtonVariant::Primary} r#type={ButtonType::Submit}/>
+                            <Button label={if ctx.props().is_new { "Anlegen" } else { "Speichern" }} variant={ButtonVariant::Primary} r#type={ButtonType::Submit} disabled={!self.can_save(ctx)}/>
                             <Button label="Abbrechen" variant={ButtonVariant::Link} onclick={oncancel}/>
                         </ActionGroup>
                     </Form>

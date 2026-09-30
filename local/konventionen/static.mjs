@@ -64,6 +64,31 @@ const FORBIDDEN_LABELS = [
 ];
 const TOAST_TITLE = /konnte(n)? nicht (gespeichert|angelegt|gelöscht|geladen|angestossen|geändert|abgeschlossen|aktiviert) werden/;
 
+// Erfolgs-Toast: "Schacht gespeichert", "In Netbox aktiviert", "Sync angestossen", "Standard-Eigentümer gesetzt"
+const SUCCESS_TITLE = /^[\p{L}\d -]+ (gespeichert|angelegt|gelöscht|geändert|angestossen|abgeschlossen|aktiviert|umbenannt|gesetzt|geliefert|zurückgenommen|bestätigt)$/u;
+
+// Functions of graphql/ that send a mutation: what pages and components call to change stored
+// data, as the regular expression of their call (`Type::name(`, `.name(` for methods, `name(`)
+const MUTATIONS = files
+  .filter((f) => f.rel.startsWith('graphql'))
+  .flatMap((f) => {
+    const calls = [];
+    let type;
+    let current;
+    for (const line of f.lines) {
+      const impl = line.match(/^impl(?:<[^>]*>)? (?:\w+ for )?(\w+)/);
+      if (impl) type = impl[1];
+      else if (/^\S/.test(line) && !/^impl/.test(line) && !/^[}\/#]/.test(line)) type = undefined;
+      const fn = line.match(/\bfn (\w+)(?:<[^>]*>)?\(([^)]*)/);
+      if (fn) current = { name: fn[1], type, self: /\bself\b/.test(fn[2]) };
+      if (/\bmutate::</.test(line) && current) {
+        const { name, type, self } = current;
+        calls.push(type ? (self ? new RegExp(`\\.${name}\\(`) : new RegExp(`\\b${type}::${name}\\(`)) : new RegExp(`(?<![.\\w:])${name}\\(`));
+      }
+    }
+    return calls;
+  });
+
 const rules = [
   {
     id: 'verboten-beschriftung',
@@ -117,6 +142,35 @@ const rules = [
     id: 'print-nur-ein-ort',
     message: 'Seite drucken (window().print()) nur im Knopf „Seite drucken“ (components/print_page.rs)',
     find: (f) => (f.rel === path.join('components', 'print_page.rs') ? [] : grep(f, /\.print\(\)/).map((line) => ({ line }))),
+  },
+  {
+    id: 'aenderung-ohne-toast',
+    message: 'Wer eine Änderung an gespeicherten Daten abschickt, bestätigt sie mit util::toast_success (Abschnitt 5)',
+    find: (f) => {
+      if (f.rel.startsWith('graphql') || /toast_success/.test(f.text)) return [];
+      return f.lines.flatMap((line, i) => {
+        if (isComment(line) || /\bfn \w+/.test(line)) return [];
+        const call = MUTATIONS.find((pattern) => pattern.test(line));
+        return call ? [{ line: i, note: 'toast_success fehlt in dieser Datei' }] : [];
+      });
+    },
+  },
+  {
+    id: 'toast-titel-erfolg',
+    message: 'Titel eines Erfolgs-Toasts: „<Objekt> <Vergangenheit>“, z. B. „Schacht gespeichert“',
+    find: (f) =>
+      f.lines.flatMap((line, i) => {
+        const title = line.match(/toast_success\([^"]*"([^"]*)"/)?.[1];
+        return title !== undefined && !SUCCESS_TITLE.test(title) ? [{ line: i, note: `„${title}“` }] : [];
+      }),
+  },
+  {
+    id: 'speichern-ohne-aenderung',
+    message: '„Speichern“ und „Anlegen“ brauchen disabled: aktiv nur mit gültigen Änderungen (Abschnitt 5)',
+    find: (f) =>
+      buttons(f)
+        .filter((b) => /\blabel=(\{[^}]*)?"(Speichern|Anlegen)"/.test(b.tag) && !/(\bdisabled=|\{disabled\})/.test(b.tag))
+        .map((b) => ({ line: b.line })),
   },
   {
     id: 'roher-link',

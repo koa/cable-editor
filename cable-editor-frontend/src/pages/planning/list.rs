@@ -4,15 +4,16 @@ use crate::{
     error::FrontendError,
     graphql::authenticated::{current_user::Role, list_plans::PlanListEntry},
     pages::router::{AppRoute, PlanView},
-    util::{get_backdrop, get_credentials, get_role, toast_error},
+    util::{get_backdrop, get_credentials, get_role, toast_error, toast_success},
 };
 use patternfly_yew::prelude::{
-    ActionGroup, Backdrop, Bullseye, Button, ButtonVariant, Cell, CellContext, Color,
+    ActionGroup, Backdrop, Bullseye, Button, ButtonType, ButtonVariant, Cell, CellContext, Color,
     ExpansionState, Form, FormGroup, Label, LabelIcon, MemoizedTableModel, Modal, PopoverBody,
     Spinner, Table, TableColumn, TableEntryRenderer, TableGridMode, TableHeader, TableMode,
     TextInput,
 };
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use web_sys::SubmitEvent;
 use yew::{
     Callback, Component, Context, Html, Properties, html, html::IntoPropValue, html_nested,
     platform::spawn_local,
@@ -110,67 +111,32 @@ impl ListOfPlannings {
             let create_button = get_backdrop(ctx.link())
                 .filter(|_| get_role(ctx.link()) >= Role::Planner)
                 .map(|bd| {
-                    let scope=ctx.link().clone();
-                    let onclick = Callback::from(move |_|{
-                        let scope=scope.clone();
-                        let onclose = {
+                    let scope = ctx.link().clone();
+                    let onclick = Callback::from(move |_| {
+                        let oncancel = {
                             let bd = bd.clone();
-                            let scope=scope.clone();
-                            Callback::from(move |_| {
+                            Callback::from(move |()| bd.close())
+                        };
+                        let oncreated = {
+                            let bd = bd.clone();
+                            let scope = scope.clone();
+                            Callback::from(move |()| {
+                                toast_success(&scope, "Planung angelegt");
                                 bd.close();
                                 scope.send_message(Msg::Refresh);
                             })
                         };
-
-                        let project_name=Rc::new(RefCell::new(String::default()));
-
-                        let onchange={
-                            let project_name=project_name.clone();
-                            Callback::from(move |value|{
-                            *project_name.borrow_mut()=value;
-                        })};
-                        let onclick= {
-                            let bd = bd.clone();
-                            let scope=scope.clone();
-                            Callback::from(move |_| {
-                                let name = project_name.borrow();
-                                if !name.is_empty() {
-                                    let credentials = get_credentials(&scope);
-                                    let name = name.clone();
-                                    let bd=bd.clone();
-                                    let scope=scope.clone();
-                                    spawn_local(async move{
-                                        match PlanListEntry::create(credentials.as_ref(), name).await {
-                                            Ok(()) => {
-                                                bd.close();
-                                                scope.send_message(Msg::Refresh);
-                                            }
-                                            // A toast: the dialog stays open with the entered name
-                                            Err(error) => {
-                                                toast_error(&scope, "Planung konnte nicht angelegt werden", error)
-                                            }
-                                        }
-                                    });
-                                }
+                        // The dialog is rendered by the backdrop viewer, whose context has no toaster
+                        let onfailed = {
+                            let scope = scope.clone();
+                            Callback::from(move |error: FrontendError| {
+                                toast_error(&scope, "Planung konnte nicht angelegt werden", error);
                             })
                         };
                         bd.open(Backdrop::new(html! {
-                            <Bullseye>
-                                <Modal title="Neue Planung" onclose={onclose}>
-                                    <Form>
-                                        <FormGroup
-                                            label="Name"
-                                            required=true
-                                            label_icon={LabelIcon::Help(html_nested!(<PopoverBody>{ "Name des Vorhabens" } </PopoverBody>))}>
-                                            <TextInput placeholder="Vorhaben" required=true {onchange}/>
-                                        </FormGroup>
-                                        <ActionGroup>
-                                            <Button label="Anlegen" variant={ButtonVariant::Primary} {onclick} />
-                                        </ActionGroup>
-                                    </Form>
-                                </Modal>
-                            </Bullseye>
-                    }))});
+                            <NewPlanDialog {oncancel} {oncreated} {onfailed}/>
+                        }));
+                    });
                     html!(<Button label="Neue Planung" variant={ButtonVariant::Primary} {onclick}/>)
                 });
             html! {
@@ -211,6 +177,107 @@ impl TableEntryRenderer<Columns> for PlanListEntry {
                     </>
                 })
             }
+        }
+    }
+}
+
+#[derive(Properties, PartialEq)]
+struct NewPlanDialogProps {
+    oncancel: Callback<()>,
+    oncreated: Callback<()>,
+    onfailed: Callback<FrontendError>,
+}
+
+/// Asks for the name of a new plan and creates it; stays open with the name if that fails.
+struct NewPlanDialog {
+    name: String,
+    saving: bool,
+}
+
+enum NewPlanMsg {
+    Name(String),
+    Create,
+    Created,
+    Failed(FrontendError),
+}
+
+impl NewPlanDialog {
+    fn can_create(&self) -> bool {
+        !self.saving && !self.name.trim().is_empty()
+    }
+}
+
+impl Component for NewPlanDialog {
+    type Message = NewPlanMsg;
+    type Properties = NewPlanDialogProps;
+
+    fn create(_ctx: &Context<Self>) -> Self {
+        Self {
+            name: String::new(),
+            saving: false,
+        }
+    }
+
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+        match msg {
+            NewPlanMsg::Name(name) => self.name = name,
+            NewPlanMsg::Create => {
+                if self.can_create() {
+                    self.saving = true;
+                    let scope = ctx.link().clone();
+                    let credentials = get_credentials(&scope);
+                    let name = self.name.trim().to_string();
+                    spawn_local(async move {
+                        scope.send_message(
+                            PlanListEntry::create(credentials.as_ref(), name)
+                                .await
+                                .map_or_else(NewPlanMsg::Failed, |()| NewPlanMsg::Created),
+                        );
+                    });
+                }
+            }
+            NewPlanMsg::Created => {
+                ctx.props().oncreated.emit(());
+                return false;
+            }
+            NewPlanMsg::Failed(error) => {
+                self.saving = false;
+                ctx.props().onfailed.emit(error);
+            }
+        }
+        true
+    }
+
+    fn view(&self, ctx: &Context<Self>) -> Html {
+        let link = ctx.link();
+        let onsubmit = link.callback(|event: SubmitEvent| {
+            event.prevent_default();
+            NewPlanMsg::Create
+        });
+        let oncancel = ctx.props().oncancel.reform(|_| ());
+        html! {
+            <Bullseye>
+                <Modal title="Neue Planung" onclose={ctx.props().oncancel.reform(|_| ())}>
+                    <Form {onsubmit}>
+                        <FormGroup
+                            label="Name"
+                            required=true
+                            label_icon={LabelIcon::Help(html_nested!(<PopoverBody>{ "Name des Vorhabens" } </PopoverBody>))}>
+                            <TextInput
+                                placeholder="Vorhaben"
+                                required=true
+                                autofocus=true
+                                value={self.name.clone()}
+                                onchange={link.callback(NewPlanMsg::Name)}
+                            />
+                        </FormGroup>
+                        <ActionGroup>
+                            <Button label="Anlegen" variant={ButtonVariant::Primary} r#type={ButtonType::Submit} disabled={!self.can_create()}/>
+                            <Button label="Abbrechen" variant={ButtonVariant::Link} onclick={oncancel}/>
+                        </ActionGroup>
+                    </Form>
+                </Modal>
+            </Bullseye>
         }
     }
 }

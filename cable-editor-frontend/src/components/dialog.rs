@@ -178,7 +178,7 @@ macro_rules! create_simple_dialog {
                         )*
 
                         <ActionGroup>
-                            <Button label="Speichern" variant={ButtonVariant::Primary} r#type={ButtonType::Submit}/>
+                            <Button label="Speichern" variant={ButtonVariant::Primary} r#type={ButtonType::Submit} disabled={*state == $struct_name::default()}/>
                             <Button label="Abbrechen" variant={ButtonVariant::Link} onclick={on_cancel} />
                         </ActionGroup>
                     </Form>
