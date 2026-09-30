@@ -37,10 +37,17 @@ use prometheus::{HistogramVec, histogram_opts};
 use reqwest::Client;
 use rust_embed::RustEmbed;
 use serde::Deserialize;
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap,
+    hash::{DefaultHasher, Hash, Hasher},
+    sync::Arc,
+    time::Duration,
+};
 use thiserror::Error;
 use tokio::sync::{Mutex, Notify};
 use tracing_actix_web::TracingLogger;
+
+mod instance;
 
 #[derive(RustEmbed)]
 #[folder = "../cable-editor-frontend/dist"]
@@ -52,6 +59,9 @@ async fn static_handler(req: HttpRequest) -> impl Responder {
         "" => "index.html",
         path => path,
     };
+    let instance = CONFIG.instance_name();
+    let icon = instance.and_then(|_| instance::icon_path(path));
+    let path = icon.as_deref().unwrap_or(path);
     // SPA fallback: a path without a file gets index.html, the Yew router takes over
     let Some((path, content)) = Assets::get(path)
         .map(|content| (path, content))
@@ -59,7 +69,16 @@ async fn static_handler(req: HttpRequest) -> impl Responder {
     else {
         return HttpResponse::NotFound().body("404 Not Found");
     };
-    let hash = content.metadata.sha256_hash();
+    let adapted = instance.and_then(|instance| instance::adapt(path, &content.data, instance));
+    // A file changed for the instance is a new one for the browser, even if the file is the same
+    let hash: Vec<u8> = match &adapted {
+        Some(data) => {
+            let mut hasher = DefaultHasher::new();
+            data.hash(&mut hasher);
+            hasher.finish().to_be_bytes().to_vec()
+        }
+        None => content.metadata.sha256_hash().to_vec(),
+    };
     let etag = EntityTag::new_strong(hash.iter().map(|b| format!("{b:02x}")).collect());
     // Hashed files never change, others are revalidated and answered with 304 if unchanged
     let cache_control = CacheControl(if is_hashed(path) {
@@ -86,7 +105,10 @@ async fn static_handler(req: HttpRequest) -> impl Responder {
         .content_type(from_path(path).first_or_octet_stream().as_ref())
         .insert_header(ETag(etag))
         .insert_header(cache_control)
-        .body(content.data.into_owned())
+        .body(match adapted {
+            Some(data) => data.into_vec(),
+            None => content.data.into_owned(),
+        })
 }
 
 /// Trunk output with a content hash in its name, e.g. `app-525c874bfe2010a5_bg.wasm`.
@@ -294,6 +316,9 @@ async fn main() -> Result<(), BackendError> {
 
     if CONFIG.planner_groups().next().is_none() && CONFIG.admin_groups().next().is_none() {
         warn!("Neither planner_groups nor admin_groups configured, nobody can change anything");
+    }
+    if let Some(name) = CONFIG.instance_name() {
+        info!("Instance {name:?}: the app is installed with another name and icon");
     }
     if LKMAP_CONFIG.is_none() {
         info!("No section lkmap configured, no delivery to the Leitungskataster");

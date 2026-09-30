@@ -72,6 +72,10 @@ spec:
             # Struct-Feld: server_bind_address
             - name: APP__OAUTH__SERVER_BIND_ADDRESS
               value: {{ .Values.config.serverBindAddress | quote }}
+            {{- with .Values.config.instanceName }}
+            - name: APP__OAUTH__INSTANCE_NAME
+              value: {{ . | quote }}
+            {{- end }}
             - name: APP__NETBOX__URL
               value: {{ .Values.config.netboxUrl | quote }}
             - name: APP__NETBOX__TOKEN

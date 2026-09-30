@@ -11,6 +11,7 @@ pub struct Settings {
     auth_scopes: Option<Box<str>>,
     planner_groups: Option<Box<str>>,
     admin_groups: Option<Box<str>>,
+    instance_name: Option<Box<str>>,
 
     server_port: Option<u16>,
     server_mgmt_port: Option<u16>,
@@ -49,6 +50,14 @@ impl Settings {
             .as_deref()
             .unwrap_or_default()
             .split_whitespace()
+    }
+    /// Name of this installation, e.g. "Dev": set on every installation but the productive one,
+    /// so it can be told apart on a phone (name and icon of the installed app).
+    pub fn instance_name(&self) -> Option<&str> {
+        self.instance_name
+            .as_deref()
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
     }
     pub fn server_port(&self) -> u16 {
         self.server_port.unwrap_or(8080)

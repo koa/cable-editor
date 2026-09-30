@@ -22,3 +22,4 @@ reqwest = { version = "0.13.4", features = ["rustls", "json"] }
 cached = { version = "2", features = ["async", "cached_proc_macro"] }
 tokio = "1"
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1"

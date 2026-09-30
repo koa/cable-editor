@@ -51,6 +51,9 @@ config:
   plannerGroups: ""
   # ... and whose members may also implement plans, choose the plan Netbox shows and delete cables
   adminGroups: ""
+  # Name of an installation other than the productive one, e.g. "Dev": the installed app on a
+  # phone then has another name, colour and an orange icon with "DEV" (leave empty for prod)
+  instanceName: ""
   serverBindAddress: "0.0.0.0"
   serverPort: "8080"
   serverMgmtPort: "9090"
