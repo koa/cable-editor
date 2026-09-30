@@ -216,11 +216,11 @@ impl PlanView {
 
         // The areas of the plan, each leading to its start page
         let areas: [(&str, PlanView); 9] = [
-            ("Ändern", PlanView::Edit),
+            ("Plan bearbeiten", PlanView::Edit),
+            ("Karte", PlanView::Map),
             ("Schacht", PlanView::ListOfCabinets),
             ("Kabel", PlanView::ListOfCables),
             ("Trasse", PlanView::ListOfDucts),
-            ("Karte", PlanView::Map),
             ("Eigentümer", PlanView::ListOfOwners),
             ("Schachttyp", PlanView::ListOfCabinetTypes),
             ("Leitungskataster", PlanView::Leitungskataster),
