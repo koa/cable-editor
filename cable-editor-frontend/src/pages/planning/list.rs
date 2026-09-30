@@ -147,7 +147,7 @@ impl ListOfPlannings {
                                             }
                                             // A toast: the dialog stays open with the entered name
                                             Err(error) => {
-                                                toast_error(&scope, "Planung konnte nicht erstellt werden", error)
+                                                toast_error(&scope, "Planung konnte nicht angelegt werden", error)
                                             }
                                         }
                                     });

@@ -1,3 +1,6 @@
+// A build script reports a failure by stopping the build
+#![allow(clippy::expect_used)]
+
 use anyhow::Result;
 use cable_editor_backend::graphql::{
     anonymous::create_anonymous_schema, authenticated::create_authenticated_schema,

@@ -12,12 +12,12 @@ use crate::{
     },
     icons::{IconLink, IconUnlink},
     pages::router::AppRoute,
-    util::{get_backdrop, get_credentials, get_role, toast_success},
+    util::{get_backdrop, get_credentials, get_role, toast_error, toast_success},
 };
 use cable_editor_common::ObjectKind;
 use patternfly_yew::prelude::{
-    ActionGroup, Alert, AlertType, Backdrop, Bullseye, Button, ButtonVariant, Cell, CellContext,
-    Color, ExpansionState, Form, FormGroup, Label, Level, MemoizedTableModel, Modal, ModalVariant,
+    ActionGroup, Backdrop, Bullseye, Button, ButtonVariant, Cell, CellContext, Color,
+    ExpansionState, Form, FormGroup, Label, Level, MemoizedTableModel, Modal, ModalVariant,
     Spinner, Table, TableColumn, TableEntryRenderer, TableGridMode, TableHeader, TableMode,
     TextInput, Title,
 };
@@ -116,6 +116,24 @@ pub struct EditPlan {
     table_state: Rc<RefCell<HashMap<usize, ExpansionState<UsageColumn>>>>,
 }
 
+/// What a plan's page does with a request, to word the toast when it fails
+#[derive(Clone, Copy)]
+pub enum Action {
+    SaveName,
+    Implement,
+    ActivateInNetbox,
+}
+
+impl Action {
+    fn failed_title(self) -> &'static str {
+        match self {
+            Action::SaveName => "Planung konnte nicht gespeichert werden",
+            Action::Implement => "Planung konnte nicht abgeschlossen werden",
+            Action::ActivateInNetbox => "Planung konnte nicht aktiviert werden",
+        }
+    }
+}
+
 pub enum Msg {
     FetchData,
     DataFetched(Option<PlanDetails>),
@@ -127,6 +145,8 @@ pub enum Msg {
     /// The plan is merged into the baseline and deleted
     Implemented,
     Error(FrontendError),
+    /// An action failed: the page and the input stay, the error is a toast titled by the action
+    ActionFailed(Action, FrontendError),
     AskNetboxActive,
     SetNetboxActive,
     NetboxActivated(PlanDetails),
@@ -192,7 +212,10 @@ impl Component for EditPlan {
                     scope.send_message(
                         PlanDetails::update_name(credentials.as_ref(), plan_id, name)
                             .await
-                            .map_or_else(Msg::Error, Msg::Saved),
+                            .map_or_else(
+                                |error| Msg::ActionFailed(Action::SaveName, error),
+                                Msg::Saved,
+                            ),
                     );
                 });
                 true
@@ -240,7 +263,10 @@ impl Component for EditPlan {
                     scope.send_message(
                         PlanDetails::implement(credentials.as_ref(), plan_id)
                             .await
-                            .map_or_else(Msg::Error, |_| Msg::Implemented),
+                            .map_or_else(
+                                |error| Msg::ActionFailed(Action::Implement, error),
+                                |_| Msg::Implemented,
+                            ),
                     );
                 });
                 true
@@ -268,6 +294,11 @@ impl Component for EditPlan {
                 self.error = Some(error);
                 self.loading = false;
                 self.saving = false;
+                true
+            }
+            Msg::ActionFailed(action, error) => {
+                self.saving = false;
+                toast_error(ctx.link(), action.failed_title(), error);
                 true
             }
             Msg::AskNetboxActive => {
@@ -311,7 +342,10 @@ impl Component for EditPlan {
                     scope.send_message(
                         PlanDetails::set_netbox_active(credentials.as_ref(), plan_id)
                             .await
-                            .map_or_else(Msg::Error, Msg::NetboxActivated),
+                            .map_or_else(
+                                |error| Msg::ActionFailed(Action::ActivateInNetbox, error),
+                                Msg::NetboxActivated,
+                            ),
                     );
                 });
                 true
@@ -345,7 +379,11 @@ impl EditPlan {
         }
 
         let Some(details) = &self.details else {
-            return html!(<Alert title="Nicht gefunden" r#type={AlertType::Danger} inline=true />);
+            return match &self.error {
+                Some(error) => error.into_prop_value(),
+                None => (&FrontendError::not_found(ObjectKind::Plan, ctx.props().plan_id))
+                    .into_prop_value(),
+            };
         };
 
         let is_open = !details.is_baseline;
@@ -419,7 +457,7 @@ impl EditPlan {
                 <div class="pf-v6-c-panel__main">
                     <div class="pf-v6-c-panel__main-body">
                         if let Some(err) = &self.error {
-                            <Alert title={err.to_string()} r#type={AlertType::Danger} inline=true />
+                            { IntoPropValue::<Html>::into_prop_value(err) }
                         }
 
                         <Form>

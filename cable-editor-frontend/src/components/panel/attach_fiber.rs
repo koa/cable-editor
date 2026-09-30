@@ -11,7 +11,7 @@ use crate::{
         },
     },
     icons::IconLink,
-    util::get_credentials,
+    util::{get_credentials, toast_error},
 };
 use cable_editor_common::ObjectKind;
 use itertools::Itertools;
@@ -25,7 +25,10 @@ use std::{
     collections::{BTreeMap, HashMap, HashSet},
     rc::Rc,
 };
-use yew::{Component, Context, Html, Properties, html, html_nested, platform::spawn_local};
+use yew::{
+    Component, Context, Html, Properties, html, html::IntoPropValue, html_nested,
+    platform::spawn_local,
+};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 enum AttachColumn {
@@ -92,6 +95,8 @@ pub enum Msg {
     Save,
     Saved,
     Error(FrontendError),
+    /// Saving failed: the input stays, the error is a toast
+    SaveFailed(FrontendError),
 }
 
 impl Component for AttachFiber {
@@ -284,7 +289,7 @@ impl Component for AttachFiber {
                                 update
                                     .store(get_credentials(&scope).as_ref())
                                     .await
-                                    .map_or_else(Msg::Error, |_| Msg::Saved),
+                                    .map_or_else(Msg::SaveFailed, |_| Msg::Saved),
                             );
                         });
                     }
@@ -293,6 +298,15 @@ impl Component for AttachFiber {
             }
             Msg::Saved => {
                 ctx.link().send_message(Msg::FetchData);
+                true
+            }
+            Msg::SaveFailed(error) => {
+                self.loading = false;
+                toast_error(
+                    ctx.link(),
+                    "Verbindungen konnten nicht gespeichert werden",
+                    error,
+                );
                 true
             }
             Msg::Error(error) => {
@@ -332,7 +346,7 @@ impl AttachFiber {
                 <div class="pf-v6-c-panel__main">
                     <div class="pf-v6-c-panel__main-body">
                         if let Some(err) = &self.error {
-                            <Alert title={err.to_string()} r#type={AlertType::Danger} inline=true />
+                            { IntoPropValue::<Html>::into_prop_value(err) }
                         }
                         { for validation_errors.iter().map(|err| html! {
                             <Alert title={err.clone()} r#type={AlertType::Warning} inline=true />

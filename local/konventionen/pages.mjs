@@ -15,6 +15,7 @@ import { chromium, devices } from '../mock/node_modules/playwright/index.mjs';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ORIGIN = `http://localhost:${process.env.MOCK_PORT ?? 8099}`;
 const ROLE = process.env.MOCK_ROLE ?? 'ADMIN';
+const TOAST_TITLE = /konnte(n)? nicht (gespeichert|angelegt|gelöscht|geladen|angestossen|geändert|abgeschlossen|aktiviert) werden/;
 const NEW_ID = '00000000-0000-4000-8000-000000000001';
 
 // Every route of the app. `v` names the variants of the enums in pages/router.rs the path shows,
@@ -45,6 +46,29 @@ const ROUTES = [
   { v: ['PanelView::Edit'], path: '/plan/1/panel/22/edit', needs: 'PLANNER' },
   { v: ['PanelView::Attach'], path: '/plan/1/panel/22/attach', needs: 'PLANNER' },
   { v: ['PanelView::Loop'], path: '/plan/1/panel/25/loop', needs: 'PLANNER' },
+];
+// Objects that don't exist: the page shows "<Art> <Id> nicht gefunden" as an alert (Abschnitt 4)
+const NOT_FOUND = [
+  { path: '/plan/0/cabinet/99999/overview', text: /Schacht 99999 nicht gefunden/ },
+  { path: '/plan/0/cable/99999/edit', text: /Kabel 99999 nicht gefunden/ },
+  { path: '/plan/0/duct/99999/show', text: /Trasse 99999 nicht gefunden/ },
+  { path: '/plan/0/panel/99999/show', text: /Panel 99999 nicht gefunden/ },
+  { path: '/plan/99999/edit', text: /Plan(ung)? 99999 nicht gefunden/ },
+  { path: '/plan/0/cabinettype/99999', text: /Schachttyp 99999 nicht gefunden/, needs: 'ADMIN' },
+];
+
+// A change the server refuses (the mock fails every mutation, MOCK_FAIL): a toast titled
+// "<Objekt> konnte nicht … werden", the page stays where it is and keeps the input. `input`
+// picks the field to change (index among the text fields), `click` the button, `confirm` the
+// button of the dialog asking first.
+const FAILING_CHANGES = [
+  { path: '/plan/0/duct/711/properties', needs: 'PLANNER', input: 2, click: /^Speichern$/, title: /Trasse konnte nicht gespeichert werden/ },
+  { path: '/plan/0/cabinet/1/properties', needs: 'PLANNER', input: 0, click: /^Speichern$/, title: /Schacht konnte nicht gespeichert werden/ },
+  { path: '/plan/0/cabinet/1/properties', needs: 'ADMIN', click: /^Löschen$/, confirm: /^(Ja|Löschen)$/, title: /Schacht konnte nicht gelöscht werden/ },
+  { path: '/plan/1/edit', needs: 'PLANNER', input: 0, click: /^Umbenennen$/, title: /Plan(ung)? konnte nicht gespeichert werden/ },
+  { path: '/plan/0/cabinettype/1', needs: 'ADMIN', input: 0, click: /^Speichern$/, title: /Schachttyp konnte nicht gespeichert werden/ },
+  { path: '/plan/1/panel/22/edit', needs: 'PLANNER', input: 0, click: /Speichern$/, title: /(Ports|Panel) konnte(n)? nicht gespeichert werden/ },
+  { path: '/plan/0/netbox', needs: 'ADMIN', click: /^Jetzt synchronisieren$/, title: /konnte nicht angestossen werden/ },
 ];
 const RANK = { READER: 0, PLANNER: 1, ADMIN: 2 };
 const allowed = (route) => RANK[ROLE] >= RANK[route.needs ?? 'READER'];
@@ -162,6 +186,62 @@ async function checkRoute(browser, device, deviceName, route) {
   }
 }
 
+async function withPage(browser, fn) {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await context.newPage();
+  try {
+    await fn(page);
+  } catch (e) {
+    report('seite-nicht-pruefbar', undefined, page.url(), String(e).split('\n')[0]);
+  } finally {
+    await context.close();
+  }
+}
+
+async function checkNotFound(browser, entry) {
+  const where = `${entry.path} (Desktop, ${ROLE})`;
+  if (RANK[ROLE] < RANK[entry.needs ?? 'READER']) return;
+  await withPage(browser, async (page) => {
+    await page.goto(ORIGIN + entry.path);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(800);
+    const alerts = await page.locator('main .pf-v6-c-alert.pf-m-danger').allInnerTexts();
+    if (!alerts.some((a) => entry.text.test(a))) {
+      report('nicht-gefunden', undefined, where, `sollte ${entry.text} als Alert zeigen, zeigt ${JSON.stringify(alerts)}`);
+    }
+  });
+}
+
+async function checkFailingChange(browser, entry) {
+  const where = `${entry.path} „${entry.click.source}“ (Desktop, ${ROLE})`;
+  if (RANK[ROLE] < RANK[entry.needs ?? 'READER']) return;
+  await withPage(browser, async (page) => {
+    await page.goto(ORIGIN + entry.path);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(800);
+    let typed;
+    if (entry.input !== undefined) {
+      const field = page.locator('main input[type=text]:visible').nth(entry.input);
+      typed = `${await field.inputValue()} x`;
+      await field.fill(typed);
+    }
+    await page.locator('main button:visible', { hasText: entry.click }).first().click();
+    if (entry.confirm) {
+      await page.locator('.pf-v6-c-modal-box button', { hasText: entry.confirm }).first().click();
+    }
+    await page.waitForTimeout(800);
+    const toasts = await page.locator('.pf-v6-c-alert-group .pf-v6-c-alert.pf-m-danger').allInnerTexts();
+    if (!toasts.some((t) => entry.title.test(t) && TOAST_TITLE.test(t))) {
+      report('fehler-als-toast', undefined, where, `sollte einen Toast ${entry.title} zeigen, zeigt ${JSON.stringify(toasts)}`);
+    }
+    if (new URL(page.url()).pathname !== entry.path) report('fehler-als-toast', undefined, where, `hat die Seite verlassen: ${page.url()}`);
+    if (typed !== undefined) {
+      const kept = await page.locator('main input[type=text]:visible').nth(entry.input).inputValue();
+      if (kept !== typed) report('fehler-als-toast', undefined, where, `Eingabe „${typed}“ ging verloren (${JSON.stringify(kept)})`);
+    }
+  });
+}
+
 // ---------------------------------------------------------------- run
 const browser = await chromium.launch();
 try {
@@ -169,6 +249,13 @@ try {
   if (!check?.ok) throw new Error(`Mock unter ${ORIGIN} nicht erreichbar (local/konventionen/run.sh startet ihn)`);
   for (const [deviceName, device] of [['Handy', devices['Pixel 7']], ['Desktop', { viewport: { width: 1440, height: 900 } }]]) {
     for (const route of ROUTES) await checkRoute(browser, device, deviceName, route);
+  }
+  for (const entry of NOT_FOUND) await checkNotFound(browser, entry);
+  await fetch(`${ORIGIN}/mock/fail?mutations=*`);
+  try {
+    for (const entry of FAILING_CHANGES) await checkFailingChange(browser, entry);
+  } finally {
+    await fetch(`${ORIGIN}/mock/fail?mutations=`);
   }
 } finally {
   await browser.close();

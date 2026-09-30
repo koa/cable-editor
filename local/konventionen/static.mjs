@@ -53,7 +53,7 @@ const FORBIDDEN_LABELS = [
   ['Loops Verbinden', 'Loops verbinden'],
   ['Ports ändern', 'Ports bearbeiten'],
 ];
-const TOAST_TITLE = /konnte(n)? nicht (gespeichert|angelegt|gelöscht|geladen|angestossen|geändert) werden/;
+const TOAST_TITLE = /konnte(n)? nicht (gespeichert|angelegt|gelöscht|geladen|angestossen|geändert|abgeschlossen|aktiviert) werden/;
 
 const rules = [
   {
@@ -72,7 +72,6 @@ const rules = [
   },
   {
     id: 'fehler-als-text',
-    step: 1,
     message: 'Fehler als FrontendError zeigen (Alert/Toast), nicht als to_string() oder {:?}',
     find: (f) =>
       grep(f, /Alert\b[^\n]*title=\{[^}]*(\.to_string\(\)|:\?)/)
@@ -81,14 +80,12 @@ const rules = [
   },
   {
     id: 'nicht-gefunden-eigener-text',
-    step: 1,
     message: '„nicht gefunden“ ist immer FrontendError::NotFound (error/messages.rs)',
     find: (f) => (f.rel === path.join('error', 'messages.rs') ? [] : grep(f, /"[^"]*nicht gefunden[^"]*"/i).map((line) => ({ line }))),
   },
   {
     id: 'toast-titel',
-    step: 1,
-    message: 'Titel eines Fehler-Toasts: „<Objekt> konnte nicht gespeichert|angelegt|gelöscht|geladen|angestossen|geändert werden“',
+    message: 'Titel eines Fehler-Toasts: „<Objekt> konnte nicht gespeichert|angelegt|gelöscht|geladen|angestossen|geändert|abgeschlossen|aktiviert werden“',
     find: (f) => {
       const hits = [];
       for (const match of f.text.matchAll(/toast_error\(([^;]*?)\)(?:;|,\s*\n|\s*\n\s*[}\)])/gs)) {

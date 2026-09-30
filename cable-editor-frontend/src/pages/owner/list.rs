@@ -192,7 +192,7 @@ impl Component for ListOfOwners {
                         Ok(()) => scope.send_message(Msg::Saved("Standard-Eigentümer gesetzt")),
                         Err(error) => toast_error(
                             &scope,
-                            "Standard-Eigentümer konnte nicht gesetzt werden",
+                            "Standard-Eigentümer konnte nicht geändert werden",
                             error,
                         ),
                     }

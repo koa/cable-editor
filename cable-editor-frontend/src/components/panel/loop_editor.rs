@@ -10,7 +10,7 @@ use crate::{
         },
     },
     icons::{IconFiberConnected, IconFiberCut, IconLink, IconUnlink},
-    util::get_credentials,
+    util::{get_credentials, toast_error},
 };
 use cable_editor_common::ObjectKind;
 
@@ -202,6 +202,8 @@ pub enum Msg {
     Save,
     Saved,
     Error(FrontendError),
+    /// Saving failed: the input stays, the error is a toast
+    SaveFailed(FrontendError),
     PrepareLoopStates,
     ResetFiber(i32, i32),
 }
@@ -423,7 +425,7 @@ impl Component for LoopPortEditor {
                                 update
                                     .store(get_credentials(&scope).as_ref())
                                     .await
-                                    .map_or_else(Msg::Error, |_| Msg::Saved),
+                                    .map_or_else(Msg::SaveFailed, |_| Msg::Saved),
                             );
                         });
                     }
@@ -432,6 +434,15 @@ impl Component for LoopPortEditor {
             }
             Msg::Saved => {
                 ctx.link().send_message(Msg::FetchData);
+                true
+            }
+            Msg::SaveFailed(error) => {
+                self.loading = false;
+                toast_error(
+                    ctx.link(),
+                    "Verbindungen konnten nicht gespeichert werden",
+                    error,
+                );
                 true
             }
             Msg::Error(error) => {
@@ -510,7 +521,7 @@ impl LoopPortEditor {
                 <div class="pf-v6-c-panel__main">
                     <div class="pf-v6-c-panel__main-body">
                         if let Some(err) = &self.error {
-                            <Alert title={err.to_string()} r#type={AlertType::Danger} inline=true />
+                            { IntoPropValue::<Html>::into_prop_value(err) }
                         }
 
                         // 1. KABELPAAR AUSWAHL / ANZEIGE

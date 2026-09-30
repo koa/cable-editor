@@ -1,6 +1,6 @@
 # Konzept: Einheitliche Bedienung im Frontend
 
-Stand: 30.09.2026 – offene Fragen entschieden; das Prüfgerüst steht, die Schritte unter „Umsetzung“ folgen.
+Stand: 30.09.2026 – offene Fragen entschieden; das Prüfgerüst steht, die Fehlerbehandlung (Schritt 1) ist umgesetzt, die übrigen Schritte unter „Umsetzung“ folgen.
 
 Diese Regeln gelten für jede neue oder geänderte Seite. Sie stammen aus einer Durchsicht des
 ganzen Frontends; wo der Code noch abweicht, steht es unter „Umsetzung“. Wie Fehler entstehen
@@ -98,7 +98,7 @@ und was das Backend liefert, steht in `fehlermeldungen.md`, der Aufbau des Bread
     Sync, Editoren wie Ports, Fasern und Loops): Toast (`util::toast_error`), die Seite bleibt.
   - Im Dialog: Alert im Dialog.
 - Der Titel des Toasts ist „<Objekt> konnte nicht gespeichert|angelegt|gelöscht|geladen|
-  angestossen werden“.
+  angestossen|geändert|abgeschlossen|aktiviert werden“.
 - „Nicht gefunden“ ist immer `FrontendError::NotFound` mit Art und Id des Objekts („Trasse 7 nicht gefunden“, Alert Danger), nie ein eigener Text.
 - Ein Hinweis, der vor dem Speichern gilt (Feld fehlt, Kombination nicht erlaubt), ist ein
   Warning-Alert bei den Feldern und sperrt „Speichern“; er ist kein Fehler.
@@ -141,7 +141,7 @@ noch nicht eingeschalteten Prüfungen einzeln. Drei Ebenen, von der strengsten z
 
 | Ebene | Werkzeug | Prüft |
 | --- | --- | --- |
-| Compiler | `cargo clippy -p cable-editor-frontend --target wasm32-unknown-unknown` (`cable-editor-frontend/clippy.toml`, `[lints.clippy]`) | keine Browser-Dialoge (`alert`, `confirm`, `prompt`), kein `log::error!` (Fehler gehören in die Oberfläche), ab Schritt 1 keine Panics; ab Schritt 4 kein rohes `Link` |
+| Compiler | `cargo clippy -p cable-editor-frontend --target wasm32-unknown-unknown` (`cable-editor-frontend/clippy.toml`, `[lints.clippy]`) | keine Browser-Dialoge (`alert`, `confirm`, `prompt`), kein `log::error!` (Fehler gehören in die Oberfläche), keine Panics (`unwrap`, `expect`, `panic!`); ab Schritt 4 kein rohes `Link` |
 | Quelltext | `local/konventionen/static.mjs` | Beschriftungen (Abschnitt 1), Fehler als `FrontendError` und Toast-Titel (4), Symbolknöpfe mit `aria_label` und `title`, „Seite drucken“ nur an einer Stelle, `PlanLink` statt `Link<AppRoute>` (3) |
 | Browser | `local/konventionen/pages.mjs` (Playwright gegen den Mock) | jede Route als Handy und Desktop: keine Konsolenfehler, kein waagerechter Überlauf, genau eine sichtbare `h1`, höchstens ein aktiver Eintrag je Breadcrumb-Menü, „Keine Berechtigung“ ohne die nötige Rolle, jeder Knopf und Link hat einen Namen |
 
@@ -169,10 +169,13 @@ Was sich nicht automatisch prüfen lässt, geht der Reviewer bei jeder Änderung
 
 ## Umsetzung
 
-Schrittweise, je ein Commit, jeder vor dem Commit durchgesehen (0 ist das Prüfgerüst, erledigt):
+Schrittweise, je ein Commit, jeder vor dem Commit durchgesehen (0, das Prüfgerüst, und 1, die
+Fehlerbehandlung, sind erledigt und werden geprüft):
 
-1. Fehler als `FrontendError`: Alerts mit `to_string()`, Debug-Ausgaben, eigene
+1. (erledigt) Fehler als `FrontendError`: Alerts mit `to_string()`, Debug-Ausgaben, eigene
    „nicht gefunden“-Texte, `expect` im Browserzustand, Fehler der Editoren als Toast.
+   Ausnahmen mit `#[allow(clippy::expect_used)]`: fehlender Yew-Kontext, `build.rs`. Ein Toast
+   zeigt den Titel des `FrontendError` (`util::ToastText`), nicht dessen englischen `Display`.
 2. Beschriftungen nach Abschnitt 1 (auch „Etikett drucken“ und „Seite drucken“), `aria_label` und
    `title` der Symbolknöpfe, Bestätigungsdialog.
 3. Rückmeldung nach Abschnitt 5: Toasts in den Editoren, beim Löschen und beim Anlegen einer

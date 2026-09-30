@@ -19,6 +19,7 @@ use crate::{
     pages::router::PlanView,
     util::{get_backdrop, get_credentials, get_role, navigate, toast_error},
 };
+use cable_editor_common::ObjectKind;
 use patternfly_yew::prelude::{
     Backdrop, Bullseye, Button, ButtonVariant, Cell, CellContext, ExpansionState, Form, FormGroup,
     Icon, InputState, LabelIcon, MemoizedTableModel, Modal, ModalVariant, SimpleList,
@@ -720,7 +721,7 @@ impl EditCable {
             }
             DataState::NotFound => {
                 let cable_id = ctx.props().cable_id;
-                format!("Kabel {cable_id} nicht gefunden").into_prop_value()
+                (&FrontendError::not_found(ObjectKind::Cable, cable_id)).into_prop_value()
             }
         }
     }

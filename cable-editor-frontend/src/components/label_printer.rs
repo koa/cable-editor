@@ -1,5 +1,5 @@
 use crate::{
-    error::FrontendError,
+    error::{BrowserPart, FrontendError},
     icons::{IconLink, IconUnlink},
 };
 use brady_web_sdk::{Brady, BradySdk, PrinterStatus, image_from_canvas, use_brady};
@@ -12,9 +12,9 @@ use patternfly_yew::prelude::{
     Modal, ModalVariant, TextInput, TextInputType, use_backdrop,
 };
 use std::{future::Future, pin::pin, rc::Rc, time::Duration};
-use wasm_bindgen::{JsCast, JsValue};
+use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
-use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, Storage, window};
+use web_sys::{CanvasRenderingContext2d, Document, HtmlCanvasElement, Storage, window};
 use yew::{
     AttrValue, Callback, Component, Html, Properties, UseStateHandle, classes, function_component,
     hook, html,
@@ -46,7 +46,7 @@ const DEFAULT_FEED_INCH: f64 = 0.125;
 /// Whether the browser can talk to the printer (Web Bluetooth), false until checked.
 #[hook]
 pub fn use_printer_supported() -> bool {
-    let brady = use_brady().expect("Missing BradyProvider");
+    let brady = use_brady_provider();
     let supported = use_state(|| false);
     {
         let (sdk, supported) = (brady.sdk.clone(), supported.clone());
@@ -68,7 +68,7 @@ pub fn check_printer_supported<C: Component>(scope: &Scope<C>, msg: fn(bool) -> 
 /// Printer connection and status, fixed at the bottom of every page.
 #[function_component]
 pub fn PrinterStatusBar() -> Html {
-    let brady = use_brady().expect("Missing BradyProvider");
+    let brady = use_brady_provider();
     let supported = use_printer_supported();
     let error = use_state(|| None);
     let busy = use_state(|| false);
@@ -164,7 +164,7 @@ pub struct PrintLabelButtonProps {
 /// Connects, asks for the text choice and cable diameter and prints the label.
 #[function_component]
 pub fn PrintLabelButton(props: &PrintLabelButtonProps) -> Html {
-    let brady = use_brady().expect("Missing BradyProvider");
+    let brady = use_brady_provider();
     let backdrop = use_backdrop();
     let error = use_state(|| None);
     let busy = use_state(|| false);
@@ -224,7 +224,7 @@ struct LabelFormProps {
 #[function_component]
 fn LabelForm(props: &LabelFormProps) -> Html {
     // Rendered by the BackdropViewer, the BradyProvider sits above it
-    let brady = use_brady().expect("Missing BradyProvider");
+    let brady = use_brady_provider();
     let selected = use_state(|| 0);
     let value = use_state(|| {
         storage()
@@ -250,8 +250,8 @@ fn LabelForm(props: &LabelFormProps) -> Html {
                 let length =
                     f64::from(canvas.width()) / f64::from(canvas.height()) * geometry.band_inch;
                 let (_, copies) = text_layout(*diameter, geometry.band_inch);
-                Ok::<_, brady_web_sdk::Error>((
-                    canvas.to_data_url()?,
+                Ok::<_, FrontendError>((
+                    canvas.to_data_url().map_err(FrontendError::Browser)?,
                     length * MM_PER_INCH,
                     copies,
                     geometry.feed_inch,
@@ -272,7 +272,7 @@ fn LabelForm(props: &LabelFormProps) -> Html {
                 )}
             </>
         },
-        (Ok(_), Some(Err(e))) => (&FrontendError::from(e.clone())).into_prop_value(),
+        (Ok(_), Some(Err(e))) => e.into_prop_value(),
     };
     let choices = (props.texts.len() > 1).then(|| {
         let items = props.texts.iter().enumerate().map(|(index, choice)| {
@@ -443,11 +443,23 @@ async fn prepare(sdk: &BradySdk) -> Result<LabelGeometry, FrontendError> {
     LabelGeometry::from_status(&sdk.status())
 }
 
-async fn load_label_font() -> Result<(), JsValue> {
-    let document = window()
+/// The connection to the printer, provided by `BradyProvider` around the whole app.
+#[allow(clippy::expect_used)] // a missing provider is a programming error, like a missing Yew context
+#[hook]
+fn use_brady_provider() -> Brady {
+    use_brady().expect("Missing BradyProvider")
+}
+
+fn document() -> Result<Document, FrontendError> {
+    window()
         .and_then(|w| w.document())
-        .expect("Missing Document");
-    JsFuture::from(document.fonts().load(&label_font(16.0))).await?;
+        .ok_or(FrontendError::BrowserMissing(BrowserPart::Document))
+}
+
+async fn load_label_font() -> Result<(), FrontendError> {
+    JsFuture::from(document()?.fonts().load(&label_font(16.0)))
+        .await
+        .map_err(FrontendError::Browser)?;
     Ok(())
 }
 
@@ -499,27 +511,27 @@ fn render_label(
     text: &str,
     diameter_mm: Option<f64>,
     geometry: &LabelGeometry,
-) -> Result<HtmlCanvasElement, brady_web_sdk::Error> {
+) -> Result<HtmlCanvasElement, FrontendError> {
     let band = geometry.band_inch;
     let height = (band * geometry.dpi).round();
     let (ratio, copies) = text_layout(diameter_mm, band);
-    let canvas: HtmlCanvasElement = window()
-        .and_then(|w| w.document())
-        .expect("Missing Document")
-        .create_element("canvas")?
+    let canvas: HtmlCanvasElement = document()?
+        .create_element("canvas")
+        .map_err(FrontendError::Browser)?
         .dyn_into()
-        .map_err(JsValue::from)?;
+        .map_err(|element| FrontendError::Browser(element.into()))?;
     let context: CanvasRenderingContext2d = canvas
-        .get_context("2d")?
+        .get_context("2d")
+        .map_err(FrontendError::Browser)?
         .and_then(|c| c.dyn_into().ok())
-        .expect("Missing 2d context");
+        .ok_or(FrontendError::BrowserMissing(BrowserPart::CanvasContext))?;
     // Scale the font so the glyphs span ratio * height
     context.set_font(&label_font(height));
-    let reference = context.measure_text(text)?;
+    let reference = context.measure_text(text).map_err(FrontendError::Browser)?;
     let glyphs = reference.actual_bounding_box_ascent() + reference.actual_bounding_box_descent();
     let font = label_font(height * ratio * height / glyphs.max(1.0));
     context.set_font(&font);
-    let metrics = context.measure_text(text)?;
+    let metrics = context.measure_text(text).map_err(FrontendError::Browser)?;
     let left = metrics.actual_bounding_box_left();
     let ascent = metrics.actual_bounding_box_ascent();
     let descent = metrics.actual_bounding_box_descent();
@@ -540,7 +552,9 @@ fn render_label(
     for copy in 0..copies {
         let offset = f64::from(copy) - f64::from(copies - 1) / 2.0;
         let center = height * (0.5 + offset * step);
-        context.fill_text(text, left, center + (ascent - descent) / 2.0)?;
+        context
+            .fill_text(text, left, center + (ascent - descent) / 2.0)
+            .map_err(FrontendError::Browser)?;
     }
     Ok(canvas)
 }

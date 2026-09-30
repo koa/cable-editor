@@ -56,6 +56,8 @@ pub fn switch<T>(props: &SwitchProps<T>) -> Html
 where
     T: Target + 'static,
 {
+    // A missing router is a programming error, like a missing Yew context
+    #[allow(clippy::expect_used)]
     let router = use_router::<T>().expect("Must be a child of a Router or Nested component");
 
     match router.active_target {

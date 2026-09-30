@@ -245,12 +245,12 @@ impl Component for CabinetProperties {
                 self.locating = true;
                 if let Err(error) = locate(ctx) {
                     self.locating = false;
-                    toast_error(ctx.link(), "Standort nicht verfügbar", error);
+                    toast_error(ctx.link(), "Standort konnte nicht geladen werden", error);
                 }
             }
             Msg::LocateFailed(error) => {
                 self.locating = false;
-                toast_error(ctx.link(), "Standort nicht verfügbar", error);
+                toast_error(ctx.link(), "Standort konnte nicht geladen werden", error);
             }
             Msg::ClearPosition => {
                 self.first.clear();

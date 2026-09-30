@@ -271,11 +271,9 @@ impl Component for Leitungskataster {
                         });
                     match saved {
                         Ok(()) => scope.send_message(Msg::Changed("Dateien heruntergeladen")),
-                        Err(error) => toast_error(
-                            &scope,
-                            "Dateien konnten nicht heruntergeladen werden",
-                            error,
-                        ),
+                        Err(error) => {
+                            toast_error(&scope, "Dateien konnten nicht gespeichert werden", error)
+                        }
                     }
                 });
                 false

@@ -93,7 +93,11 @@ impl Component for NetboxPage {
                         toast_success(ctx.link(), "Sync angestossen");
                         ctx.link().send_message(Msg::Fetch);
                     }
-                    Err(error) => toast_error(ctx.link(), "Sync nicht angestossen", error),
+                    Err(error) => toast_error(
+                        ctx.link(),
+                        "Synchronisation konnte nicht angestossen werden",
+                        error,
+                    ),
                 }
                 true
             }

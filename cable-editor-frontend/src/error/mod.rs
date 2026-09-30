@@ -73,9 +73,31 @@ pub enum FrontendError {
     UnsupportedTape,
     #[error("Map error: {0:?}")]
     Map(JsValue),
+    /// The browser lacks something the page needs, e.g. the document
+    #[error("The browser lacks {0:?}")]
+    BrowserMissing(BrowserPart),
+    /// The browser refused a call, e.g. to the canvas
+    #[error("Browser error: {0:?}")]
+    Browser(JsValue),
     /// The browser didn't save a downloaded file
     #[error("Datei konnte nicht gespeichert werden: {}", js_message(.0))]
     SaveFile(JsValue),
+}
+
+/// What the browser has to offer for a page, worded in [`FrontendError::title`]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BrowserPart {
+    Document,
+    CanvasContext,
+}
+
+impl BrowserPart {
+    fn name(self) -> &'static str {
+        match self {
+            BrowserPart::Document => "ein Dokument",
+            BrowserPart::CanvasContext => "einen 2D-Zeichenbereich",
+        }
+    }
 }
 
 impl FrontendError {
@@ -127,6 +149,12 @@ impl FrontendError {
             }
             FrontendError::SaveFile(e) => {
                 format!("Datei konnte nicht gespeichert werden: {}", js_message(e))
+            }
+            FrontendError::BrowserMissing(part) => {
+                format!("Der Browser bietet {} nicht an", part.name())
+            }
+            FrontendError::Browser(e) => {
+                format!("Der Browser meldet einen Fehler: {}", js_message(e))
             }
         }
     }

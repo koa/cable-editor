@@ -20,12 +20,14 @@ use crate::{
     pages::router::{AppRoute, PanelView, PlanView},
     util::get_credentials,
 };
+use cable_editor_common::ObjectKind;
 use gloo_utils::window;
 use patternfly_yew::prelude::{
-    Alert, AlertType, Button, ButtonVariant, Card, CardBody, CardTitle, Divider, Icon, Level,
-    Spinner, Title,
+    Button, ButtonVariant, Card, CardBody, CardTitle, Divider, Icon, Level, Spinner, Title,
 };
-use yew::{Component, Context, Html, Properties, classes, html, platform::spawn_local};
+use yew::{
+    Component, Context, Html, Properties, classes, html, html::IntoPropValue, platform::spawn_local,
+};
 use yew_nested_router::components::Link;
 
 #[derive(Properties, PartialEq, Clone)]
@@ -144,7 +146,7 @@ impl ShowPanel {
         if let Some(error) = &self.error {
             return html! {
                 <div class="pf-v6-u-p-lg">
-                    <Alert title={error.to_string()} r#type={AlertType::Danger} inline=true />
+                    { IntoPropValue::<Html>::into_prop_value(error) }
                     <div class="pf-v6-u-mt-md">
                         <Button
                             variant={ButtonVariant::Primary}
@@ -159,7 +161,7 @@ impl ShowPanel {
         let Some(root_planned) = &self.data else {
             return html! {
                 <div class="pf-v6-u-p-lg">
-                    <Alert title="Panel nicht gefunden" r#type={AlertType::Warning} inline=true />
+                    { IntoPropValue::<Html>::into_prop_value(&FrontendError::not_found(ObjectKind::Panel, self.panel_id)) }
                 </div>
             };
         };

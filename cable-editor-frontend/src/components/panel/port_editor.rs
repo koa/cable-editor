@@ -5,7 +5,7 @@ use crate::{
         IdOrNew, PortType,
         edit_ports::{FetchedPanelWithPorts, FlatPortInput, NetboxDevicePort, update_panel_ports},
     },
-    util::get_credentials,
+    util::{get_credentials, toast_error},
 };
 use patternfly_yew::prelude::{
     ActionGroup, Button, ButtonVariant, FormSelect, FormSelectOption, Icon, Spinner, TextInput,
@@ -39,6 +39,8 @@ pub enum Msg {
     MarkDeleted(usize),
     Save,
     Error(FrontendError),
+    /// Saving failed: the input stays, the error is a toast
+    SaveFailed(FrontendError),
     MoveUp(usize),
     MoveDown(usize),
     NetboxPortsFetched(Box<[NetboxDevicePort]>),
@@ -288,9 +290,14 @@ impl Component for PortEditor {
                     scope.send_message(
                         update_panel_ports(credentials.as_ref(), panel_id, changes, deletes)
                             .await
-                            .map_or_else(Msg::Error, |_| Msg::FetchPorts),
+                            .map_or_else(Msg::SaveFailed, |_| Msg::FetchPorts),
                     );
                 });
+                true
+            }
+            Msg::SaveFailed(error) => {
+                self.loading = false;
+                toast_error(ctx.link(), "Ports konnten nicht gespeichert werden", error);
                 true
             }
             Msg::Error(error) => {

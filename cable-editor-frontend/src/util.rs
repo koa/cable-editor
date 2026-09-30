@@ -4,7 +4,7 @@ use crate::{
     pages::router::{AppRoute, PlanView},
 };
 use patternfly_yew::prelude::{AlertType, Backdropper, Toast, Toaster};
-use std::{fmt::Display, time::Duration};
+use std::time::Duration;
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{Blob, BlobPropertyBag, HtmlAnchorElement, Url};
 use yew::html::Scope;
@@ -33,18 +33,42 @@ pub fn get_toaster(scope: &Scope<impl BaseComponent>) -> Option<Toaster> {
     scope.context::<Toaster>(Callback::noop()).map(|(c, _)| c)
 }
 
+/// What a toast tells about an error: the message for users, with the technical cause where
+/// there is one (for a `FrontendError` its `title`, not the English `Display`).
+pub trait ToastText {
+    fn toast_text(&self) -> String;
+}
+
+impl ToastText for FrontendError {
+    fn toast_text(&self) -> String {
+        self.title()
+    }
+}
+
+impl ToastText for String {
+    fn toast_text(&self) -> String {
+        self.clone()
+    }
+}
+
+impl<T: ToastText + ?Sized> ToastText for &T {
+    fn toast_text(&self) -> String {
+        (**self).toast_text()
+    }
+}
+
 /// Shows an error that shouldn't replace the page, e.g. of a failed request behind a button
 /// (the page would lose unsaved input).
 pub fn toast_error(
     scope: &Scope<impl BaseComponent>,
     title: impl Into<String>,
-    error: impl Display,
+    error: impl ToastText,
 ) {
     if let Some(toaster) = get_toaster(scope) {
         toaster.toast(Toast {
             title: title.into(),
             r#type: AlertType::Danger,
-            body: html!(error.to_string()),
+            body: html!(error.toast_text()),
             ..Toast::default()
         });
     }
