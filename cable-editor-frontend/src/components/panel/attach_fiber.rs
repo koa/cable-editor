@@ -1,6 +1,7 @@
 use crate::components::icon_button::IconButton;
 use crate::components::menu::popup::{MenuActionItem, MenuGroup, PopupMenu};
 use crate::components::page_layout::{PageLayout, object_title};
+use crate::components::unsaved::Unsaved;
 use crate::{
     components::{fiber::FiberLabel, table::ListModel},
     error::FrontendError,
@@ -82,6 +83,7 @@ pub struct AttachFiber {
     table_state: Rc<RefCell<HashMap<usize, ExpansionState<AttachColumn>>>>,
     loading: bool,
     error: Option<FrontendError>,
+    unsaved: Unsaved,
 }
 
 pub enum Msg {
@@ -104,8 +106,9 @@ impl Component for AttachFiber {
     type Message = Msg;
     type Properties = AttachFiberProps;
 
-    fn create(_ctx: &Context<Self>) -> Self {
+    fn create(ctx: &Context<Self>) -> Self {
         Self {
+            unsaved: Unsaved::new(ctx.link()),
             current_situation: None,
             slot_states: BTreeMap::new(),
             edit_slot: None,
@@ -326,6 +329,7 @@ impl Component for AttachFiber {
     }
 
     fn rendered(&mut self, ctx: &Context<Self>, first_render: bool) {
+        self.unsaved.set(!self.loading && self.has_changes());
         if first_render {
             ctx.link().send_message(Msg::FetchData);
         }

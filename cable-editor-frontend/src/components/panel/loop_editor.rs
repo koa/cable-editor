@@ -1,5 +1,6 @@
 use crate::components::icon_button::IconButton;
 use crate::components::page_layout::{PageLayout, object_title};
+use crate::components::unsaved::Unsaved;
 use crate::{
     components::{fiber::FiberLabel, table::ListModel},
     error::FrontendError,
@@ -192,6 +193,7 @@ pub struct LoopPortEditor {
     loading: bool,
     error: Option<FrontendError>,
     missing_port_count: usize,
+    unsaved: Unsaved,
 }
 
 pub enum Msg {
@@ -213,7 +215,7 @@ impl Component for LoopPortEditor {
     type Message = Msg;
     type Properties = LoopPortEditorProps;
 
-    fn create(_ctx: &Context<Self>) -> Self {
+    fn create(ctx: &Context<Self>) -> Self {
         Self {
             current_situation: None,
             cable_a: None,
@@ -223,6 +225,7 @@ impl Component for LoopPortEditor {
             loading: true,
             error: None,
             missing_port_count: 0,
+            unsaved: Unsaved::new(ctx.link()),
         }
     }
 
@@ -513,10 +516,12 @@ impl Component for LoopPortEditor {
 impl LoopPortEditor {
     fn view_content(&self, ctx: &Context<Self>) -> Html {
         if self.loading {
+            self.unsaved.set(false);
             return html!(<Spinner />);
         }
 
         let unmodified = self.calculate_current_states(ctx.props().panel_id) == self.fiber_states;
+        self.unsaved.set(!unmodified);
 
         html! {
             <div class="pf-v6-c-panel">

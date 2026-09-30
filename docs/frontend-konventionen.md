@@ -1,6 +1,6 @@
 # Konzept: Einheitliche Bedienung im Frontend
 
-Stand: 30.09.2026 – offene Fragen entschieden; das Prüfgerüst steht, die Fehlerbehandlung (Schritt 1), die Beschriftungen (Schritt 2) und die Rückmeldung (Schritt 3) und die Links (Schritt 4) sind umgesetzt, die übrigen Schritte unter „Umsetzung“ folgen.
+Stand: 30.09.2026 – offene Fragen entschieden; das Prüfgerüst steht, alle Schritte unter „Umsetzung“ sind umgesetzt.
 
 Diese Regeln gelten für jede neue oder geänderte Seite. Sie stammen aus einer Durchsicht des
 ganzen Frontends; wo der Code noch abweicht, steht es unter „Umsetzung“. Wie Fehler entstehen
@@ -122,12 +122,16 @@ und was das Backend liefert, steht in `fehlermeldungen.md`, der Aufbau des Bread
 - **Ungespeicherte Änderungen:** Eine Seite mit Änderungen, die noch fehlen, warnt beim
   Verlassen: bei jedem Wechsel in der App (Breadcrumb, Links) mit einem Dialog „Änderungen
   verwerfen?“ (Knöpfe „Verwerfen“ und „Weiter bearbeiten“), beim Schliessen und Neuladen des
-  Fensters mit dem Hinweis des Browsers (`beforeunload`). `yew-nested-router` (0.9) lässt einen
-  Wechsel nicht abfangen: `Link`, `push` und `replace` navigieren sofort, und `popstate` (Zurück
-  im Browser) ist nicht zu verhindern. Darum fragt die App selbst: Eine Seite mit ungespeicherten
-  Änderungen meldet sich in einem Kontext an, und alle Wege aus der App (`PlanLink`, Menüeinträge,
-  `util::navigate`) fragen dort zuerst nach; bei „Zurück“ im Browser schiebt die App die Adresse
-  wieder auf die Seite und fragt dann. Deshalb darf keine Seite ein rohes `Link<AppRoute>` bauen.
+  Fensters mit dem Hinweis des Browsers (`beforeunload`); bei „Zurück“ im Browser bleibt die Adresse
+  auf der Seite und der Dialog erscheint. `yew-nested-router` (0.9) lässt einen Wechsel nicht
+  abfangen: `Link`, `push` und `replace` navigieren sofort, und `popstate` ist nicht zu
+  verhindern. Darum wacht `UnsavedGuard` (`components/unsaved.rs`) um den Router selbst: Er fängt
+  Klicks auf Links der App und `popstate` in der Capture-Phase ab, bevor der Router sie sieht,
+  schiebt bei „Zurück“ die Adresse der Seite wieder auf den Stapel und fragt. Nur „Verwerfen“
+  führt weiter. Eine Seite mit Änderungen hält ein `Unsaved` und meldet nach jedem Rendern
+  `set(hat_aenderungen)`; ohne Änderungen, schreibgeschützt oder beim Laden meldet sie `false`.
+  Was eine Seite selbst öffnet (`util::navigate` nach Speichern oder Löschen), fragt nicht.
+  Ein neues Objekt, in dem noch nichts eingegeben ist, hat nichts zu verlieren.
 - **Dialoge mit Formular:** „Speichern“ oder „Anlegen“ und „Abbrechen“; Enter sendet ab,
   Abbrechen und Esc schliessen ohne Rückfrage.
 
@@ -142,7 +146,7 @@ noch nicht eingeschalteten Prüfungen einzeln. Drei Ebenen, von der strengsten z
 | --- | --- | --- |
 | Compiler | `cargo clippy -p cable-editor-frontend --target wasm32-unknown-unknown` (`cable-editor-frontend/clippy.toml`, `[lints.clippy]`) | keine Browser-Dialoge (`alert`, `confirm`, `prompt`), kein `log::error!` (Fehler gehören in die Oberfläche), keine Panics (`unwrap`, `expect`, `panic!`), kein rohes `Link` des Routers |
 | Quelltext | `local/konventionen/static.mjs` | Beschriftungen (Abschnitt 1), Fehler als `FrontendError` und Toast-Titel (4), Symbolknöpfe als `IconButton`, „Seite drucken“ nur an einer Stelle, `PlanLink` statt `Link<AppRoute>` (3) |
-| Browser | `local/konventionen/pages.mjs` (Playwright gegen den Mock) | jede Route als Handy und Desktop: keine Konsolenfehler, kein waagerechter Überlauf, genau eine sichtbare `h1`, höchstens ein aktiver Eintrag je Breadcrumb-Menü, „Keine Berechtigung“ ohne die nötige Rolle, jeder Knopf und Link hat einen Namen |
+| Browser | `local/konventionen/pages.mjs` (Playwright gegen den Mock) | Verlassen einer Seite mit Änderungen (Link, „Zurück“, Fenster schliessen), jede Route als Handy und Desktop: keine Konsolenfehler, kein waagerechter Überlauf, genau eine sichtbare `h1`, höchstens ein aktiver Eintrag je Breadcrumb-Menü, „Keine Berechtigung“ ohne die nötige Rolle, jeder Knopf und Link hat einen Namen |
 
 - Eine Prüfung mit „ausstehend“ gehört zu einem Umsetzungsschritt, der noch fehlt; der Commit
   dieses Schritts schaltet sie ein (`step` in den Tabellen der Skripte, Lint in `Cargo.toml`), damit
@@ -168,7 +172,7 @@ Was sich nicht automatisch prüfen lässt, geht der Reviewer bei jeder Änderung
 
 ## Umsetzung
 
-Schrittweise, je ein Commit, jeder vor dem Commit durchgesehen (0 bis 4 sind erledigt und werden geprüft):
+Schrittweise, je ein Commit, jeder vor dem Commit durchgesehen:
 
 1. (erledigt) Fehler als `FrontendError`: Alerts mit `to_string()`, Debug-Ausgaben, eigene
    „nicht gefunden“-Texte, `expect` im Browserzustand, Fehler der Editoren als Toast.
@@ -195,7 +199,10 @@ Schrittweise, je ein Commit, jeder vor dem Commit durchgesehen (0 bis 4 sind erl
    Ansehen, Anlegen und Bearbeiten (`PlanView::NewCable { id }`, `EditCable` mit `IdOrNew`, kein
    Dialog). `createCable` nimmt Name, Fasern und Kabelweg auf einmal und verweigert einen leeren
    Weg, damit es kein Kabel ohne Segment gibt; danach öffnet die Kabelseite.
-6. Warnung bei ungespeicherten Änderungen.
+6. (erledigt) Warnung bei ungespeicherten Änderungen (`components/unsaved.rs`): `UnsavedGuard`
+   um den Router, `Unsaved` in den Formularen der Schächte, Trassen, Schachttypen, Kabel, in
+   Planung, Panel-Editor, Fasern auflegen und Loops. `pages.mjs` prüft Link, „Zurück“ und
+   das Schliessen des Fensters (`LEAVE_FLOWS`) und dass nach dem Speichern nicht mehr gefragt wird.
 
 ## Entschieden
 
@@ -205,5 +212,6 @@ Schrittweise, je ein Commit, jeder vor dem Commit durchgesehen (0 bis 4 sind erl
   Berechtigte ändern sie dort. Bei Schacht und Trasse bleibt die Übersicht mit dem Knopf
   „Bearbeiten“, weil sie viel enthält, was nicht zum Formular gehört (Panels, Etiketten, Kabel).
 - **Planung:** so heisst der Plan in der Oberfläche.
-- **Warnung beim Verlassen:** die App fragt selbst nach (siehe 5), weil der Router den Wechsel
-  nicht abfangen lässt.
+- **Warnung beim Verlassen:** die App fragt selbst nach (siehe 5) und fängt Klicks und „Zurück“
+  global ab, weil der Router den Wechsel nicht abfangen lässt; dadurch muss nicht jeder Link
+  etwas davon wissen.

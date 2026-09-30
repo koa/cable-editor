@@ -91,6 +91,16 @@ const SUCCESSFUL_CHANGES = [
     next: { click: /^Löschen$/, confirm: /^(Ja|Löschen)$/, title: /^Schachttyp gelöscht$/, then: '/plan/0/listofcabinettypes' } },
   { path: '/plan/0/cable/11/edit', needs: 'ADMIN', click: /^Löschen$/, confirm: /^(Ja|Löschen)$/, title: /^Kabel gelöscht$/, then: '/plan/0/listofcables' },
 ];
+// Pages holding input that isn't stored yet (Abschnitt 5, "Verlassen"): `input` picks the text
+// field to change (`text` the new value), `pickDuct` adds a path to a new cable.
+const LEAVE_FLOWS = [
+  { path: '/plan/0/duct/711/properties', needs: 'PLANNER', input: 2 },
+  { path: '/plan/0/cabinet/1/properties', needs: 'PLANNER', input: 0 },
+  { path: '/plan/1/edit', needs: 'PLANNER', input: 0 },
+  { path: '/plan/0/cabinettype/1', needs: 'ADMIN', input: 0 },
+  { path: '/plan/1/panel/22/edit', needs: 'PLANNER', input: 0 },
+  { path: `/plan/0/newcable/${NEW_ID}`, needs: 'PLANNER', input: 0, text: 'Konventionstest', pickDuct: true },
+];
 const RANK = { READER: 0, PLANNER: 1, ADMIN: 2 };
 const allowed = (route) => RANK[ROLE] >= RANK[route.needs ?? 'READER'];
 
@@ -314,8 +324,158 @@ async function checkSuccessfulChange(browser, entry) {
       if (!(expected instanceof RegExp ? expected.test(now) : now === expected)) {
         report('wohin-danach', undefined, where, `sollte auf ${expected} stehen, steht auf ${now}`);
       }
+      // Stored changes aren't lost by leaving: nothing is asked
+      if (!step.next && !step.then && step.input !== undefined) {
+        const link = await leaveLink(page);
+        if (link) {
+          await link.click();
+          await page.waitForTimeout(500);
+          if (await dialogOf(page).count()) report('aenderungen-verwerfen', undefined, where, 'fragt nach dem Speichern noch nach');
+        }
+      }
     }
   });
+}
+
+
+// ---------------------------------------------------------------- leaving a page with changes
+const DISCARD_TITLE = 'Änderungen verwerfen?';
+
+// A link to another page of the app: one on the page, else the first entry of a breadcrumb menu
+// (the menu stays open). `null` if there is none.
+async function leaveLink(page) {
+  const find = () => page.evaluate(() => {
+    const here = location.pathname;
+    const link = [...document.querySelectorAll('a[href]')].find((a) => {
+      const r = a.getBoundingClientRect();
+      const url = new URL(a.href);
+      return r.width > 0 && r.height > 0 && url.origin === location.origin && url.pathname !== here && a.target !== '_blank' && !a.hasAttribute('download');
+    });
+    return link?.getAttribute('href') ?? null;
+  });
+  let href = await find();
+  const toggles = page.locator('main nav button:visible');
+  for (let i = 0; !href && i < (await toggles.count()); i++) {
+    await toggles.nth(i).click();
+    await page.waitForTimeout(200);
+    href = await find();
+    if (!href) await page.keyboard.press('Escape');
+  }
+  return href ? page.locator(`a[href="${href}"]:visible`).first() : null;
+}
+
+// Opens `path` the way the router does, so the browser has a page to go back to
+async function openInApp(page, path) {
+  await page.evaluate((path) => {
+    history.pushState(null, '', path);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  }, path);
+  await page.waitForLoadState('networkidle');
+  await page.waitForTimeout(800);
+}
+
+async function change(page, entry) {
+  const field = page.locator('main input[type=text]:visible').nth(entry.input);
+  await field.fill(entry.text ?? `${await field.inputValue()} x`);
+  if (entry.pickDuct) await pickDuct(page);
+  await page.waitForTimeout(300);
+  return field;
+}
+
+const pathOf = (page) => new URL(page.url()).pathname;
+const dialogOf = (page) => page.locator('.pf-v6-c-modal-box', { hasText: DISCARD_TITLE });
+
+async function expectDialog(page, where, what) {
+  const shown = await dialogOf(page).count();
+  if (!shown) report('aenderungen-verwerfen', undefined, where, `${what}: sollte „${DISCARD_TITLE}“ fragen, fragt nicht`);
+  return shown > 0;
+}
+
+async function checkLeaveFlow(browser, entry) {
+  if (RANK[ROLE] < RANK[entry.needs ?? 'READER']) return;
+  const where = `${entry.path} (Desktop, ${ROLE})`;
+  // Without changes nothing is asked
+  await withPage(browser, async (page) => {
+    await page.goto(ORIGIN + entry.path);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(800);
+    const link = await leaveLink(page);
+    if (!link) return report('aenderungen-verwerfen', undefined, where, 'keine Verknüpfung zu einer anderen Seite gefunden (Prüfung anpassen)');
+    await link.click();
+    await page.waitForTimeout(500);
+    if (await dialogOf(page).count()) report('aenderungen-verwerfen', undefined, where, 'fragt ohne Änderungen nach');
+    if (pathOf(page) === entry.path) report('aenderungen-verwerfen', undefined, where, 'Verknüpfung ohne Änderungen führt nicht weiter');
+  });
+  // Link: asks, "Weiter bearbeiten" stays, "Verwerfen" leaves
+  await withPage(browser, async (page) => {
+    await page.goto(ORIGIN + entry.path);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(800);
+    const field = await change(page, entry);
+    const typed = await field.inputValue();
+    let link = await leaveLink(page);
+    if (!link) return;
+    await link.click();
+    await page.waitForTimeout(500);
+    if (!(await expectDialog(page, where, 'Verknüpfung'))) return;
+    if (await page.locator('main nav button[aria-expanded=true]').count()) report('aenderungen-verwerfen', undefined, where, 'Verknüpfung: das Menü bleibt hinter dem Dialog offen');
+    if (pathOf(page) !== entry.path) report('aenderungen-verwerfen', undefined, where, `Verknüpfung: hat die Seite schon vor der Antwort verlassen: ${pathOf(page)}`);
+    await page.locator('.pf-v6-c-modal-box button', { hasText: /^Weiter bearbeiten$/ }).click();
+    await page.waitForTimeout(500);
+    if (pathOf(page) !== entry.path) report('aenderungen-verwerfen', undefined, where, `„Weiter bearbeiten“ hat die Seite verlassen: ${pathOf(page)}`);
+    if (await dialogOf(page).count()) report('aenderungen-verwerfen', undefined, where, '„Weiter bearbeiten“ schliesst den Dialog nicht');
+    if ((await field.inputValue()) !== typed) report('aenderungen-verwerfen', undefined, where, '„Weiter bearbeiten“ hat die Eingabe verworfen');
+    link = await leaveLink(page);
+    await link.click();
+    await page.waitForTimeout(500);
+    if (!(await expectDialog(page, where, 'Verknüpfung, zweites Mal'))) return;
+    await page.locator('.pf-v6-c-modal-box button', { hasText: /^Verwerfen$/ }).click();
+    await page.waitForTimeout(800);
+    if (pathOf(page) === entry.path) report('aenderungen-verwerfen', undefined, where, '„Verwerfen“ führt nicht weiter');
+    if (await dialogOf(page).count()) report('aenderungen-verwerfen', undefined, where, '„Verwerfen“ schliesst den Dialog nicht');
+  });
+  // "Zurück" in the browser: the address stays, the question comes
+  await withPage(browser, async (page) => {
+    await page.goto(ORIGIN + '/listofplans');
+    await page.waitForLoadState('networkidle');
+    await openInApp(page, entry.path);
+    await change(page, entry);
+    await page.goBack();
+    await page.waitForTimeout(800);
+    if (pathOf(page) !== entry.path) report('aenderungen-verwerfen', undefined, where, `„Zurück“: die Adresse wechselt auf ${pathOf(page)}`);
+    if (!(await expectDialog(page, where, '„Zurück“'))) return;
+    await page.locator('.pf-v6-c-modal-box button', { hasText: /^Weiter bearbeiten$/ }).click();
+    await page.waitForTimeout(500);
+    if (pathOf(page) !== entry.path) report('aenderungen-verwerfen', undefined, where, `„Zurück“, „Weiter bearbeiten“: steht auf ${pathOf(page)}`);
+    await page.goBack();
+    await page.waitForTimeout(800);
+    if (!(await expectDialog(page, where, '„Zurück“, zweites Mal'))) return;
+    await page.locator('.pf-v6-c-modal-box button', { hasText: /^Verwerfen$/ }).click();
+    await page.waitForTimeout(800);
+    if (pathOf(page) !== '/listofplans') report('aenderungen-verwerfen', undefined, where, `„Zurück“, „Verwerfen“: steht auf ${pathOf(page)}`);
+  });
+  // Closing the window: the browser's warning
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  try {
+    const page = await context.newPage();
+    const kinds = [];
+    page.on('dialog', (d) => {
+      kinds.push(d.type());
+      d.dismiss().catch(() => {});
+    });
+    await page.goto(ORIGIN + entry.path);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(800);
+    await change(page, entry);
+    await page.locator('main').click({ position: { x: 2, y: 2 } });
+    await page.close({ runBeforeUnload: true });
+    await page.waitForTimeout(500);
+    if (!kinds.includes('beforeunload')) report('aenderungen-verwerfen', undefined, where, 'Fenster schliessen: keine Warnung des Browsers');
+  } catch (e) {
+    report('seite-nicht-pruefbar', undefined, where, String(e).split('\n')[0]);
+  } finally {
+    await context.close();
+  }
 }
 
 // ---------------------------------------------------------------- run
@@ -327,6 +487,7 @@ try {
     for (const route of ROUTES) await checkRoute(browser, device, deviceName, route);
   }
   for (const entry of NOT_FOUND) await checkNotFound(browser, entry);
+  for (const entry of LEAVE_FLOWS) await checkLeaveFlow(browser, entry);
   for (const entry of SUCCESSFUL_CHANGES) await checkSuccessfulChange(browser, entry);
   await fetch(`${ORIGIN}/mock/fail?mutations=*`);
   try {

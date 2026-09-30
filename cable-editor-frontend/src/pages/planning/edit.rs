@@ -1,4 +1,5 @@
 use crate::components::page_layout::{PageLayout, object_title};
+use crate::components::unsaved::Unsaved;
 use crate::{
     components::{
         links::{CableLink, PanelLink, SchachtLink},
@@ -114,6 +115,7 @@ pub struct EditPlan {
     saving: bool,
     error: Option<FrontendError>,
     table_state: Rc<RefCell<HashMap<usize, ExpansionState<UsageColumn>>>>,
+    unsaved: Unsaved,
 }
 
 /// What a plan's page does with a request, to word the toast when it fails
@@ -156,8 +158,9 @@ impl Component for EditPlan {
     type Message = Msg;
     type Properties = EditPlanProps;
 
-    fn create(_ctx: &Context<Self>) -> Self {
+    fn create(ctx: &Context<Self>) -> Self {
         Self {
+            unsaved: Unsaved::new(ctx.link()),
             details: None,
             edit_name: String::new(),
             loading: true,
@@ -367,6 +370,11 @@ impl Component for EditPlan {
     }
 
     fn rendered(&mut self, ctx: &Context<Self>, first_render: bool) {
+        self.unsaved.set(
+            self.details
+                .as_ref()
+                .is_some_and(|details| self.edit_name != details.name),
+        );
         if first_render {
             ctx.link().send_message(Msg::FetchData);
         }

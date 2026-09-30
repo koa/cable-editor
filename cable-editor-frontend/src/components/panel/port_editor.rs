@@ -1,5 +1,6 @@
 use crate::components::icon_button::IconButton;
 use crate::components::page_layout::{PageLayout, object_title};
+use crate::components::unsaved::Unsaved;
 use crate::{
     error::FrontendError,
     graphql::authenticated::{
@@ -65,6 +66,7 @@ pub struct PortEditor {
     panel_name: Option<Box<str>>,
     netbox_device_id: Option<i32>,
     netbox_ports: Box<[NetboxDevicePort]>,
+    unsaved: Unsaved,
 }
 impl PortEditor {
     fn recalculate_orders(&mut self) {
@@ -82,8 +84,9 @@ impl Component for PortEditor {
     type Message = Msg;
     type Properties = PortEditorProps;
 
-    fn create(_ctx: &Context<Self>) -> Self {
+    fn create(ctx: &Context<Self>) -> Self {
         Self {
+            unsaved: Unsaved::new(ctx.link()),
             ports: Vec::new(),
             stored: Vec::new(),
             loading: true,
@@ -326,6 +329,7 @@ impl Component for PortEditor {
     }
 
     fn rendered(&mut self, ctx: &Context<Self>, first_render: bool) {
+        self.unsaved.set(!self.loading && self.ports != self.stored);
         if first_render {
             ctx.link().send_message(Msg::FetchPorts);
         }

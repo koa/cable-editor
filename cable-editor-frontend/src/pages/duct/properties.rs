@@ -2,6 +2,7 @@ use crate::{
     components::{
         dialog::confirm_delete,
         page_layout::{PageLayout, object_title},
+        unsaved::Unsaved,
     },
     error::FrontendError,
     geo::{
@@ -62,6 +63,9 @@ pub struct EditDuctProperties {
     map: MapHolder,
     /// Number of the last check, older answers are dropped
     check_request: u32,
+    /// A new duct is only unsaved once something was entered
+    touched: bool,
+    unsaved: Unsaved,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -138,10 +142,25 @@ impl Component for EditDuctProperties {
             file_input: NodeRef::default(),
             map: MapHolder::default(),
             check_request: 0,
+            touched: false,
+            unsaved: Unsaved::new(ctx.link()),
         }
     }
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+        if matches!(
+            msg,
+            Msg::SetSchachtA(_)
+                | Msg::SetSchachtZ(_)
+                | Msg::SetDescription(_)
+                | Msg::SetOwner(_)
+                | Msg::SetLeitungskataster(_)
+                | Msg::SetLagebestimmung(_)
+                | Msg::SetWidth(_)
+                | Msg::FileRead(..)
+        ) {
+            self.touched = true;
+        }
         match msg {
             Msg::Loaded(duct, choices) => {
                 self.error = None;
@@ -350,7 +369,8 @@ impl Component for EditDuctProperties {
         }
     }
 
-    fn rendered(&mut self, _ctx: &Context<Self>, first_render: bool) {
+    fn rendered(&mut self, ctx: &Context<Self>, first_render: bool) {
+        self.unsaved.set(self.has_unsaved(ctx));
         if !first_render {
             return;
         }
@@ -502,6 +522,14 @@ impl EditDuctProperties {
             lagebestimmung: self.lagebestimmung,
             width_mm,
         })
+    }
+
+    fn has_unsaved(&self, ctx: &Context<Self>) -> bool {
+        if self.is_new(ctx) {
+            self.touched
+        } else {
+            self.has_changes(ctx) || self.file.is_some()
+        }
     }
 
     fn has_changes(&self, ctx: &Context<Self>) -> bool {

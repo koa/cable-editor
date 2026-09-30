@@ -2,6 +2,7 @@ use crate::{
     components::{
         dialog::confirm_delete,
         page_layout::{PageLayout, object_title},
+        unsaved::Unsaved,
     },
     error::FrontendError,
     geo::{
@@ -68,6 +69,9 @@ pub struct CabinetProperties {
     /// Number of the last conversion request, older answers are dropped
     conversion: u32,
     _convert_delay: Option<Timeout>,
+    /// A new Schacht is only unsaved once something was entered
+    touched: bool,
+    unsaved: Unsaved,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -147,10 +151,24 @@ impl Component for CabinetProperties {
             marker: None,
             conversion: 0,
             _convert_delay: None,
+            touched: false,
+            unsaved: Unsaved::new(ctx.link()),
         }
     }
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+        if matches!(
+            msg,
+            Msg::SetName(_)
+                | Msg::SetType(_)
+                | Msg::SetOwner(_)
+                | Msg::SetLagebestimmung(_)
+                | Msg::SetFirst(_)
+                | Msg::SetSecond(_)
+                | Msg::Picked(..)
+        ) {
+            self.touched = true;
+        }
         match msg {
             Msg::Loaded(schacht, choices) => {
                 self.error = None;
@@ -371,6 +389,7 @@ impl Component for CabinetProperties {
     }
 
     fn rendered(&mut self, ctx: &Context<Self>, first_render: bool) {
+        self.unsaved.set(self.has_unsaved());
         if !first_render {
             return;
         }
@@ -583,6 +602,13 @@ impl CabinetProperties {
                 }
             });
         });
+    }
+
+    fn has_unsaved(&self) -> bool {
+        match &self.loaded {
+            Some((None, _)) => self.touched,
+            _ => self.has_changes(),
+        }
     }
 
     /// Whether the fields differ from the stored Schacht (always for a new one).

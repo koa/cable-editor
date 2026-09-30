@@ -3,6 +3,7 @@ use crate::components::{
     dialog::confirm_delete,
     page_layout::{PageLayout, object_title},
     select_duct::SelectDuct,
+    unsaved::Unsaved,
 };
 use crate::{
     components::table::ListModel,
@@ -200,6 +201,7 @@ pub struct EditCable {
     saving: bool,
     path: Option<CablePath>,
     table_state: Rc<RefCell<HashMap<usize, ExpansionState<CablePathColumn>>>>,
+    unsaved: Unsaved,
 }
 #[derive(Debug, Default)]
 pub enum DataState {
@@ -239,8 +241,11 @@ impl Component for EditCable {
     type Message = Msg;
     type Properties = EditCableProperties;
 
-    fn create(_ctx: &Context<Self>) -> Self {
-        Self::default()
+    fn create(ctx: &Context<Self>) -> Self {
+        Self {
+            unsaved: Unsaved::new(ctx.link()),
+            ..Self::default()
+        }
     }
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
@@ -449,6 +454,9 @@ impl EditCable {
     }
 
     fn view_content(&self, ctx: &Context<Self>) -> Html {
+        if !matches!(self.state, DataState::Data(_)) {
+            self.unsaved.set(false);
+        }
         match &self.state {
             DataState::Data(data) => {
                 // Readers see the cable without the means to change it
@@ -524,7 +532,10 @@ impl EditCable {
                         .path
                         .as_ref()
                         .map(|p| p.duct_sequence().collect::<Vec<_>>());
-                has_changes |= path_changed || is_new;
+                has_changes |= path_changed;
+                // A new cable that is still blank has nothing to lose
+                self.unsaved.set(has_changes && !readonly);
+                has_changes |= is_new;
                 // A cable needs at least one segment
                 let no_path = self.path.is_none();
                 has_error |= no_path;

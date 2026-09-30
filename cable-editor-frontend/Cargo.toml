@@ -18,7 +18,7 @@ serde_json = "1.0"
 cable-editor-common = { path = "../cable-editor-common" }
 log = "0.4"
 wasm-logger = "0.2"
-web-sys = { version = "0.3", features = ["AddEventListenerOptions", "Blob", "BlobPropertyBag", "CanvasRenderingContext2d", "Coordinates", "Document", "DomParser", "Element", "File", "FileList", "FontFaceSet", "Geolocation", "HtmlAnchorElement", "HtmlCanvasElement", "HtmlCollection", "HtmlInputElement", "Location", "MediaQueryList", "Navigator", "Position", "PositionError", "PositionOptions", "Storage", "SupportedType", "TextMetrics", "TouchEvent", "TouchList", "Url", "Window"] }
+web-sys = { version = "0.3", features = ["AddEventListenerOptions", "BeforeUnloadEvent", "Blob", "BlobPropertyBag", "CanvasRenderingContext2d", "Coordinates", "Document", "DomParser", "Element", "File", "FileList", "FontFaceSet", "Geolocation", "History", "HtmlAnchorElement", "HtmlCanvasElement", "HtmlCollection", "HtmlInputElement", "Location", "MediaQueryList", "Navigator", "PopStateEvent", "Position", "PositionError", "PositionOptions", "Storage", "SupportedType", "TextMetrics", "TouchEvent", "TouchList", "Url", "Window"] }
 thiserror = "2.0"
 
 yew-oauth2 = { version = "0.14",features = ["openid"] }
@@ -28,6 +28,7 @@ cynic = { version = "3", features = ["http-reqwest"] }
 
 leaflet = "0.5.0"
 gloo-utils = "0.2.0"
+gloo-events = "0.3"
 gloo-timers = "0.3"
 
 futures = "0.3"

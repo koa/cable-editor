@@ -1,7 +1,7 @@
 use crate::graphql::authenticated::list_plans::BASELINE_PLAN_ID;
 use crate::{
     components::table::{TreeModel, TreeState, TreeTable, TreeTableColumn, TreeTableContext},
-    components::{icon_button::IconButton, plan_link::PlanLink},
+    components::{icon_button::IconButton, plan_link::PlanLink, unsaved::Unsaved},
     create_simple_dialog,
     error::FrontendError,
     graphql::authenticated::{IdOrNew, cabinet_details::PanelTreeEntry},
@@ -33,6 +33,7 @@ pub struct EditCabinet {
     model: TreeModel<IdOrNew, PanelEntry>,
     loaded_panels: Option<Box<[PanelTreeEntry]>>,
     netbox_devices: Rc<[OverviewNetboxDevice]>,
+    unsaved: Unsaved,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
@@ -193,8 +194,9 @@ impl Component for EditCabinet {
     type Message = Msg;
     type Properties = EditCabinetProps;
 
-    fn create(_ctx: &Context<Self>) -> Self {
+    fn create(ctx: &Context<Self>) -> Self {
         Self {
+            unsaved: Unsaved::new(ctx.link()),
             loading: true,
             error: None,
             state: TreeState::default(),
@@ -506,6 +508,7 @@ impl Component for EditCabinet {
     }
 
     fn rendered(&mut self, ctx: &Context<Self>, first_render: bool) {
+        self.unsaved.set(!self.loading && self.has_changes());
         if first_render {
             ctx.link().send_message(Msg::FetchPanels);
         }

@@ -6,6 +6,7 @@ use crate::{
     components::{
         dialog::confirm_delete,
         page_layout::{PageLayout, object_title},
+        unsaved::Unsaved,
     },
     error::FrontendError,
     graphql::authenticated::{
@@ -44,6 +45,9 @@ pub struct CabinetTypeProperties {
     icon: Option<String>,
     saving: bool,
     file_input: NodeRef,
+    /// A new type is only unsaved once something was entered
+    touched: bool,
+    unsaved: Unsaved,
 }
 
 pub enum Msg {
@@ -84,10 +88,22 @@ impl Component for CabinetTypeProperties {
             icon: None,
             saving: false,
             file_input: NodeRef::default(),
+            touched: false,
+            unsaved: Unsaved::new(ctx.link()),
         }
     }
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+        if matches!(
+            msg,
+            Msg::SetName(_)
+                | Msg::SetObjektart(_)
+                | Msg::SetDimension1(_)
+                | Msg::SetDimension2(_)
+                | Msg::IconRead(..)
+        ) {
+            self.touched = true;
+        }
         match msg {
             Msg::Loaded(Ok(typ)) => {
                 self.error = None;
@@ -176,6 +192,10 @@ impl Component for CabinetTypeProperties {
         true
     }
 
+    fn rendered(&mut self, ctx: &Context<Self>, _first_render: bool) {
+        self.unsaved.set(self.has_unsaved(ctx));
+    }
+
     fn changed(&mut self, ctx: &Context<Self>, old_props: &Self::Properties) -> bool {
         // A new type's temporary id comes from the route, so it's stable
         let other = ctx.props().typ != old_props.typ;
@@ -257,6 +277,14 @@ impl CabinetTypeProperties {
             dimension1_mm: parse_dimension(&self.dimension1)?,
             dimension2_mm: parse_dimension(&self.dimension2)?,
         })
+    }
+
+    fn has_unsaved(&self, ctx: &Context<Self>) -> bool {
+        if self.is_new(ctx) {
+            self.touched
+        } else {
+            self.has_changes(ctx)
+        }
     }
 
     fn has_changes(&self, ctx: &Context<Self>) -> bool {
