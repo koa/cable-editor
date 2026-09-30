@@ -124,7 +124,7 @@ async fn send<Q, V: Serialize>(
 /// Sends `operation` to `url`, with the bearer token of `credentials` if logged in, and returns
 /// the data of the response. Its first error: `FrontendError::User` if the backend refused the
 /// request, else `FrontendError::Graphql` with the messages and their origins; a response with
-/// neither data nor errors: `FrontendError::NotFound`; data that doesn't fit the query:
+/// neither data nor errors: `FrontendError::EmptyResponse`; data that doesn't fit the query:
 /// `FrontendError::InvalidResponse`.
 async fn run<Q, V>(
     url: &str,
@@ -174,6 +174,6 @@ where
         GraphQlResponse {
             data: Some(data), ..
         } => serde_json::from_value(data).map_err(FrontendError::InvalidResponse),
-        GraphQlResponse { data: None, .. } => Err(FrontendError::NotFound),
+        GraphQlResponse { data: None, .. } => Err(FrontendError::EmptyResponse),
     }
 }

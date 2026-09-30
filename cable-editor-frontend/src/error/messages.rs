@@ -14,7 +14,7 @@ pub fn user_error(error: &UserError) -> String {
     match error {
         UserError::NotLoggedIn => "Nicht angemeldet, bitte die Seite neu laden".into(),
         UserError::NotAllowed => "Keine Berechtigung für diese Änderung".into(),
-        UserError::NotFound { kind, id } => format!("{} {id} nicht gefunden", object(*kind)),
+        UserError::NotFound { kind, id } => not_found(*kind, *id),
         UserError::InvalidRequest => "Ungültige Anfrage (ein Fehler der App)".into(),
 
         UserError::NameMissing => "Der Name fehlt".into(),
@@ -143,6 +143,11 @@ pub fn user_error(error: &UserError) -> String {
 }
 
 /// The kind of object in a sentence, e.g. "Schacht".
+/// An object that doesn't exist, whether the backend or a page found out.
+pub fn not_found(kind: ObjectKind, id: i64) -> String {
+    format!("{} {id} nicht gefunden", object(kind))
+}
+
 fn object(kind: ObjectKind) -> &'static str {
     match kind {
         ObjectKind::Schacht => "Schacht",

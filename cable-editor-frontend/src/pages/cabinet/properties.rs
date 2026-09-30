@@ -20,6 +20,7 @@ use crate::{
     pages::router::{CabinetView, PlanView},
     util::{get_credentials, get_role, navigate, toast_error, toast_success},
 };
+use cable_editor_common::ObjectKind;
 use gloo_timers::callback::Timeout;
 use leaflet::{DragEvents, Marker, MarkerOptions, MouseEvent};
 use patternfly_yew::prelude::{
@@ -345,8 +346,10 @@ impl Component for CabinetProperties {
         let content = if let Some(error) = &self.error {
             error.into_prop_value()
         } else if let Some((stored, choices)) = &self.loaded {
-            if stored.is_none() && !is_new {
-                (&FrontendError::NotFound).into_prop_value()
+            if stored.is_none()
+                && let IdOrNew::Id(id) = ctx.props().cabinet
+            {
+                (&FrontendError::not_found(ObjectKind::Schacht, id)).into_prop_value()
             } else {
                 self.view_form(ctx, choices)
             }

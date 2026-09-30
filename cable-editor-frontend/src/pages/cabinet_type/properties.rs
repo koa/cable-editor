@@ -19,6 +19,7 @@ use crate::{
     pages::router::PlanView,
     util::{get_credentials, get_role, navigate, toast_error, toast_success},
 };
+use cable_editor_common::ObjectKind;
 use patternfly_yew::prelude::{
     ActionGroup, Button, ButtonVariant, Form, FormGroup, FormSelect, FormSelectOption, Icon,
     Spinner, TextInput, TextInputType,
@@ -191,8 +192,10 @@ impl Component for CabinetTypeProperties {
         let content = if let Some(error) = &self.error {
             error.into_prop_value()
         } else if let Some(stored) = &self.loaded {
-            if stored.is_none() && !is_new {
-                (&FrontendError::NotFound).into_prop_value()
+            if stored.is_none()
+                && let IdOrNew::Id(id) = ctx.props().typ
+            {
+                (&FrontendError::not_found(ObjectKind::SchachtTyp, id)).into_prop_value()
             } else {
                 self.view_form(ctx)
             }

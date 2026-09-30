@@ -1,6 +1,7 @@
 use crate::error::FrontendError;
 use crate::graphql::authenticated::schema;
 use crate::graphql::query;
+use cable_editor_common::ObjectKind;
 use yew_oauth2::context::OAuth2Context;
 
 #[derive(cynic::QueryVariables, Debug)]
@@ -58,6 +59,6 @@ impl PanelHierarchy {
         query::<FetchPanelQuery, _>(FetchPanelVariables { panel_id }, credentials)
             .await?
             .panel
-            .ok_or(FrontendError::NotFound)
+            .ok_or(FrontendError::not_found(ObjectKind::Panel, panel_id))
     }
 }

@@ -12,6 +12,7 @@ use crate::{
     icons::{IconFiberConnected, IconFiberCut, IconLink, IconUnlink},
     util::get_credentials,
 };
+use cable_editor_common::ObjectKind;
 
 use crate::graphql::authenticated::connections::{FiberOwnEnd, PortUsageUpdateAction, UsedEndPort};
 use itertools::Itertools;
@@ -474,7 +475,10 @@ impl Component for LoopPortEditor {
             }
             Msg::DataFetched(None) => {
                 self.loading = false;
-                self.error = Some(FrontendError::NotFound);
+                self.error = Some(FrontendError::not_found(
+                    ObjectKind::Panel,
+                    ctx.props().panel_id,
+                ));
                 true
             }
         }

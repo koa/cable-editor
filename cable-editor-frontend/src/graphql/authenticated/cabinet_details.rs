@@ -2,6 +2,7 @@ use crate::{
     error::FrontendError,
     graphql::{authenticated::schema, mutate, query},
 };
+use cable_editor_common::ObjectKind;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use yew_oauth2::prelude::OAuth2Context;
 
@@ -38,7 +39,7 @@ pub async fn fetch_schacht_name(
         .await?
         .schacht
         .map(|s| s.name)
-        .ok_or(FrontendError::NotFound)
+        .ok_or(FrontendError::not_found(ObjectKind::Schacht, id))
 }
 
 #[derive(cynic::QueryFragment, Debug)]

@@ -8,6 +8,7 @@ use crate::{
         query,
     },
 };
+use cable_editor_common::ObjectKind;
 use yew_oauth2::context::OAuth2Context;
 
 #[derive(cynic::QueryVariables)]
@@ -152,6 +153,6 @@ impl SchachtCables {
         query::<FetchSchachtCablesQuery, _>(Variables { id }, credentials)
             .await?
             .schacht
-            .ok_or(FrontendError::NotFound)
+            .ok_or(FrontendError::not_found(ObjectKind::Schacht, id))
     }
 }

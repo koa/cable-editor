@@ -5,6 +5,7 @@ use crate::{
         mutate, query,
     },
 };
+use cable_editor_common::ObjectKind;
 use yew_oauth2::context::OAuth2Context;
 
 #[derive(cynic::InputObject, Debug, Clone)]
@@ -139,7 +140,10 @@ impl NetboxDevicePort {
         )
         .await?
         .netbox_device
-        .ok_or(FrontendError::NotFound)?
+        .ok_or(FrontendError::not_found(
+            ObjectKind::NetboxDevice,
+            netbox_device_id,
+        ))?
         .rear_ports
         .into_boxed_slice())
     }

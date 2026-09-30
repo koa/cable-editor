@@ -22,6 +22,7 @@ use crate::{
     pages::router::{DuctView, PlanView},
     util::{get_credentials, get_role, navigate, toast_error, toast_success},
 };
+use cable_editor_common::ObjectKind;
 use patternfly_yew::prelude::{
     ActionGroup, Alert, AlertType, Button, ButtonVariant, Checkbox, CheckboxState, Form, FormGroup,
     FormSelect, FormSelectOption, Icon, Spinner, TextInput, TextInputType, ToggleGroup,
@@ -325,8 +326,10 @@ impl Component for EditDuctProperties {
         let content = if let Some(error) = &self.error {
             error.into_prop_value()
         } else if let Some((stored, choices)) = &self.loaded {
-            if stored.is_none() && !is_new {
-                (&FrontendError::NotFound).into_prop_value()
+            if stored.is_none()
+                && let IdOrNew::Id(id) = ctx.props().duct
+            {
+                (&FrontendError::not_found(ObjectKind::Duct, id)).into_prop_value()
             } else {
                 self.view_form(ctx, choices)
             }

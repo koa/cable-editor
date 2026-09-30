@@ -1,7 +1,7 @@
 pub mod messages;
 
 use crate::components::recovery::ErrorRecovery;
-use cable_editor_common::{ErrorOrigin, UserError};
+use cable_editor_common::{ErrorOrigin, ObjectKind, UserError};
 use cynic::http::CynicReqwestError;
 use patternfly_yew::prelude::{Alert, AlertType};
 use reqwest::header::InvalidHeaderValue;
@@ -52,10 +52,13 @@ pub enum FrontendError {
     /// The data of a response doesn't fit the query (e.g. a new version changed the schema)
     #[error("Invalid response of the server: {0}")]
     InvalidResponse(serde_json::Error),
-    #[error("Plan not found: {0}")]
-    PlanNotFound(i32),
-    #[error("Expected data not found")]
-    NotFound,
+    /// The response has neither data nor errors
+    #[error("Empty response of the server")]
+    EmptyResponse,
+    /// An object the page asked for doesn't exist (the backend's refusal for the same reason
+    /// is `User(UserError::NotFound)`, worded the same)
+    #[error("{}", messages::not_found(*.kind, *.id))]
+    NotFound { kind: ObjectKind, id: i64 },
     #[error("Cannot determine the address of the server")]
     NoServerAddress,
     #[error("The panels of the Schacht don't form a tree")]
@@ -76,6 +79,14 @@ pub enum FrontendError {
 }
 
 impl FrontendError {
+    /// The object `kind` with `id` doesn't exist.
+    pub fn not_found(kind: ObjectKind, id: i32) -> Self {
+        FrontendError::NotFound {
+            kind,
+            id: id.into(),
+        }
+    }
+
     /// The message, with the technical cause where there is one.
     pub fn title(&self) -> String {
         match self {
@@ -97,8 +108,8 @@ impl FrontendError {
             FrontendError::InvalidResponse(e) => {
                 format!("Antwort des Servers nicht lesbar: {e}")
             }
-            FrontendError::PlanNotFound(id) => format!("Plan {id} existiert nicht"),
-            FrontendError::NotFound => "Daten nicht gefunden".to_string(),
+            FrontendError::EmptyResponse => "Leere Antwort des Servers".to_string(),
+            FrontendError::NotFound { kind, id } => messages::not_found(*kind, *id),
             FrontendError::NoServerAddress => {
                 "Adresse des Servers konnte nicht bestimmt werden".to_string()
             }

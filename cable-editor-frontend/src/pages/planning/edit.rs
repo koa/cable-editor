@@ -14,6 +14,7 @@ use crate::{
     pages::router::AppRoute,
     util::{get_backdrop, get_credentials, get_role, toast_success},
 };
+use cable_editor_common::ObjectKind;
 use patternfly_yew::prelude::{
     ActionGroup, Alert, AlertType, Backdrop, Bullseye, Button, ButtonVariant, Cell, CellContext,
     Color, ExpansionState, Form, FormGroup, Label, Level, MemoizedTableModel, Modal, ModalVariant,
@@ -171,7 +172,10 @@ impl Component for EditPlan {
             }
             Msg::DataFetched(None) => {
                 self.loading = false;
-                self.error = Some(FrontendError::NotFound);
+                self.error = Some(FrontendError::not_found(
+                    ObjectKind::Plan,
+                    ctx.props().plan_id,
+                ));
                 true
             }
             Msg::UpdateNameInput(name) => {

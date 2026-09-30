@@ -14,6 +14,7 @@ use crate::{
     pages::router::{CabinetView, DuctView, PlanView},
     util::{get_credentials, get_role, navigate},
 };
+use cable_editor_common::ObjectKind;
 use patternfly_yew::prelude::{DescriptionGroup, DescriptionList, Spinner};
 use wasm_bindgen::JsCast;
 use yew::{Component, Context, Html, Properties, html, html::IntoPropValue, platform::spawn_local};
@@ -96,7 +97,8 @@ impl Component for ShowDuct {
         } else {
             match &self.duct {
                 None => html!(<Spinner/>),
-                Some(None) => (&FrontendError::NotFound).into_prop_value(),
+                Some(None) => (&FrontendError::not_found(ObjectKind::Duct, ctx.props().duct_id))
+                    .into_prop_value(),
                 Some(Some(duct)) => {
                     let edit = PlanView::Duct {
                         id: duct.id,

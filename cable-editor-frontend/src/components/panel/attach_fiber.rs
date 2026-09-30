@@ -13,6 +13,7 @@ use crate::{
     icons::IconLink,
     util::get_credentials,
 };
+use cable_editor_common::ObjectKind;
 use itertools::Itertools;
 use patternfly_yew::prelude::{
     Alert, AlertType, Button, ButtonVariant, Cell, CellContext, ExpansionState, FormSelect,
@@ -137,7 +138,10 @@ impl Component for AttachFiber {
             }
             Msg::DataFetched(None) => {
                 self.loading = false;
-                self.error = Some(FrontendError::NotFound);
+                self.error = Some(FrontendError::not_found(
+                    ObjectKind::Panel,
+                    ctx.props().panel_id,
+                ));
                 true
             }
             Msg::StartEdit(port_id, side) => {
