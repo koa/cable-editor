@@ -40,3 +40,7 @@ brady-web-sdk = { git = "https://git.panter.ch/open-source/brady-web-sdk-rs.git"
 cable-editor-backend = { path = "../cable-editor-backend" }
 anyhow = "1.0"
 cynic-codegen = { version = "3" }
+
+[lints.clippy]
+disallowed_methods = "deny"
+disallowed_macros = "deny"

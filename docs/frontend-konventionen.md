@@ -1,6 +1,6 @@
 # Konzept: Einheitliche Bedienung im Frontend
 
-Stand: 30.09.2026 – offene Fragen entschieden, noch nicht umgesetzt.
+Stand: 30.09.2026 – offene Fragen entschieden; das Prüfgerüst steht, die Schritte unter „Umsetzung“ folgen.
 
 Diese Regeln gelten für jede neue oder geänderte Seite. Sie stammen aus einer Durchsicht des
 ganzen Frontends; wo der Code noch abweicht, steht es unter „Umsetzung“. Wie Fehler entstehen
@@ -132,9 +132,44 @@ und was das Backend liefert, steht in `fehlermeldungen.md`, der Aufbau des Bread
 - **Dialoge mit Formular:** „Speichern“ oder „Anlegen“ und „Abbrechen“; Enter sendet ab,
   Abbrechen und Esc schliessen ohne Rückfrage.
 
+## Prüfung
+
+Die Einhaltung wird nur lokal geprüft, nicht in der CI. Vor jedem Review einer Änderung am
+Frontend läuft `local/konventionen/run.sh` (baut das Frontend, startet den Mock einmal je Rolle
+`ADMIN`, `PLANNER`, `READER`); `SKIP_BUILD=1` nimmt das vorhandene `dist/`, `VERBOSE=1` zeigt die
+noch nicht eingeschalteten Prüfungen einzeln. Drei Ebenen, von der strengsten zur weichsten:
+
+| Ebene | Werkzeug | Prüft |
+| --- | --- | --- |
+| Compiler | `cargo clippy -p cable-editor-frontend --target wasm32-unknown-unknown` (`cable-editor-frontend/clippy.toml`, `[lints.clippy]`) | keine Browser-Dialoge (`alert`, `confirm`, `prompt`), kein `log::error!` (Fehler gehören in die Oberfläche), ab Schritt 1 keine Panics; ab Schritt 4 kein rohes `Link` |
+| Quelltext | `local/konventionen/static.mjs` | Beschriftungen (Abschnitt 1), Fehler als `FrontendError` und Toast-Titel (4), Symbolknöpfe mit `aria_label` und `title`, „Seite drucken“ nur an einer Stelle, `PlanLink` statt `Link<AppRoute>` (3) |
+| Browser | `local/konventionen/pages.mjs` (Playwright gegen den Mock) | jede Route als Handy und Desktop: keine Konsolenfehler, kein waagerechter Überlauf, genau eine sichtbare `h1`, höchstens ein aktiver Eintrag je Breadcrumb-Menü, „Keine Berechtigung“ ohne die nötige Rolle, jeder Knopf und Link hat einen Namen |
+
+- Eine Prüfung mit „ausstehend“ gehört zu einem Umsetzungsschritt, der noch fehlt; der Commit
+  dieses Schritts schaltet sie ein (`step` in den Tabellen der Skripte, Lint in `Cargo.toml`), damit
+  die Prüfung danach immer grün ist.
+- Eine Ausnahme steht im Code und hat einen Grund: `// konventionen:ignore <regel> <Grund>` in der
+  Zeile davor, bei Clippy `#[allow(...)]` mit einem Satz. `run.sh` nennt ihre Zahl.
+- `pages.mjs` hat für jede Route der Enums in `pages/router.rs` einen Eintrag (`ROUTES`) und bricht
+  ab, wenn einer fehlt oder überzählig ist; eine neue Route gehört also mit ihrem Eintrag in
+  denselben Commit.
+- `MOCK_FAIL=updateCable,deleteCable` (oder `*`) lässt Mutationen des Mocks wie bei einer
+  kaputten Datenbank fehlschlagen, `GET /mock/fail?mutations=…` ändert das im laufenden Mock.
+- Jede neue Regel dieser Datei kommt im selben Commit in eine der Ebenen oder in die Prüfliste.
+
+Was sich nicht automatisch prüfen lässt, geht der Reviewer bei jeder Änderung durch:
+
+- [ ] Beschriftungen sind kurze Verben und stimmen mit Abschnitt 1 überein; Sonderfälle sind
+      begründet.
+- [ ] Jede Aktion, die Daten ändert, endet mit Toast (Erfolg) oder Fehler im Muster von 4 und 5.
+- [ ] Jedes Objekt, das die Seite zeigt, ist verlinkt (Abschnitt 3), Ausnahme: Formulare.
+- [ ] Das Menü bietet nur eine Ebene an, die Gruppierung der Bereiche stimmt (Abschnitt 2).
+- [ ] Texte sind verständlich, deutsch und ohne technische Wörter, die Benutzer nicht kennen.
+- [ ] Auf dem Handy (Screenshot) ist alles bedienbar; kein Text ist abgeschnitten.
+
 ## Umsetzung
 
-Schrittweise, je ein Commit, jeder vor dem Commit durchgesehen:
+Schrittweise, je ein Commit, jeder vor dem Commit durchgesehen (0 ist das Prüfgerüst, erledigt):
 
 1. Fehler als `FrontendError`: Alerts mit `to_string()`, Debug-Ausgaben, eigene
    „nicht gefunden“-Texte, `expect` im Browserzustand, Fehler der Editoren als Toast.

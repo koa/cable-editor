@@ -1,0 +1,12 @@
+# Rules of docs/frontend-konventionen.md that Clippy can enforce (see "Prüfung" there). Lints are
+# switched on in Cargo.toml as soon as the code has no hits; the rest is in local/konventionen.
+disallowed-methods = [
+    { path = "web_sys::Window::alert", reason = "the app has its own dialogs (components/dialog.rs)" },
+    { path = "web_sys::Window::alert_with_message", reason = "the app has its own dialogs (components/dialog.rs)" },
+    { path = "web_sys::Window::confirm_with_message", reason = "the app has its own dialogs (components/dialog.rs)" },
+    { path = "web_sys::Window::prompt_with_message", reason = "the app has its own dialogs (components/dialog.rs)" },
+    { path = "web_sys::Window::prompt_with_message_and_default", reason = "the app has its own dialogs (components/dialog.rs)" },
+]
+disallowed-macros = [
+    { path = "log::error", reason = "errors belong in the UI as FrontendError (alert or toast), never only in the console" },
+]

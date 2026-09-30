@@ -20,6 +20,10 @@ const ROLE = process.env.MOCK_ROLE ?? 'ADMIN';
 // Result of the last Netbox sync (docs/netbox-sync.md): OK (default), ISSUES, FEHLER or none
 // (NEU, no run yet)
 const NETBOX = process.env.MOCK_NETBOX ?? 'OK';
+// Mutations failing with an unexpected server error (extensions.origin) like a broken database,
+// separated by commas ("*": all), to check how the frontend shows failures. Changed while running
+// by GET /mock/fail?mutations=updateCable,deleteCable (empty: none)
+let failing = new Set((process.env.MOCK_FAIL ?? '').split(',').filter(Boolean));
 const ORIGIN = `http://localhost:${PORT}`;
 const ISSUER = `${ORIGIN}/realms/cable`;
 const CLIENT_ID = 'cable-editor';
@@ -615,6 +619,20 @@ const root = {
   },
 };
 
+// The mutations of MOCK_FAIL fail with an unexpected error, as a diesel error would
+const isMutation = (name) => /^(create|update|delete|set|implement|sync|download)/.test(name);
+for (const [name, resolver] of Object.entries(root)) {
+  if (typeof resolver !== 'function' || !isMutation(name)) continue;
+  root[name] = (...args) => {
+    if (failing.has('*') || failing.has(name)) {
+      throw new GraphQLError('db error', {
+        extensions: { origin: { library: 'diesel', location: `mock/${name}.rs:1`, id: 'mock-0001' } },
+      });
+    }
+    return resolver(...args);
+  };
+}
+
 // graphql-js 16 predefines @oneOf
 const load = (f) => fs.readFileSync(path.join(SCHEMA_DIR, f), 'utf8').replace(/"""[^"]*"""\s*directive @oneOf[^\n]*\n/, '').replace(/ @oneOf/g, '');
 const authSchema = buildSchema(load('authenticated_schema.graphql'));
@@ -643,6 +661,10 @@ http.createServer(async (req, res) => {
       const result = await graphql({ schema: anon ? anonSchema : authSchema, source: query, rootValue: anon ? anonRoot : root, variableValues: variables, operationName });
       if (result.errors) console.log('GQL ERR', operationName, JSON.stringify(result.errors).slice(0, 500));
       return json(res, result);
+    }
+    if (p === '/mock/fail') {
+      failing = new Set((url.searchParams.get('mutations') ?? '').split(',').filter(Boolean));
+      return json(res, { failing: [...failing] });
     }
     if (p === '/realms/cable/.well-known/openid-configuration') {
       return json(res, {
