@@ -99,9 +99,8 @@ const rules = [
   },
   {
     id: 'plan-statt-planung',
-    step: 5,
     message: 'in der Oberfläche heisst der Plan „Planung“',
-    find: (f) => grep(f, /"[^"]*\bPlan\b[^"]*"/).filter((line) => !/^\s*(use|mod|#\[)/.test(f.lines[line])).map((line) => ({ line })),
+    find: (f) => grep(f, /"[^"]*\b(Plan|Plans|Pläne|Plänen)\b[^"]*"/).filter((line) => !/^\s*(use|mod|#\[)/.test(f.lines[line])).map((line) => ({ line })),
   },
   {
     id: 'fehler-als-text',

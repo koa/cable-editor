@@ -2,27 +2,26 @@ use crate::{
     components::{
         links::{CableLink, SchachtLink},
         page_layout::PageLayout,
+        plan_link::PlanLink,
         table::ListModel,
     },
     error::FrontendError,
     graphql::authenticated::{
         current_user::Role,
-        list_cables::{CableListEntry, create_cable, fetch_cables_list},
+        list_cables::{CableListEntry, fetch_cables_list},
     },
-    util::{get_backdrop, get_credentials, get_role, toast_success},
+    pages::router::PlanView,
+    util::{get_credentials, get_role},
 };
 use patternfly_yew::prelude::{
-    ActionGroup, Backdrop, Bullseye, Button, ButtonVariant, Cell, CellContext, ExpansionState,
-    Form, FormGroup, MemoizedTableModel, Modal, ModalVariant, Order, Spinner, Table, TableColumn,
-    TableEntryRenderer, TableGridMode, TableHeader, TableHeaderSortBy, TableMode, TextInput,
+    Cell, CellContext, ExpansionState, MemoizedTableModel, Order, Spinner, Table, TableColumn,
+    TableEntryRenderer, TableGridMode, TableHeader, TableHeaderSortBy, TableMode,
 };
 use std::{cell::RefCell, cmp::Ordering, collections::HashMap, rc::Rc};
-use web_sys::SubmitEvent;
+use uuid::Uuid;
 use yew::{
-    Callback, Component, Context, Html, Properties, html, html::IntoPropValue, html_nested,
-    platform::spawn_local,
+    Component, Context, Html, html, html::IntoPropValue, html_nested, platform::spawn_local,
 };
-use yew_oauth2::prelude::OAuth2Context;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Columns {
@@ -80,8 +79,6 @@ pub enum Msg {
     Fetch,
     Loaded(Result<Box<[CableListEntry]>, FrontendError>),
     Sort(TableHeaderSortBy<Columns>),
-    AddCable,
-    Created,
 }
 
 impl Component for ListOfCables {
@@ -117,36 +114,6 @@ impl Component for ListOfCables {
                 self.sort = Some(sort);
                 self.sort_cables();
                 true
-            }
-            Msg::Created => {
-                toast_success(ctx.link(), "Kabel angelegt");
-                // Reload, so the new cable shows up
-                ctx.link().send_message(Msg::Fetch);
-                false
-            }
-            Msg::AddCable => {
-                if let Some(backdrop) = get_backdrop(ctx.link()) {
-                    let on_close = {
-                        let backdrop = backdrop.clone();
-                        Callback::from(move |()| backdrop.close())
-                    };
-                    // The dialog is rendered by the backdrop viewer, whose context has no toaster
-                    let on_created = {
-                        let backdrop = backdrop.clone();
-                        ctx.link().callback(move |()| {
-                            backdrop.close();
-                            Msg::Created
-                        })
-                    };
-                    backdrop.open(Backdrop::new(html! {
-                        <Bullseye>
-                            <Modal title="Neues Kabel" variant={ModalVariant::Small}>
-                                <AddCable {on_close} {on_created}/>
-                            </Modal>
-                        </Bullseye>
-                    }));
-                }
-                false
             }
         }
     }
@@ -220,90 +187,14 @@ impl ListOfCables {
                     {entries}
                 />
                 if get_role(ctx.link()) >= Role::Planner {
-                    <Button variant={ButtonVariant::Primary} label="Neues Kabel" onclick={ctx.link().callback(|_| Msg::AddCable)}/>
+                    // Not stretched to the width of the page's content
+                    <div>
+                        <PlanLink to={PlanView::NewCable { id: Uuid::new_v4() }} class="pf-v6-c-button pf-m-primary">
+                            {"Neues Kabel"}
+                        </PlanLink>
+                    </div>
                 }
             </>
-        }
-    }
-}
-
-struct AddCable {
-    cable_name: String,
-    error: Option<FrontendError>,
-}
-enum AddCableMsg {
-    Save,
-    Cancel,
-    UpdateText(String),
-    Error(FrontendError),
-}
-#[derive(Properties, PartialEq)]
-struct AddCableProps {
-    on_close: Callback<()>,
-    on_created: Callback<()>,
-}
-impl Component for AddCable {
-    type Message = AddCableMsg;
-    type Properties = AddCableProps;
-
-    fn create(_ctx: &Context<Self>) -> Self {
-        Self {
-            cable_name: "".to_string(),
-            error: None,
-        }
-    }
-
-    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
-        match msg {
-            AddCableMsg::Save => {
-                let name = self.cable_name.clone();
-                let scope = ctx.link().clone();
-                let on_created = ctx.props().on_created.clone();
-                if let Some((credentials, _)) = scope.context::<OAuth2Context>(Callback::noop()) {
-                    spawn_local(async move {
-                        match create_cable(Some(&credentials), name).await {
-                            Ok(_) => {
-                                on_created.emit(());
-                            }
-                            Err(error) => {
-                                scope.send_message(AddCableMsg::Error(error));
-                            }
-                        }
-                    });
-                }
-                false
-            }
-            AddCableMsg::Cancel => {
-                ctx.props().on_close.emit(());
-                true
-            }
-            AddCableMsg::UpdateText(text) => {
-                self.cable_name = text;
-                true
-            }
-            AddCableMsg::Error(error) => {
-                self.error = Some(error);
-                true
-            }
-        }
-    }
-
-    fn view(&self, ctx: &Context<Self>) -> Html {
-        let value = self.cable_name.clone();
-        let disabled = value.is_empty();
-        html! {
-            <Form onsubmit={ctx.link().callback(|event: SubmitEvent|{
-                event.prevent_default();
-                AddCableMsg::Save
-            })}>
-                <FormGroup label="name" required=true>
-                    <TextInput required=true {value} onchange={ctx.link().callback(|text|{AddCableMsg::UpdateText(text)})}/>
-                </FormGroup>
-                <ActionGroup>
-                    <Button variant={ButtonVariant::Primary} label="Anlegen" onclick={ctx.link().callback(|_|{AddCableMsg::Save})} {disabled}/>
-                    <Button variant={ButtonVariant::Secondary} label="Abbrechen" onclick={ctx.link().callback(|_|{AddCableMsg::Cancel})}/>
-                </ActionGroup>
-            </Form>
         }
     }
 }

@@ -77,8 +77,8 @@ impl Component for ListPlan {
                         .props()
                         .plan_id
                         .and_then(|pid| plans.iter().find(|plan| plan.id == pid))
-                        .map(|plan| Cow::Owned(format!("Plan: {}", plan.name)))
-                        .unwrap_or(Cow::Borrowed("Plan: - "));
+                        .map(|plan| Cow::Owned(format!("Planung: {}", plan.name)))
+                        .unwrap_or(Cow::Borrowed("Planung: - "));
                     let view = ctx
                         .props()
                         .view

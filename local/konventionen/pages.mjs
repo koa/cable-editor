@@ -30,6 +30,7 @@ const ROUTES = [
   { v: ['CabinetView::Properties'], path: '/plan/0/cabinet/1/properties' },
   { v: ['CabinetView::Edit'], path: '/plan/0/cabinet/1/edit', needs: 'PLANNER' },
   { v: ['PlanView::ListOfCables'], path: '/plan/0/listofcables' },
+  { v: ['PlanView::NewCable'], path: `/plan/0/newcable/${NEW_ID}`, needs: 'PLANNER' },
   { v: ['PlanView::Cable', 'CableView::Edit'], path: '/plan/0/cable/11/edit' },
   { v: ['PlanView::Map'], path: '/plan/0/map' },
   { v: ['PlanView::ListOfDucts'], path: '/plan/0/listofducts' },
@@ -69,6 +70,7 @@ const FAILING_CHANGES = [
   { path: '/plan/0/cabinettype/1', needs: 'ADMIN', input: 0, click: /^Speichern$/, title: /Schachttyp konnte nicht gespeichert werden/ },
   { path: '/plan/1/panel/22/edit', needs: 'PLANNER', input: 0, click: /Speichern$/, title: /(Ports|Panel) konnte(n)? nicht gespeichert werden/ },
   { path: '/plan/0/netbox', needs: 'ADMIN', click: /^Jetzt synchronisieren$/, title: /konnte nicht angestossen werden/ },
+  { path: `/plan/0/newcable/${NEW_ID}`, needs: 'PLANNER', input: 0, text: 'Konventionstest', pickDuct: true, click: /^Anlegen$/, title: /Kabel konnte nicht angelegt werden/ },
 ];
 
 // A change that works: a success toast titled "<Objekt> <Vergangenheit>" (Abschnitt 5) and the
@@ -82,7 +84,8 @@ const SUCCESSFUL_CHANGES = [
   { path: '/plan/1/panel/22/edit', needs: 'PLANNER', input: 0, click: /^Speichern$/, untouched: true, title: /^Ports gespeichert$/ },
   { path: '/plan/0/netbox', needs: 'ADMIN', click: /^Jetzt synchronisieren$/, title: /^Sync angestossen$/ },
   { path: '/listofplans', needs: 'PLANNER', click: /^Neue Planung$/, dialog: { input: 0, text: 'Konventionstest', click: /^Anlegen$/ }, title: /^Planung angelegt$/ },
-  { path: '/plan/0/listofcables', needs: 'PLANNER', click: /^Neues Kabel$/, dialog: { input: 0, text: 'Konventionstest', click: /^Anlegen$/ }, title: /^Kabel angelegt$/ },
+  // A new cable needs a duct (its path), its page follows
+  { path: `/plan/0/newcable/${NEW_ID}`, needs: 'PLANNER', input: 0, text: 'Konventionstest', pickDuct: true, click: /^Anlegen$/, title: /^Kabel angelegt$/, then: /^\/plan\/0\/cable\/\d+\/edit$/ },
   // Creates a Schachttyp (its page follows) and deletes it again
   { path: `/plan/0/newcabinettype/${NEW_ID}`, needs: 'ADMIN', input: 0, text: 'Konventionstest', click: /^Anlegen$/, title: /^Schachttyp angelegt$/, then: /^\/plan\/0\/cabinettype\/\d+$/,
     next: { click: /^Löschen$/, confirm: /^(Ja|Löschen)$/, title: /^Schachttyp gelöscht$/, then: '/plan/0/listofcabinettypes' } },
@@ -238,6 +241,13 @@ async function checkNotFound(browser, entry) {
   });
 }
 
+// The path of a new cable: the first duct of the dialog "Trasse auswählen"
+async function pickDuct(page) {
+  await page.locator('main button:visible', { hasText: /^Trasse auswählen$/ }).first().click();
+  await page.locator('.pf-v6-c-modal-box tbody tr').first().click();
+  await page.waitForTimeout(500);
+}
+
 async function checkFailingChange(browser, entry) {
   const where = `${entry.path} „${entry.click.source}“ (Desktop, ${ROLE})`;
   if (RANK[ROLE] < RANK[entry.needs ?? 'READER']) return;
@@ -248,9 +258,10 @@ async function checkFailingChange(browser, entry) {
     let typed;
     if (entry.input !== undefined) {
       const field = page.locator('main input[type=text]:visible').nth(entry.input);
-      typed = `${await field.inputValue()} x`;
+      typed = entry.text ?? `${await field.inputValue()} x`;
       await field.fill(typed);
     }
+    if (entry.pickDuct) await pickDuct(page);
     await page.locator('main button:visible', { hasText: entry.click }).first().click();
     if (entry.confirm) {
       await page.locator('.pf-v6-c-modal-box button', { hasText: entry.confirm }).first().click();
@@ -284,6 +295,7 @@ async function checkSuccessfulChange(browser, entry) {
         const field = page.locator('main input[type=text]:visible').nth(step.input);
         await field.fill(step.text ?? `${await field.inputValue()} x`);
       }
+      if (step.pickDuct) await pickDuct(page);
       await button.click();
       if (step.dialog) {
         await page.locator('.pf-v6-c-modal-box input[type=text]:visible').nth(step.dialog.input).fill(step.dialog.text);

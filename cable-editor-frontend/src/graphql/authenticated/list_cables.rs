@@ -38,16 +38,6 @@ pub async fn fetch_cables_list(
         .list_cable
         .into_boxed_slice())
 }
-pub async fn create_cable(
-    credentials: Option<&OAuth2Context>,
-    name: String,
-) -> Result<CableListEntry, FrontendError> {
-    Ok(
-        mutate::<AddCableMutation, _>(AddCableMutationVariables { name }, credentials)
-            .await?
-            .create_cable,
-    )
-}
 pub async fn delete_cable(
     credentials: Option<&OAuth2Context>,
     cable_id: i32,
@@ -55,18 +45,6 @@ pub async fn delete_cable(
     mutate::<DeleteCableMutation, _>(DeleteCableMutationVariables { cable_id }, credentials)
         .await?;
     Ok(())
-}
-
-#[derive(cynic::QueryVariables)]
-struct AddCableMutationVariables {
-    name: String,
-}
-
-#[derive(cynic::QueryFragment, Debug)]
-#[cynic(graphql_type = "Mutation", variables = "AddCableMutationVariables")]
-struct AddCableMutation {
-    #[arguments( name: $name)]
-    pub create_cable: CableListEntry,
 }
 
 #[derive(cynic::QueryVariables)]

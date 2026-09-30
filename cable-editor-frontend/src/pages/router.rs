@@ -4,7 +4,7 @@ use crate::components::menu::list_cable::ListCable;
 use crate::components::menu::list_duct::ListDuct;
 use crate::components::menu::list_panel::ListPanel;
 use crate::components::menu::list_plan::ListPlan;
-use crate::components::menu::{MenuDropdown, MenuEntry};
+use crate::components::menu::{MenuDropdown, MenuEntry, MenuEntryGroup};
 use crate::{
     components::{
         netbox::NetboxHint,
@@ -156,6 +156,10 @@ pub enum PlanView {
         view: CabinetView,
     },
     ListOfCables,
+    /// Like `NewCabinet`
+    NewCable {
+        id: Uuid,
+    },
     Cable {
         id: i32,
         #[target(nested)]
@@ -196,12 +200,12 @@ impl PlanView {
     pub fn append_breadcrumbs(&self, plan_id: i32, item_contents: &mut Vec<VNode>) {
         // The area the current page lies in: its entry leads to the area's start page
         let (title, area): (Cow<'static, str>, PlanView) = match self {
-            PlanView::Edit => ("Ändern".into(), PlanView::Edit),
+            PlanView::Edit => ("Planung bearbeiten".into(), PlanView::Edit),
             PlanView::Cabinet { .. }
             | PlanView::ListOfCabinets
             | PlanView::NewCabinet { .. }
             | PlanView::Panel { .. } => ("Schacht".into(), PlanView::ListOfCabinets),
-            PlanView::Cable { .. } | PlanView::ListOfCables => {
+            PlanView::Cable { .. } | PlanView::ListOfCables | PlanView::NewCable { .. } => {
                 ("Kabel".into(), PlanView::ListOfCables)
             }
             PlanView::Duct { .. } | PlanView::ListOfDucts | PlanView::NewDuct { .. } => {
@@ -216,27 +220,56 @@ impl PlanView {
             PlanView::Netbox => ("Netbox".into(), PlanView::Netbox),
         };
 
-        // The areas of the plan, each leading to its start page
-        let areas: [(&str, PlanView); 9] = [
-            ("Plan bearbeiten", PlanView::Edit),
-            ("Karte", PlanView::Map),
-            ("Schacht", PlanView::ListOfCabinets),
-            ("Kabel", PlanView::ListOfCables),
-            ("Trasse", PlanView::ListOfDucts),
-            ("Eigentümer", PlanView::ListOfOwners),
-            ("Schachttyp", PlanView::ListOfCabinetTypes),
-            ("Leitungskataster", PlanView::Leitungskataster),
-            ("Netbox", PlanView::Netbox),
+        // The areas of the plan in groups, each leading to its start page
+        let areas: [(&'static str, &[(&str, PlanView)]); 4] = [
+            (
+                "Planung",
+                &[
+                    ("Planung bearbeiten", PlanView::Edit),
+                    ("Karte", PlanView::Map),
+                ],
+            ),
+            (
+                "Objekte",
+                &[
+                    ("Schacht", PlanView::ListOfCabinets),
+                    ("Kabel", PlanView::ListOfCables),
+                    ("Trasse", PlanView::ListOfDucts),
+                ],
+            ),
+            (
+                "Stammdaten",
+                &[
+                    ("Eigentümer", PlanView::ListOfOwners),
+                    ("Schachttyp", PlanView::ListOfCabinetTypes),
+                ],
+            ),
+            (
+                "Lieferung",
+                &[
+                    ("Leitungskataster", PlanView::Leitungskataster),
+                    ("Netbox", PlanView::Netbox),
+                ],
+            ),
         ];
-        let entries = areas
+        let groups = areas
             .into_iter()
-            .map(|(text, view)| MenuEntry {
-                selected: view == area,
-                text: text.into(),
-                target: AppRoute::Plan { plan_id, view },
+            .map(|(title, views)| MenuEntryGroup {
+                title,
+                entries: views
+                    .iter()
+                    .map(|(text, view)| MenuEntry {
+                        selected: *view == area,
+                        text: (*text).into(),
+                        target: AppRoute::Plan {
+                            plan_id,
+                            view: view.clone(),
+                        },
+                    })
+                    .collect(),
             })
             .collect::<Box<[_]>>();
-        item_contents.push(html!(<MenuDropdown {title} {entries}/>));
+        item_contents.push(html!(<MenuDropdown {title} {groups}/>));
 
         match self {
             PlanView::Cabinet { id, view } => {
@@ -252,6 +285,7 @@ impl PlanView {
                     .push(html!(<ListPanel {plan_id} panel_id={*id} view={view.clone()}/>));
             }
             PlanView::NewCabinet { .. } => item_contents.push(html!("Neuer Schacht")),
+            PlanView::NewCable { .. } => item_contents.push(html!("Neues Kabel")),
             PlanView::NewDuct { .. } => item_contents.push(html!("Neue Trasse")),
             PlanView::NewCabinetType { .. } => item_contents.push(html!("Neuer Schachttyp")),
             PlanView::CabinetType { id } => {
@@ -337,6 +371,7 @@ impl PlanView {
                 ..
             }
             | PlanView::NewCabinet { .. }
+            | PlanView::NewCable { .. }
             | PlanView::NewDuct { .. }
             | PlanView::Panel {
                 view: PanelView::Edit | PanelView::Loop | PanelView::Attach,
@@ -357,6 +392,9 @@ impl PlanView {
             }
             PlanView::Cabinet { id, view } => view.content(plan_id, id),
             PlanView::ListOfCables => html! {<ListOfCables/>},
+            PlanView::NewCable { id } => {
+                html!(<EditCable {plan_id} cable={IdOrNew::Temporary(id)}/>)
+            }
             PlanView::Cable { id, view } => view.content(plan_id, id),
             PlanView::Panel { id, view } => view.content(plan_id, id),
             PlanView::Map => html!(<Map {plan_id}/>),
@@ -404,7 +442,7 @@ impl CableView {
     fn content(self, plan_id: i32, cable_id: i32) -> Html {
         match self {
             CableView::Edit => {
-                html!(<EditCable {plan_id} {cable_id}/>)
+                html!(<EditCable {plan_id} cable={IdOrNew::Id(cable_id)}/>)
             }
         }
     }

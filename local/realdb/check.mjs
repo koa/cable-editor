@@ -66,9 +66,8 @@ check('login as admin', user.currentUser.role === 'ADMIN', user.currentUser.role
 // Cables ending at the panels in Berg (4) and Grosswies (6): K1 1→4, K2 4→6, K3 6→7, K4 3→4
 const cables = {};
 for (const [name, path] of [['K1', [1, 2]], ['K2', [4]], ['K3', [6]], ['K4', [3]]]) {
-  const { createCable } = await gql('mutation($n:String!){ createCable(name:$n){ id } }', { n: name });
+  const { createCable } = await gql('mutation($n:String!,$p:[Int!]!){ createCable(name:$n, fibers:{bundleCount:1,fiberCount:12}, path:$p){ id } }', { n: name, p: path });
   cables[name] = createCable.id;
-  await gql('mutation($id:Int!,$p:[Int!]){ updateCable(cableId:$id, fibers:{bundleCount:1,fiberCount:12}, path:$p){ id } }', { id: createCable.id, p: path });
 }
 const panelIds = {};
 for (const schachtId of [4, 6]) {
@@ -218,9 +217,10 @@ await refused('updateCable to an empty path', 'mutation($c:Int!){ updateCable(ca
 await refused('setPortUsage on the baseline', 'mutation($p:Int!){ setPortUsage(planId:0, changes:[{portId:$p, side:FRONT, fiber:{remove:true}}]) }', { p: ports[4][0] }, { code: 'BaselineUnchangeable' });
 await refused('deleteCable attached in the baseline', 'mutation($c:Int!){ deleteCable(cableId:$c) }', { c: cables.K1 }, { code: 'CableAttached', plans: [{ plan: 'Baseline', ports: 6 }] });
 await refused('deleteCable attached in a plan', 'mutation($c:Int!){ deleteCable(cableId:$c) }', { c: cables.K4 }, { code: 'CableAttached', plans: [{ plan: 'Umbau Berg', ports: 3 }] });
-const spare = (await gql('mutation{ createCable(name:"Reserve"){ id } }')).createCable.id;
-await gql('mutation($c:Int!){ updateCable(cableId:$c, path:[5]){ id } }', { c: spare });
-check('deleteCable without ports', (await gql('mutation($c:Int!){ deleteCable(cableId:$c) }', { c: spare })).deleteCable === true);
+await refused('createCable without path', 'mutation{ createCable(name:"Leer", fibers:{bundleCount:1,fiberCount:12}, path:[]){ id } }', {}, { code: 'CableWithoutSegment' });
+const spare = (await gql('mutation{ createCable(name:"Reserve", fibers:{bundleCount:2,fiberCount:6}, path:[5]){ id bundleCount fiberCount } }')).createCable;
+check('createCable stores the structure', spare.bundleCount === 2 && spare.fiberCount === 6);
+check('deleteCable without ports', (await gql('mutation($c:Int!){ deleteCable(cableId:$c) }', { c: spare.id })).deleteCable === true);
 await gql('mutation($d:Int!){ deleteDuct(ductId:$d) }', { d: duct.createDuct.id });
 await gql('mutation($id:Int!){ deleteSchacht(schachtId:$id) }', { id: schachtId });
 

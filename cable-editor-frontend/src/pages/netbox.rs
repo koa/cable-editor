@@ -139,7 +139,7 @@ impl NetboxPage {
                             {" Änderungen warten auf den nächsten Sync."}
                         }
                     </DescriptionGroup>
-                    <DescriptionGroup term="Netbox zeigt den Plan">{active_plan}</DescriptionGroup>
+                    <DescriptionGroup term="Netbox zeigt die Planung">{active_plan}</DescriptionGroup>
                     <DescriptionGroup term="Letzter Sync">{last_run}</DescriptionGroup>
                     if let Some(retry_at) = &sync.retry_at {
                         <DescriptionGroup term="Nächster Versuch">
@@ -148,7 +148,7 @@ impl NetboxPage {
                     }
                 </DescriptionList>
                 <p class="pf-v6-u-mt-md pf-v6-u-color-200">
-                    {"Die Circuits werden nach jeder Änderung des aktiven Plans synchronisiert und zusätzlich alle paar Stunden, was auch Änderungen von Hand in Netbox ausgleicht. Welchen Plan Netbox zeigt, bestimmt die Seite „Ändern“ eines Plans."}
+                    {"Die Circuits werden nach jeder Änderung der aktiven Planung synchronisiert und zusätzlich alle paar Stunden, was auch Änderungen von Hand in Netbox ausgleicht. Welche Planung Netbox zeigt, bestimmt die Seite „Planung bearbeiten“ einer Planung."}
                 </p>
                 <div class="pf-v6-u-mt-md pf-v6-u-mb-xl">
                     <Button

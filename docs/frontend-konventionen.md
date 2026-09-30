@@ -183,15 +183,18 @@ Schrittweise, je ein Commit, jeder vor dem Commit durchgesehen (0 bis 4 sind erl
    einer Planung oder eines Kabels; „Speichern“ und „Anlegen“ nur aktiv bei Änderungen. Ein
    Dialog im Backdrop kennt den Toaster nicht (der `BackdropViewer` liegt ausserhalb des
    `ToastViewer`): er meldet Erfolg und Fehler der Seite, die ihn geöffnet hat, und die zeigt den
-   Toast (`NewPlanDialog`, `AddCable`). Beim Löschen kommt der Toast vor dem Wechsel auf die
+   Toast (`NewPlanDialog`). Beim Löschen kommt der Toast vor dem Wechsel auf die
    Liste.
 4. (erledigt) Links für Schachttyp, Eigentümer und Plan; `PlanLink` statt `Link<AppRoute>`.
    `components/links.rs` hat `SchachtTypLink` (Seite des Typs) und `OwnerLink` (Liste der
    Eigentümer), `plan_link.rs` neben `PlanLink` (bleibt im Plan des Pfads) `PlanNameLink` für
    einen anderen Plan (auf dessen Schächte, wie die Liste der Planungen). Clippy verbietet
    `Link` ausserhalb von `plan_link.rs` (`disallowed-types`).
-5. Bereichsmenü gruppieren; „Planung“ statt „Plan“ in der Oberfläche; das Kabel auf eine Seite für
-   Ansehen, Anlegen und Bearbeiten (`NewCable` mit `IdOrNew`, kein Dialog).
+5. (erledigt) Bereichsmenü gruppiert (`MenuDropdown` mit `groups`); „Planung“ statt „Plan“ in der
+   Oberfläche (die Regel `plan-statt-planung` prüft die Texte); das Kabel auf einer Seite für
+   Ansehen, Anlegen und Bearbeiten (`PlanView::NewCable { id }`, `EditCable` mit `IdOrNew`, kein
+   Dialog). `createCable` nimmt Name, Fasern und Kabelweg auf einmal und verweigert einen leeren
+   Weg, damit es kein Kabel ohne Segment gibt; danach öffnet die Kabelseite.
 6. Warnung bei ungespeicherten Änderungen.
 
 ## Entschieden

@@ -155,7 +155,7 @@ fn object(kind: ObjectKind) -> &'static str {
         ObjectKind::Duct => "Trasse",
         ObjectKind::Cable => "Kabel",
         ObjectKind::Owner => "Eigentümer",
-        ObjectKind::Plan => "Plan",
+        ObjectKind::Plan => "Planung",
         ObjectKind::Panel => "Panel",
         ObjectKind::Port => "Port",
         ObjectKind::NetboxDevice => "Netbox-Gerät",

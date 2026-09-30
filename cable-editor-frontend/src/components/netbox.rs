@@ -85,7 +85,7 @@ impl Component for NetboxHint {
                 NetboxSyncState::NichtSynchron => (
                     "Netbox nicht synchron",
                     false,
-                    "Der Sync hat Probleme gefunden und Netbox unverändert gelassen: die Circuits in Netbox entsprechen nicht dem aktiven Plan.",
+                    "Der Sync hat Probleme gefunden und Netbox unverändert gelassen: die Circuits in Netbox entsprechen nicht der aktiven Planung.",
                     Box::default(),
                 ),
                 NetboxSyncState::Fehler => (

@@ -9,8 +9,8 @@ struct Variables {
 }
 
 #[derive(cynic::InputObject, Clone)]
-#[cynic(graphql_type = "UpdateCableStructure")]
-pub struct UpdateCableStructure {
+#[cynic(graphql_type = "CableStructureInput")]
+pub struct CableStructure {
     pub bundle_count: i32,
     pub fiber_count: i32,
 }
@@ -19,8 +19,22 @@ pub struct UpdateCableStructure {
 struct UpdateCableMutationVariables {
     cable_id: i32,
     name: Option<String>,
-    fibers: Option<UpdateCableStructure>,
+    fibers: Option<CableStructure>,
     path: Option<Vec<i32>>,
+}
+
+#[derive(cynic::QueryVariables)]
+struct CreateCableMutationVariables {
+    name: String,
+    fibers: CableStructure,
+    path: Vec<i32>,
+}
+
+#[derive(cynic::QueryFragment, Debug)]
+#[cynic(graphql_type = "Mutation", variables = "CreateCableMutationVariables")]
+struct CreateCableMutation {
+    #[arguments(name: $name, fibers: $fibers, path: $path)]
+    pub create_cable: CableDetails,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
@@ -104,11 +118,26 @@ impl CableDetails {
         )
     }
 
+    /// A new cable with its structure and path at once: one without a path is refused.
+    pub async fn create_cable(
+        credentials: Option<&OAuth2Context>,
+        name: String,
+        fibers: CableStructure,
+        path: Vec<i32>,
+    ) -> Result<CableDetails, FrontendError> {
+        Ok(mutate::<CreateCableMutation, _>(
+            CreateCableMutationVariables { name, fibers, path },
+            credentials,
+        )
+        .await?
+        .create_cable)
+    }
+
     pub async fn update_cable(
         credentials: Option<&OAuth2Context>,
         cable_id: i32,
         name: Option<String>,
-        fibers: Option<UpdateCableStructure>,
+        fibers: Option<CableStructure>,
         path: Option<Vec<i32>>,
     ) -> Result<Option<CableDetails>, FrontendError> {
         Ok(mutate::<UpdateCableMutation, _>(

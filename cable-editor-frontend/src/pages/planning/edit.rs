@@ -327,7 +327,7 @@ impl Component for EditPlan {
                                         <Button label="Abbrechen" variant={ButtonVariant::Link} onclick={on_cancel}/>
                                     </>
                                 }}>
-                                <p>{"Netbox zeigt danach die Circuits dieses Plans, statt die des bisher aktiven. Sie werden automatisch synchronisiert; findet der Sync Probleme, bleibt Netbox unverändert."}</p>
+                                <p>{"Netbox zeigt danach die Circuits dieser Planung, statt die des bisher aktiven. Sie werden automatisch synchronisiert; findet der Sync Probleme, bleibt Netbox unverändert."}</p>
                             </Modal>
                         </Bullseye>
                     }));
@@ -485,10 +485,10 @@ impl EditPlan {
                                 if details.netbox_active {
                                     <div>
                                         <Label label="In Netbox aktiv" compact=true color={Color::Blue}/>
-                                        {" Netbox zeigt die Circuits dieses Plans."}
+                                        {" Netbox zeigt die Circuits dieser Planung."}
                                     </div>
                                 } else {
-                                    <div>{"Netbox zeigt die Circuits eines anderen Plans."}</div>
+                                    <div>{"Netbox zeigt die Circuits einer anderen Planung."}</div>
                                     if role >= Role::Admin {
                                         <div class="pf-v6-u-mt-sm">
                                             <Button

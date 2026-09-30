@@ -12,7 +12,7 @@ use crate::{
 use async_graphql::{Context, InputObject, Object};
 use cable_editor_common::{UserError, error::PlanPorts};
 use diesel::{ExpressionMethods, OptionalExtension, QueryDsl, dsl::count_star};
-use diesel_async::RunQueryDsl;
+use diesel_async::{AsyncPgConnection, RunQueryDsl};
 
 #[derive(Default)]
 pub struct CableMutation;
@@ -20,16 +20,27 @@ pub struct CableMutation;
 #[Object]
 impl CableMutation {
     #[graphql(guard = "RoleGuard(Role::Planner)")]
-    async fn create_cable(&self, ctx: &Context<'_>, name: String) -> ApiResult<Cable> {
+    async fn create_cable(
+        &self,
+        ctx: &Context<'_>,
+        name: String,
+        fibers: CableStructureInput,
+        path: Vec<i32>,
+    ) -> ApiResult<Cable> {
+        if path.is_empty() {
+            return Err(UserError::CableWithoutSegment.into());
+        }
         let mut connection = authenticated::get_connection(ctx).await?;
-        Ok(diesel::insert_into(schema::kabel::table)
+        let cable = diesel::insert_into(schema::kabel::table)
             .values((
                 schema::kabel::name.eq(name),
-                schema::kabel::buendel_anz.eq(1),
-                schema::kabel::faser_anz.eq(12),
+                schema::kabel::buendel_anz.eq(fibers.bundle_count as i32),
+                schema::kabel::faser_anz.eq(fibers.fiber_count as i32),
             ))
             .get_result::<Cable>(&mut connection)
-            .await?)
+            .await?;
+        set_path(&mut connection, cable.id, path).await?;
+        Ok(cable)
     }
     #[graphql(guard = "RoleGuard(Role::Planner)")]
     async fn update_cable(
@@ -37,14 +48,14 @@ impl CableMutation {
         ctx: &Context<'_>,
         cable_id: i32,
         name: Option<String>,
-        fibers: Option<UpdateCableStructure>,
+        fibers: Option<CableStructureInput>,
         path: Option<Vec<i32>>,
     ) -> ApiResult<Option<Cable>> {
         if path.as_ref().is_some_and(Vec::is_empty) {
             return Err(UserError::CableWithoutSegment.into());
         }
         let mut connection = authenticated::get_connection(ctx).await?;
-        let (buendel_anz, faser_anz) = if let Some(UpdateCableStructure {
+        let (buendel_anz, faser_anz) = if let Some(CableStructureInput {
             bundle_count,
             fiber_count,
         }) = fibers
@@ -60,23 +71,8 @@ impl CableMutation {
             faser_anz,
         };
 
-        if let Some(path_ids) = path {
-            diesel::delete(
-                schema::kabel_trasse::table.filter(schema::kabel_trasse::kabel.eq(cable_id)),
-            )
-            .execute(&mut connection)
-            .await?;
-
-            for (sequenz, trasse_id) in path_ids.into_iter().enumerate() {
-                diesel::insert_into(schema::kabel_trasse::table)
-                    .values((
-                        schema::kabel_trasse::kabel.eq(cable_id),
-                        schema::kabel_trasse::trasse.eq(trasse_id),
-                        schema::kabel_trasse::sequenz.eq(sequenz as i32),
-                    ))
-                    .execute(&mut connection)
-                    .await?;
-            }
+        if let Some(path) = path {
+            set_path(&mut connection, cable_id, path).await?;
         }
 
         Ok(if changeset.any() {
@@ -127,8 +123,30 @@ impl CableMutation {
     }
 }
 
+/// Replaces the ducts a cable runs through, in the order given.
+async fn set_path(
+    connection: &mut AsyncPgConnection,
+    cable_id: i32,
+    path: Vec<i32>,
+) -> ApiResult<()> {
+    diesel::delete(schema::kabel_trasse::table.filter(schema::kabel_trasse::kabel.eq(cable_id)))
+        .execute(connection)
+        .await?;
+    for (sequenz, trasse_id) in path.into_iter().enumerate() {
+        diesel::insert_into(schema::kabel_trasse::table)
+            .values((
+                schema::kabel_trasse::kabel.eq(cable_id),
+                schema::kabel_trasse::trasse.eq(trasse_id),
+                schema::kabel_trasse::sequenz.eq(sequenz as i32),
+            ))
+            .execute(connection)
+            .await?;
+    }
+    Ok(())
+}
+
 #[derive(InputObject)]
-struct UpdateCableStructure {
+struct CableStructureInput {
     bundle_count: u32,
     fiber_count: u32,
 }

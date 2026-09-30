@@ -8,15 +8,16 @@ use crate::{
     components::table::ListModel,
     error::FrontendError,
     graphql::authenticated::{
+        IdOrNew,
         cable_details::{
             CableDetails, CableDuct, CablePath, CablePathSegment, CableSegmentEndSchacht,
-            PotentialDuct, UpdateCableStructure,
+            CableStructure, PotentialDuct,
         },
         current_user::Role,
         list_cables::delete_cable,
         list_ducts::DuctListEntry,
     },
-    pages::router::PlanView,
+    pages::router::{CableView, PlanView},
     util::{get_backdrop, get_credentials, get_role, navigate, toast_error, toast_success},
 };
 use cable_editor_common::ObjectKind;
@@ -211,6 +212,7 @@ pub enum DataState {
 pub enum Msg {
     Data(CableDetails),
     Saved(CableDetails),
+    Created(CableDetails),
     Error(FrontendError),
     NotFound,
     SetName(String),
@@ -256,6 +258,20 @@ impl Component for EditCable {
                 toast_success(ctx.link(), "Kabel gespeichert");
                 self.update(ctx, Msg::Data(data))
             }
+            Msg::Created(data) => {
+                // The toast before the page changes, as this one is gone with it
+                toast_success(ctx.link(), "Kabel angelegt");
+                navigate(
+                    ctx.link(),
+                    ctx.props().plan_id,
+                    PlanView::Cable {
+                        id: data.id,
+                        view: CableView::Edit,
+                    },
+                );
+                // Stays on the spinner until the cable's page has loaded it
+                true
+            }
             Msg::Error(error) => {
                 self.state = DataState::Error(error);
                 true
@@ -285,13 +301,22 @@ impl Component for EditCable {
                     let string = self.fiber_count.clone();
                     let path = self.path.clone();
                     let cable_details = data.clone();
-                    update_cable(scope, cable_name, bundle_count, string, path, cable_details);
+                    if self.is_new(ctx) {
+                        create_cable(scope, cable_name, bundle_count, string, path);
+                    } else {
+                        update_cable(scope, cable_name, bundle_count, string, path, cable_details);
+                    }
                 }
                 true
             }
             Msg::SaveFailed(error) => {
                 self.saving = false;
-                toast_error(ctx.link(), "Kabel konnte nicht gespeichert werden", error);
+                let title = if self.is_new(ctx) {
+                    "Kabel konnte nicht angelegt werden"
+                } else {
+                    "Kabel konnte nicht gespeichert werden"
+                };
+                toast_error(ctx.link(), title, error);
                 true
             }
             Msg::AppendSegment {
@@ -383,20 +408,31 @@ impl Component for EditCable {
     }
 
     fn changed(&mut self, ctx: &Context<Self>, old_props: &Self::Properties) -> bool {
-        if ctx.props().cable_id != old_props.cable_id {
+        if ctx.props().cable != old_props.cable {
             Self::fetch_data(ctx);
         }
         false
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        let view = if get_role(ctx.link()) >= Role::Planner {
-            "Kabel bearbeiten"
+        let title = if self.is_new(ctx) {
+            "Neues Kabel".into()
         } else {
-            "Kabel"
+            let view = if get_role(ctx.link()) >= Role::Planner {
+                "Kabel bearbeiten"
+            } else {
+                "Kabel"
+            };
+            object_title(
+                view,
+                match &self.state {
+                    DataState::Data(data) => Some(&data.name),
+                    _ => None,
+                },
+            )
         };
         html! {
-            <PageLayout title={object_title(view, match &self.state { DataState::Data(data) => Some(&data.name), _ => None })}>{self.view_content(ctx)}</PageLayout>
+            <PageLayout {title}>{self.view_content(ctx)}</PageLayout>
         }
     }
 
@@ -408,22 +444,32 @@ impl Component for EditCable {
 }
 
 impl EditCable {
+    fn is_new(&self, ctx: &Context<Self>) -> bool {
+        matches!(ctx.props().cable, IdOrNew::Temporary(_))
+    }
+
     fn view_content(&self, ctx: &Context<Self>) -> Html {
         match &self.state {
             DataState::Data(data) => {
                 // Readers see the cable without the means to change it
                 let role = get_role(ctx.link());
                 let readonly = role < Role::Planner;
+                let is_new = self.is_new(ctx);
                 let mut has_changes = false;
                 let mut has_error = false;
                 let name_edit = {
                     let value = self.cable_name.clone();
                     let onchange = ctx.link().callback(Msg::SetName);
-                    let state = if value == data.name {
-                        InputState::Default
-                    } else if value.is_empty() {
+                    let state = if value.is_empty() {
                         has_error = true;
-                        InputState::Error
+                        // A new cable doesn't start out as an error
+                        if is_new {
+                            InputState::Default
+                        } else {
+                            InputState::Error
+                        }
+                    } else if value == data.name && !is_new {
+                        InputState::Default
                     } else {
                         has_changes = true;
                         InputState::Success
@@ -478,7 +524,7 @@ impl EditCable {
                         .path
                         .as_ref()
                         .map(|p| p.duct_sequence().collect::<Vec<_>>());
-                has_changes |= path_changed;
+                has_changes |= path_changed || is_new;
                 // A cable needs at least one segment
                 let no_path = self.path.is_none();
                 has_error |= no_path;
@@ -492,7 +538,7 @@ impl EditCable {
                     } else if self.saving {
                         html!(<Spinner/>)
                     } else {
-                        let delete_button = (role >= Role::Admin).then(|| {
+                        let delete_button = (role >= Role::Admin && !is_new).then(|| {
                             let onclick = confirm_delete(
                                 ctx.link(),
                                 "Kabel",
@@ -510,7 +556,7 @@ impl EditCable {
                         html! {
                             <>
                             <Button variant={ButtonVariant::Primary}
-                                label="Speichern"
+                                label={if is_new { "Anlegen" } else { "Speichern" }}
                                 onclick={on_save}
                                 disabled={!has_changes || has_error}
                             />
@@ -729,12 +775,46 @@ impl EditCable {
             DataState::Pending => {
                 html!(<Spinner/>)
             }
-            DataState::NotFound => {
-                let cable_id = ctx.props().cable_id;
-                (&FrontendError::not_found(ObjectKind::Cable, cable_id)).into_prop_value()
-            }
+            DataState::NotFound => match ctx.props().cable {
+                IdOrNew::Id(cable_id) => {
+                    (&FrontendError::not_found(ObjectKind::Cable, cable_id)).into_prop_value()
+                }
+                IdOrNew::Temporary(_) => Html::default(),
+            },
         }
     }
+}
+
+fn create_cable(
+    scope: Scope<EditCable>,
+    cable_name: String,
+    bundle_count: String,
+    fiber_count: String,
+    path: Option<CablePath>,
+) {
+    let credentials = get_credentials(&scope);
+    let (Some(path), Ok(bundle_count), Ok(fiber_count)) = (
+        path,
+        bundle_count.parse::<i32>(),
+        fiber_count.parse::<i32>(),
+    ) else {
+        // The button is disabled for this
+        return;
+    };
+    let fibers = CableStructure {
+        bundle_count,
+        fiber_count,
+    };
+    let path = path.duct_sequence().collect::<Vec<_>>();
+    spawn_local(async move {
+        scope.send_message(
+            match CableDetails::create_cable(credentials.as_ref(), cable_name, fibers, path).await {
+                Ok(created) => Msg::Created(created),
+                // A toast: an error page would drop the input
+                Err(error) => Msg::SaveFailed(error),
+            },
+        );
+    });
 }
 
 fn update_cable(
@@ -763,7 +843,7 @@ fn update_cable(
         {
             None
         } else {
-            Some(UpdateCableStructure {
+            Some(CableStructure {
                 bundle_count,
                 fiber_count,
             })
@@ -802,7 +882,18 @@ fn update_cable(
 impl EditCable {
     fn fetch_data(ctx: &Context<EditCable>) {
         let scope = ctx.link().clone();
-        let cable_id = ctx.props().cable_id;
+        let IdOrNew::Id(cable_id) = ctx.props().cable else {
+            // A new cable starts with one bundle of 12 fibers and no path
+            scope.send_message(Msg::Data(CableDetails {
+                id: 0,
+                name: String::new(),
+                bundle_count: 1,
+                fiber_count: 12,
+                length: None,
+                path: None,
+            }));
+            return;
+        };
         let credentials = get_credentials(&scope);
         spawn_local(async move {
             scope.send_message(
@@ -819,5 +910,5 @@ impl EditCable {
 #[derive(Debug, Clone, PartialEq, Properties)]
 pub struct EditCableProperties {
     pub plan_id: i32,
-    pub cable_id: i32,
+    pub cable: IdOrNew,
 }
