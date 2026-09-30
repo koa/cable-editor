@@ -2,10 +2,9 @@
 //! run with its issues or error, and a sync right away.
 
 use crate::{
-    components::{netbox::view_issues, page_layout::PageLayout},
+    components::{netbox::view_issues, page_layout::PageLayout, plan_link::PlanNameLink},
     error::{FrontendError, ServerError},
     graphql::authenticated::netbox_sync::{NetboxSync, NetboxSyncError, NetboxSyncState},
-    pages::router::{AppRoute, PlanView},
     util::{get_credentials, toast_error, toast_success},
 };
 use cable_editor_common::{ErrorOrigin, UserError};
@@ -16,7 +15,6 @@ use patternfly_yew::prelude::{
 };
 use serde::Deserialize;
 use yew::{Component, Context, Html, Properties, html, html::IntoPropValue, platform::spawn_local};
-use yew_nested_router::components::Link;
 
 /// How often the page asks again while a run is due, in milliseconds
 const REFRESH_MS: u32 = 5_000;
@@ -128,9 +126,7 @@ impl NetboxPage {
         };
         let active_plan = match &sync.active_plan {
             Some(plan) => html! {
-                <Link<AppRoute> to={AppRoute::Plan { plan_id: plan.id, view: PlanView::Edit }}>
-                    {plan.name.as_str()}
-                </Link<AppRoute>>
+                <PlanNameLink id={plan.id} text={plan.name.clone()}/>
             },
             None => html!("keiner"),
         };

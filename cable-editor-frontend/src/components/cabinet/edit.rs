@@ -1,11 +1,11 @@
 use crate::graphql::authenticated::list_plans::BASELINE_PLAN_ID;
 use crate::{
-    components::icon_button::IconButton,
     components::table::{TreeModel, TreeState, TreeTable, TreeTableColumn, TreeTableContext},
+    components::{icon_button::IconButton, plan_link::PlanLink},
     create_simple_dialog,
     error::FrontendError,
     graphql::authenticated::{IdOrNew, cabinet_details::PanelTreeEntry},
-    pages::router::{AppRoute, PanelView, PlanView},
+    pages::router::{PanelView, PlanView},
     util::{get_credentials, toast_error, toast_success},
 };
 
@@ -25,7 +25,6 @@ use yew::{
     platform::spawn_local,
     prelude::{SubmitEvent, function_component, use_state},
 };
-use yew_nested_router::components::Link;
 
 pub struct EditCabinet {
     loading: bool,
@@ -152,44 +151,18 @@ impl TreeTableColumn<IdOrNew, PanelEntry, PanelEditAction> for PanelColumn {
                 }
                 if !*modified && let IdOrNew::Id(id) = &context.key {
                     let class = classes!("pf-v6-c-button", "pf-m-secondary");
-                    let to = AppRoute::Plan {
-                        plan_id: *plan_id,
-                        view: PlanView::Panel {
-                            id: *id,
-                            view: PanelView::Edit,
-                        },
-                    };
+                    let id = *id;
+                    let panel = |view| PlanView::Panel { id, view };
                     buttons.push(
-                        html!(<Link<AppRoute>{to} class={class.clone()}>{format!("{} Ports bearbeiten",context.row.port_count)}</Link<AppRoute>>),
+                        html!(<PlanLink to={panel(PanelView::Edit)} class={class.clone()}>{format!("{} Ports bearbeiten",context.row.port_count)}</PlanLink>),
                     );
-                    let to = AppRoute::Plan {
-                        plan_id: *plan_id,
-                        view: PlanView::Panel {
-                            id: *id,
-                            view: PanelView::Show,
-                        },
-                    };
-                    buttons.push(html!(<Link<AppRoute>{to} class={class.clone()}>{"Übersicht"}</Link<AppRoute>>));
+                    buttons.push(html!(<PlanLink to={panel(PanelView::Show)} class={class.clone()}>{"Übersicht"}</PlanLink>));
                     if *plan_id != BASELINE_PLAN_ID {
                         if context.row.has_loop {
-                            let to = AppRoute::Plan {
-                                plan_id: *plan_id,
-                                view: PlanView::Panel {
-                                    id: *id,
-                                    view: PanelView::Loop,
-                                },
-                            };
-                            buttons.push(html!(<Link<AppRoute>{to} class={class.clone()}>{"Loops verbinden"}</Link<AppRoute>>));
+                            buttons.push(html!(<PlanLink to={panel(PanelView::Loop)} class={class.clone()}>{"Loops verbinden"}</PlanLink>));
                         }
                         if context.row.port_count > 0 {
-                            let to = AppRoute::Plan {
-                                plan_id: *plan_id,
-                                view: PlanView::Panel {
-                                    id: *id,
-                                    view: PanelView::Attach,
-                                },
-                            };
-                            buttons.push(html!(<Link<AppRoute>{to} {class}>{"Fasern auflegen"}</Link<AppRoute>>));
+                            buttons.push(html!(<PlanLink to={panel(PanelView::Attach)} {class}>{"Fasern auflegen"}</PlanLink>));
                         }
                     }
                 }

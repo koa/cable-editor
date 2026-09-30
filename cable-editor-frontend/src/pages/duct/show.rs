@@ -1,6 +1,6 @@
 use crate::{
     components::{
-        links::{CableLink, SchachtLink},
+        links::{CableLink, OwnerLink, SchachtLink},
         page_layout::{PageLayout, object_title},
         plan_link::PlanLink,
     },
@@ -217,7 +217,7 @@ fn view_details(duct: &DuctDetails) -> Html {
             </DescriptionGroup>
             <DescriptionGroup term="Länge">{length}</DescriptionGroup>
             <DescriptionGroup term="Kabel">{cables}</DescriptionGroup>
-            <DescriptionGroup term="Eigentümer">{duct.owner.name.clone()}</DescriptionGroup>
+            <DescriptionGroup term="Eigentümer"><OwnerLink text={duct.owner.name.clone()}/></DescriptionGroup>
             <DescriptionGroup term="Leitungskataster">
                 {if duct.leitungskataster { "wird geliefert" } else { "wird nicht geliefert" }}
             </DescriptionGroup>

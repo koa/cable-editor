@@ -8,6 +8,7 @@ use crate::{
         fiber::FiberLabel,
         label_printer::PanelLabelButton,
         links::{CableLink, PanelLink, SchachtLink},
+        plan_link::PlanLink,
     },
     error::FrontendError,
     graphql::authenticated::{
@@ -18,7 +19,7 @@ use crate::{
         },
     },
     icons::IconLink,
-    pages::router::{AppRoute, PanelView, PlanView},
+    pages::router::{PanelView, PlanView},
     util::get_credentials,
 };
 use cable_editor_common::ObjectKind;
@@ -28,7 +29,6 @@ use patternfly_yew::prelude::{
 use yew::{
     Component, Context, Html, Properties, classes, html, html::IntoPropValue, platform::spawn_local,
 };
-use yew_nested_router::components::Link;
 
 #[derive(Properties, PartialEq, Clone)]
 pub struct ShowPanelProps {
@@ -382,34 +382,22 @@ impl ShowPanel {
                                     />
                                     if can_plan {
                                         if has_direct_ports {
-                                            <Link<AppRoute>
-                                                to={AppRoute::Plan {
-                                                    plan_id: self.plan_id,
-                                                    view: PlanView::Panel {
-                                                        id: child_id,
-                                                        view: PanelView::Attach,
-                                                    },
-                                                }}
+                                            <PlanLink
+                                                to={PlanView::Panel { id: child_id, view: PanelView::Attach }}
                                                 class="no-print pf-v6-c-button pf-m-secondary"
                                             >
                                                 <IconLink/>
                                                 <span class="pf-v6-u-ml-xs">{"Fasern auflegen"}</span>
-                                            </Link<AppRoute>>
+                                            </PlanLink>
                                         }
                                         if has_direct_loops {
-                                            <Link<AppRoute>
-                                                to={AppRoute::Plan {
-                                                    plan_id: self.plan_id,
-                                                    view: PlanView::Panel {
-                                                        id: child_id,
-                                                        view: PanelView::Loop,
-                                                    },
-                                                }}
+                                            <PlanLink
+                                                to={PlanView::Panel { id: child_id, view: PanelView::Loop }}
                                                 class="no-print pf-v6-c-button pf-m-secondary"
                                             >
                                                 {Icon::Redo}
                                                 <span class="pf-v6-u-ml-xs">{"Loops verbinden"}</span>
-                                            </Link<AppRoute>>
+                                            </PlanLink>
                                         }
                                     }
                                 </div>

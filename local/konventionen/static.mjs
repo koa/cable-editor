@@ -174,7 +174,6 @@ const rules = [
   },
   {
     id: 'roher-link',
-    step: 4,
     message: 'PlanLink statt Link<AppRoute> verwenden',
     find: (f) => (f.rel === path.join('components', 'plan_link.rs') ? [] : grep(f, /<Link<AppRoute>/).map((line) => ({ line }))),
   },

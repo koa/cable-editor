@@ -1,5 +1,7 @@
 //! Links to elements shown on a page, each to the view that fits best: a Schacht to its overview,
-//! a panel to its connection overview, a cable or a duct to its page (its only view).
+//! a panel to its connection overview, a cable or a duct to its page (its only view), a type of
+//! Schacht to its page, an owner (who has no page) to the list of owners; a plan is
+//! `plan_link::PlanNameLink`.
 use crate::{
     components::plan_link::PlanLink,
     pages::router::{CabinetView, CableView, DuctView, PanelView, PlanView},
@@ -47,4 +49,21 @@ pub fn DuctLink(props: &ElementLinkProps) -> Html {
         view: DuctView::Show,
     };
     html!(<PlanLink {to}>{props.text.clone()}</PlanLink>)
+}
+
+#[function_component]
+pub fn SchachtTypLink(props: &ElementLinkProps) -> Html {
+    let to = PlanView::CabinetType { id: props.id };
+    html!(<PlanLink {to}>{props.text.clone()}</PlanLink>)
+}
+
+#[derive(Properties, PartialEq)]
+pub struct OwnerLinkProps {
+    /// Shown text, the owner's name
+    pub text: AttrValue,
+}
+
+#[function_component]
+pub fn OwnerLink(props: &OwnerLinkProps) -> Html {
+    html!(<PlanLink to={PlanView::ListOfOwners}>{props.text.clone()}</PlanLink>)
 }

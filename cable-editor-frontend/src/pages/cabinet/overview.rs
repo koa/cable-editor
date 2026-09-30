@@ -1,7 +1,7 @@
 use crate::{
     components::{
         label_printer::{LabelText, PanelLabelButton, PrintLabelButton, check_printer_supported},
-        links::{CableLink, PanelLink, SchachtLink},
+        links::{CableLink, OwnerLink, PanelLink, SchachtLink, SchachtTypLink},
         page_layout::{PageLayout, object_title},
         plan_link::PlanLink,
         table::ListModel,
@@ -93,11 +93,13 @@ fn view_panel(panel: &SchachtPanelEntry) -> Html {
 /// Type, owner, position and Lagebestimmung of the Schacht, read-only (the button of the
 /// overview opens `CabinetView::Properties` to change them).
 fn view_properties(schacht: &SchachtCables) -> Html {
-    let typ = schacht
-        .typ
-        .as_ref()
-        .and_then(|t| t.name.clone())
-        .unwrap_or_else(|| "kein Typ".to_string());
+    let typ = match &schacht.typ {
+        Some(typ) => {
+            let name = typ.name.as_deref().unwrap_or("(ohne Namen)");
+            html!(<SchachtTypLink id={typ.id} text={name.to_string()}/>)
+        }
+        None => html!("kein Typ"),
+    };
     let position = match &schacht.position {
         Some(point) => {
             let (e, n) = CoordinateSystem::Lv95.format(point.e, point.n);
@@ -108,7 +110,7 @@ fn view_properties(schacht: &SchachtCables) -> Html {
     html! {
         <DescriptionList>
             <DescriptionGroup term="Typ">{typ}</DescriptionGroup>
-            <DescriptionGroup term="Eigentümer">{schacht.owner.name.clone()}</DescriptionGroup>
+            <DescriptionGroup term="Eigentümer"><OwnerLink text={schacht.owner.name.clone()}/></DescriptionGroup>
             <DescriptionGroup term="Position (LV95)">{position}</DescriptionGroup>
             <DescriptionGroup term="Lagebestimmung">{schacht.lagebestimmung.title()}</DescriptionGroup>
             <DescriptionGroup term="Geändert">{schacht.changed_at.local()}</DescriptionGroup>

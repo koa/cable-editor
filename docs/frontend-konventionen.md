@@ -1,6 +1,6 @@
 # Konzept: Einheitliche Bedienung im Frontend
 
-Stand: 30.09.2026 – offene Fragen entschieden; das Prüfgerüst steht, die Fehlerbehandlung (Schritt 1), die Beschriftungen (Schritt 2) und die Rückmeldung (Schritt 3) sind umgesetzt, die übrigen Schritte unter „Umsetzung“ folgen.
+Stand: 30.09.2026 – offene Fragen entschieden; das Prüfgerüst steht, die Fehlerbehandlung (Schritt 1), die Beschriftungen (Schritt 2) und die Rückmeldung (Schritt 3) und die Links (Schritt 4) sind umgesetzt, die übrigen Schritte unter „Umsetzung“ folgen.
 
 Diese Regeln gelten für jede neue oder geänderte Seite. Sie stammen aus einer Durchsicht des
 ganzen Frontends; wo der Code noch abweicht, steht es unter „Umsetzung“. Wie Fehler entstehen
@@ -140,7 +140,7 @@ noch nicht eingeschalteten Prüfungen einzeln. Drei Ebenen, von der strengsten z
 
 | Ebene | Werkzeug | Prüft |
 | --- | --- | --- |
-| Compiler | `cargo clippy -p cable-editor-frontend --target wasm32-unknown-unknown` (`cable-editor-frontend/clippy.toml`, `[lints.clippy]`) | keine Browser-Dialoge (`alert`, `confirm`, `prompt`), kein `log::error!` (Fehler gehören in die Oberfläche), keine Panics (`unwrap`, `expect`, `panic!`); ab Schritt 4 kein rohes `Link` |
+| Compiler | `cargo clippy -p cable-editor-frontend --target wasm32-unknown-unknown` (`cable-editor-frontend/clippy.toml`, `[lints.clippy]`) | keine Browser-Dialoge (`alert`, `confirm`, `prompt`), kein `log::error!` (Fehler gehören in die Oberfläche), keine Panics (`unwrap`, `expect`, `panic!`), kein rohes `Link` des Routers |
 | Quelltext | `local/konventionen/static.mjs` | Beschriftungen (Abschnitt 1), Fehler als `FrontendError` und Toast-Titel (4), Symbolknöpfe als `IconButton`, „Seite drucken“ nur an einer Stelle, `PlanLink` statt `Link<AppRoute>` (3) |
 | Browser | `local/konventionen/pages.mjs` (Playwright gegen den Mock) | jede Route als Handy und Desktop: keine Konsolenfehler, kein waagerechter Überlauf, genau eine sichtbare `h1`, höchstens ein aktiver Eintrag je Breadcrumb-Menü, „Keine Berechtigung“ ohne die nötige Rolle, jeder Knopf und Link hat einen Namen |
 
@@ -168,7 +168,7 @@ Was sich nicht automatisch prüfen lässt, geht der Reviewer bei jeder Änderung
 
 ## Umsetzung
 
-Schrittweise, je ein Commit, jeder vor dem Commit durchgesehen (0 bis 3 sind erledigt und werden geprüft):
+Schrittweise, je ein Commit, jeder vor dem Commit durchgesehen (0 bis 4 sind erledigt und werden geprüft):
 
 1. (erledigt) Fehler als `FrontendError`: Alerts mit `to_string()`, Debug-Ausgaben, eigene
    „nicht gefunden“-Texte, `expect` im Browserzustand, Fehler der Editoren als Toast.
@@ -185,7 +185,11 @@ Schrittweise, je ein Commit, jeder vor dem Commit durchgesehen (0 bis 3 sind erl
    `ToastViewer`): er meldet Erfolg und Fehler der Seite, die ihn geöffnet hat, und die zeigt den
    Toast (`NewPlanDialog`, `AddCable`). Beim Löschen kommt der Toast vor dem Wechsel auf die
    Liste.
-4. Links für Schachttyp, Eigentümer und Plan; `PlanLink` statt `Link<AppRoute>`.
+4. (erledigt) Links für Schachttyp, Eigentümer und Plan; `PlanLink` statt `Link<AppRoute>`.
+   `components/links.rs` hat `SchachtTypLink` (Seite des Typs) und `OwnerLink` (Liste der
+   Eigentümer), `plan_link.rs` neben `PlanLink` (bleibt im Plan des Pfads) `PlanNameLink` für
+   einen anderen Plan (auf dessen Schächte, wie die Liste der Planungen). Clippy verbietet
+   `Link` ausserhalb von `plan_link.rs` (`disallowed-types`).
 5. Bereichsmenü gruppieren; „Planung“ statt „Plan“ in der Oberfläche; das Kabel auf eine Seite für
    Ansehen, Anlegen und Bearbeiten (`NewCable` mit `IdOrNew`, kein Dialog).
 6. Warnung bei ungespeicherten Änderungen.

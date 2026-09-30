@@ -1,6 +1,6 @@
 use crate::{
     components::{
-        links::{DuctLink, SchachtLink},
+        links::{DuctLink, OwnerLink, SchachtLink},
         page_layout::PageLayout,
         plan_link::PlanLink,
         table::ListModel,
@@ -49,7 +49,7 @@ impl TableEntryRenderer<Columns> for DuctListEntry {
                 Cell::new(self.length.map(|l| format!("{l:.1} m")).into_prop_value())
             }
             Columns::Cables => Cell::new(self.cables.len().into_prop_value()),
-            Columns::Owner => Cell::new(self.owner.name.clone().into_prop_value()),
+            Columns::Owner => Cell::new(html!(<OwnerLink text={self.owner.name.clone()}/>)),
             Columns::Lk => Cell::new(if self.leitungskataster {
                 html!("ja")
             } else {

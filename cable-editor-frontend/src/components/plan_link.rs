@@ -1,5 +1,8 @@
+// The only place allowed to build a router `Link`: everywhere else `PlanLink` and `PlanNameLink`
+// take care of the plan in the path (see docs/frontend-konventionen.md, section 3).
+#![allow(clippy::disallowed_types)]
 use crate::pages::router::{AppRoute, PlanView};
-use yew::{Callback, Component, Context, Html, html};
+use yew::{AttrValue, Callback, Component, Context, Html, Properties, function_component, html};
 use yew_nested_router::{
     components::{Link, LinkProperties},
     prelude::RouterContext,
@@ -7,8 +10,6 @@ use yew_nested_router::{
 
 /// Link to a view within the plan of the current page.
 pub struct PlanLink {}
-pub enum Msg {}
-
 impl Component for PlanLink {
     type Message = ();
     type Properties = LinkProperties<PlanView>;
@@ -56,4 +57,21 @@ impl Component for PlanLink {
         };
         html!(<Link<AppRoute> ..props/>)
     }
+}
+
+#[derive(Properties, PartialEq)]
+pub struct PlanNameLinkProps {
+    pub id: i32,
+    /// Shown text, the plan's name
+    pub text: AttrValue,
+}
+
+/// Link to a plan, wherever a page names one: to its Schächte, where its list leads to as well.
+#[function_component]
+pub fn PlanNameLink(props: &PlanNameLinkProps) -> Html {
+    let to = AppRoute::Plan {
+        plan_id: props.id,
+        view: PlanView::ListOfCabinets,
+    };
+    html!(<Link<AppRoute> {to}>{props.text.clone()}</Link<AppRoute>>)
 }

@@ -1,9 +1,8 @@
 use crate::components::page_layout::PageLayout;
 use crate::{
-    components::table::ListModel,
+    components::{plan_link::PlanNameLink, table::ListModel},
     error::FrontendError,
     graphql::authenticated::{current_user::Role, list_plans::PlanListEntry},
-    pages::router::{AppRoute, PlanView},
     util::{get_backdrop, get_credentials, get_role, toast_error, toast_success},
 };
 use patternfly_yew::prelude::{
@@ -18,7 +17,6 @@ use yew::{
     Callback, Component, Context, Html, Properties, html, html::IntoPropValue, html_nested,
     platform::spawn_local,
 };
-use yew_nested_router::components::Link;
 
 pub struct ListOfPlannings {
     error: Option<FrontendError>,
@@ -159,9 +157,9 @@ impl ListOfPlannings {
 impl TableEntryRenderer<Columns> for PlanListEntry {
     fn render_cell(&self, context: CellContext<'_, Columns>) -> Cell {
         match &context.column {
-            Columns::Name => Cell::new(
-                html!(<Link<AppRoute> to={AppRoute::Plan {plan_id: self.id,view: PlanView::ListOfCabinets}}>{self.name.as_str()}</Link<AppRoute>>),
-            ),
+            Columns::Name => {
+                Cell::new(html!(<PlanNameLink id={self.id} text={self.name.clone()}/>))
+            }
             Columns::Kind => {
                 let kind = if self.is_baseline {
                     "Ist-Zustand"

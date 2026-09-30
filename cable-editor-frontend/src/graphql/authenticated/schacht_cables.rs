@@ -41,6 +41,7 @@ pub struct SchachtCables {
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
 #[cynic(graphql_type = "SchachtTyp")]
 pub struct SchachtTypeName {
+    pub id: i32,
     pub name: Option<String>,
 }
 

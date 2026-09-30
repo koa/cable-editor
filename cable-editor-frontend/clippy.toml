@@ -10,3 +10,6 @@ disallowed-methods = [
 disallowed-macros = [
     { path = "log::error", reason = "errors belong in the UI as FrontendError (alert or toast), never only in the console" },
 ]
+disallowed-types = [
+    { path = "yew_nested_router::components::Link", reason = "PlanLink and the links of components/links.rs keep the plan of the path (components/plan_link.rs is the only place)" },
+]
