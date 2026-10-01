@@ -6,5 +6,4 @@ Konzeptionell (kein primäres Code-Problem)
 
 Code
 - Neuer Schacht soll die Karte nicht auf die ganze Schweiz zoomen, sondern das aktuelle Projektgebiet (Ausser es ist der erste Schacht)
-- Automatisches JWT Ticket renew funktioniert nicht (Fehlermeldung nach Ablauf des Tickets)
 - Manuelle Github-Action für Release builden und version weiterzählen
