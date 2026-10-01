@@ -27,11 +27,13 @@ impl Settings {
     }
 
     /// OIDC scopes the frontend requests, space separated like the `scope` parameter.
-    /// `groups` needs a matching scope at the provider.
+    /// `groups` needs a matching scope at the provider. `offline_access` makes the provider
+    /// issue a refresh token (Pocket ID only does so with this scope requested), without which
+    /// the frontend's automatic renewal silently does nothing once the access token expires.
     pub fn auth_scopes(&self) -> Box<[Box<str>]> {
         self.auth_scopes
             .as_deref()
-            .unwrap_or("openid profile groups")
+            .unwrap_or("openid profile groups offline_access")
             .split_whitespace()
             .map(Box::from)
             .collect()
