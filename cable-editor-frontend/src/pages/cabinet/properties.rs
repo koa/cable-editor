@@ -7,7 +7,7 @@ use crate::{
     error::FrontendError,
     geo::{
         coordinates::{Check, CoordinateSystem, check, parse_number, split_pair},
-        map::{MapHolder, div_icon, lat_lng},
+        map::{MapHolder, div_icon, fit_points, lat_lng},
     },
     graphql::authenticated::{
         Genauigkeit, GeoPoint, IdOrNew,
@@ -176,6 +176,11 @@ impl Component for CabinetProperties {
                 if schacht.is_none() {
                     // A new Schacht: the default owner
                     self.owner = choices.owners.iter().find(|o| o.is_default).map(|o| o.id);
+                    // Show the project's area instead of all of Switzerland, unless this is
+                    // the first Schacht
+                    if let Some(map) = self.map.map() {
+                        fit_points(map, choices.existing_locations.iter());
+                    }
                 }
                 self.loaded = Some((schacht, choices));
             }
