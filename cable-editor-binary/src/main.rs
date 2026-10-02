@@ -195,7 +195,7 @@ async fn graphql(
 
     response.into()
 }
-#[cached(ttl = 30)]
+#[cached(ttl_secs = 30)]
 async fn fetch_user_info(access_token_str: String) -> Result<UserInfo, BackendError> {
     let response = Client::new()
         .get(user_info_url().await?)
