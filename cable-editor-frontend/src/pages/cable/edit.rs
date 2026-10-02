@@ -778,7 +778,7 @@ impl EditCable {
                             }
                             <FormGroup>{save_button}</FormGroup>
                         </Form>
-                        <CableMap path={self.path.clone()} editable={!readonly} {onedit}/>
+                        <CableMap cable={ctx.props().cable} path={self.path.clone()} editable={!readonly} {onedit}/>
                     </div>
                 }
             }

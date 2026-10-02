@@ -7,7 +7,7 @@ use crate::{
     error::FrontendError,
     geo::map::{MapHolder, duct_hit_line, duct_line, fit_points, hover_text, schacht_marker},
     graphql::authenticated::{
-        GeoPoint,
+        GeoPoint, IdOrNew,
         cable_details::{CableDuct, CablePath, CableSegmentEndSchacht},
         map::{MapData, MapDuct, MapDuctEnd, fetch_map_data},
         schacht_types::type_icon,
@@ -50,6 +50,8 @@ pub enum PathEdit {
 
 #[derive(Clone, PartialEq, Properties)]
 pub struct CableMapProps {
+    /// Which cable this is, to tell a switch to another one from further edits of the same path
+    pub cable: IdOrNew,
     /// The path as currently edited
     pub path: Option<CablePath>,
     /// Clicks change the path
@@ -64,7 +66,7 @@ pub struct CableMap {
     map: MapHolder,
     /// Ducts and Schächte, drawn once
     drawn_base: bool,
-    /// Fit the map to the path (or everything) once, later changes keep the view
+    /// Fit the map to the path (or everything) once per cable, later changes to it keep the view
     fitted: bool,
 }
 
@@ -108,7 +110,13 @@ impl Component for CableMap {
 
     fn changed(&mut self, ctx: &Context<Self>, old_props: &Self::Properties) -> bool {
         let props = ctx.props();
-        if props.path != old_props.path || props.editable != old_props.editable {
+        if props.cable != old_props.cable {
+            self.fitted = false;
+        }
+        if props.path != old_props.path
+            || props.editable != old_props.editable
+            || props.cable != old_props.cable
+        {
             self.draw(ctx);
         }
         false
