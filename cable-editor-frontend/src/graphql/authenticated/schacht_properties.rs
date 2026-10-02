@@ -47,9 +47,6 @@ pub struct SchachtOwnerRef {
 pub struct SchachtChoices {
     pub types: Box<[SchachtTypeEntry]>,
     pub owners: Box<[OwnerChoice]>,
-    /// The positions of the other Schächte, to show a new one's map over the project's area
-    /// instead of all of Switzerland; empty when editing an existing Schacht.
-    pub existing_locations: Box<[GeoPoint]>,
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone, Copy, PartialEq)]
@@ -70,16 +67,9 @@ pub struct SchachtTypeEntry {
 struct SchachtChoicesQuery {
     list_schacht_typ: Vec<SchachtTypeEntry>,
     list_owner: Vec<OwnerChoice>,
-    list_schacht: Vec<ExistingSchachtLocation>,
 }
 
-#[derive(cynic::QueryFragment, Debug)]
-#[cynic(graphql_type = "Schacht")]
-struct ExistingSchachtLocation {
-    location: Option<GeoPoint>,
-}
-
-/// The types and owners to choose from, and the other Schächte's positions, for a new Schacht.
+/// The types and owners to choose from, for a new Schacht.
 pub async fn fetch_schacht_choices(
     credentials: Option<&OAuth2Context>,
 ) -> Result<SchachtChoices, FrontendError> {
@@ -87,11 +77,6 @@ pub async fn fetch_schacht_choices(
     Ok(SchachtChoices {
         types: result.list_schacht_typ.into(),
         owners: result.list_owner.into(),
-        existing_locations: result
-            .list_schacht
-            .into_iter()
-            .filter_map(|s| s.location)
-            .collect(),
     })
 }
 
@@ -106,8 +91,6 @@ pub async fn fetch_schacht_properties(
     let choices = SchachtChoices {
         types: result.list_schacht_typ.into(),
         owners: result.list_owner.into(),
-        // Only used to show a new Schacht's map over the project's area
-        existing_locations: Box::new([]),
     };
     Ok((result.schacht, choices))
 }

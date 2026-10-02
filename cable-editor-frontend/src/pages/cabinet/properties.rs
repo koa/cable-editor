@@ -7,16 +7,18 @@ use crate::{
     error::FrontendError,
     geo::{
         coordinates::{Check, CoordinateSystem, check, parse_number, split_pair},
-        map::{MapHolder, div_icon, fit_points, lat_lng},
+        map::{MapHolder, div_icon, duct_line, fit_points, lat_lng, schacht_marker},
     },
     graphql::authenticated::{
         Genauigkeit, GeoPoint, IdOrNew,
         current_user::Role,
+        map::{MapData, fetch_map_data},
         schacht_properties::{
             ConvertedPoint, GeoPointInput, Lv95Input, PositionInput, SchachtChoices, SchachtInput,
             SchachtProperties, convert_point, create_schacht, delete_schacht,
             fetch_schacht_choices, fetch_schacht_properties, update_schacht,
         },
+        schacht_types::type_icon,
     },
     pages::router::{CabinetView, PlanView},
     util::{get_credentials, get_role, navigate, toast_error, toast_success},
@@ -44,11 +46,15 @@ const POSITION_ZOOM: f64 = 18.0;
 /// Name, type, owner, position and Lagebestimmung of a Schacht, or a new one
 /// (`IdOrNew::Temporary`). The position can be set on the map (click, drag the marker), typed in
 /// LV95 or WGS84 or taken from the device's location; the Lagebestimmung stays as set (ungenau
-/// unless set explicitly), also for a position from the device. Readers see the same page
-/// read-only.
+/// unless set explicitly), also for a position from the device. The map also shows all other
+/// ducts and Schächte for context, so the position can be judged relative to them; the one being
+/// placed stands out with its own marker style (`.schacht-properties__marker`). Readers see the
+/// same page read-only.
 pub struct CabinetProperties {
     /// The Schacht as stored (missing for a new one) and the types and owners to choose from
     loaded: Option<(Option<SchachtProperties>, SchachtChoices)>,
+    /// All ducts and Schächte, drawn for context (`draw_base`)
+    map_data: Option<MapData>,
     error: Option<FrontendError>,
     name: String,
     type_id: Option<i32>,
@@ -91,7 +97,7 @@ enum PositionState {
 }
 
 pub enum Msg {
-    Loaded(Option<SchachtProperties>, SchachtChoices),
+    Loaded(Option<SchachtProperties>, SchachtChoices, MapData),
     LoadError(FrontendError),
     SetName(String),
     SetType(Option<i32>),
@@ -135,6 +141,7 @@ impl Component for CabinetProperties {
         Self::fetch(ctx);
         Self {
             loaded: None,
+            map_data: None,
             error: None,
             name: String::new(),
             type_id: None,
@@ -170,7 +177,7 @@ impl Component for CabinetProperties {
             self.touched = true;
         }
         match msg {
-            Msg::Loaded(schacht, choices) => {
+            Msg::Loaded(schacht, choices, map_data) => {
                 self.error = None;
                 self.take_stored(ctx, schacht.as_ref());
                 if schacht.is_none() {
@@ -179,10 +186,18 @@ impl Component for CabinetProperties {
                     // Show the project's area instead of all of Switzerland, unless this is
                     // the first Schacht
                     if let Some(map) = self.map.map() {
-                        fit_points(map, choices.existing_locations.iter());
+                        fit_points(
+                            map,
+                            map_data
+                                .schaechte
+                                .iter()
+                                .filter_map(|s| s.location.as_ref()),
+                        );
                     }
                 }
+                self.draw_base(ctx, &map_data);
                 self.loaded = Some((schacht, choices));
+                self.map_data = Some(map_data);
             }
             Msg::LoadError(error) => self.error = Some(error),
             Msg::SetName(name) => self.name = name,
@@ -429,14 +444,20 @@ impl CabinetProperties {
         let credentials = get_credentials(&scope);
         let cabinet = ctx.props().cabinet;
         spawn_local(async move {
-            let result = match cabinet {
+            let loaded = match cabinet {
                 IdOrNew::Id(id) => fetch_schacht_properties(credentials.as_ref(), id).await,
                 IdOrNew::Temporary(_) => fetch_schacht_choices(credentials.as_ref())
                     .await
                     .map(|choices| (None, choices)),
             };
+            let result = match loaded {
+                Ok((schacht, choices)) => fetch_map_data(credentials.as_ref())
+                    .await
+                    .map(|map_data| (schacht, choices, map_data)),
+                Err(error) => Err(error),
+            };
             scope.send_message(match result {
-                Ok((schacht, choices)) => Msg::Loaded(schacht, choices),
+                Ok((schacht, choices, map_data)) => Msg::Loaded(schacht, choices, map_data),
                 Err(error) => Msg::LoadError(error),
             });
         });
@@ -572,6 +593,35 @@ impl CabinetProperties {
         if center {
             map.set_view(&position, map.get_zoom().max(POSITION_ZOOM));
         }
+    }
+
+    /// Draws all other ducts and Schächte for context, so the position being placed (its own
+    /// marker from `show_marker`) can be judged relative to them. Excludes the Schacht being
+    /// placed itself, which would otherwise sit right under its own marker.
+    fn draw_base(&mut self, ctx: &Context<Self>, data: &MapData) {
+        if self.map.map().is_none() {
+            return;
+        }
+        let current_id = match ctx.props().cabinet {
+            IdOrNew::Id(id) => Some(id),
+            IdOrNew::Temporary(_) => None,
+        };
+        let mut layers: Vec<leaflet::Layer> = Vec::new();
+        for line in data.ducts.iter().filter_map(|duct| duct.line.as_deref()) {
+            layers.push(duct_line(line, "map-view__duct").unchecked_into());
+        }
+        for schacht in &data.schaechte {
+            if Some(schacht.id) == current_id {
+                continue;
+            }
+            if let Some(location) = schacht.location {
+                layers.push(
+                    schacht_marker(&schacht.name, location, type_icon(&schacht.typ), || {})
+                        .unchecked_into(),
+                );
+            }
+        }
+        self.map.replace_layers(layers);
     }
 
     fn save(&mut self, ctx: &Context<Self>) {

@@ -972,10 +972,12 @@ body {
   color: var(--pf-t--global--text--color--subtle);
 }
 
-// Leaflet divIcon for the Schacht's position (geo::map::div_icon)
+// Leaflet divIcon for the Schacht's position (geo::map::div_icon); the warning colour (also used
+// for a selected duct, .map-view__duct--selected) sets it apart from the other Schächte drawn
+// for context (pages/cabinet/properties.rs draw_base)
 .schacht-properties__marker {
   box-sizing: border-box;
-  border: 4px solid var(--pf-t--global--color--brand--default);
+  border: 4px solid var(--pf-t--global--color--status--warning--default);
   border-radius: 50%;
   background: var(--pf-t--global--background--color--primary--default);
   box-shadow: var(--pf-t--global--box-shadow--sm);
