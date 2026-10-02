@@ -17,6 +17,27 @@
             addEventListener("afterprint", () => apply(dark.matches));
         })();
     </script>
+    <!-- Last resort for a failure the wasm app itself never gets a chance to show (a script
+         error or a rejected promise before or outside of it, e.g. during login): logs the full
+         error and replaces a silently blank page with a visible message. Plain JS and inline
+         styles only, so it works even if nothing else has loaded yet. -->
+    <script>
+        (() => {
+            const show = (error) => {
+                console.error("Cable Editor failed to start:", error);
+                if (document.getElementById("boot-failure")) return;
+                const el = document.createElement("div");
+                el.id = "boot-failure";
+                el.style.cssText = "position:fixed;inset:0;z-index:9999;display:flex;" +
+                    "align-items:center;justify-content:center;padding:2rem;text-align:center;" +
+                    "font:16px/1.4 sans-serif;background:#fff;color:#151515";
+                el.textContent = "Die Anwendung konnte nicht gestartet werden. Bitte die Seite neu laden.";
+                document.body.appendChild(el);
+            };
+            addEventListener("error", (e) => show(e.error ?? e.message));
+            addEventListener("unhandledrejection", (e) => show(e.reason));
+        })();
+    </script>
     <!-- resizes-content: the on-screen keyboard shrinks the layout, so dialogs stay above it -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
     <title>Cable Editor</title>
