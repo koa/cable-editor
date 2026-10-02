@@ -1,0 +1,75 @@
+name: Release
+
+# Manually started: bumps the workspace version (Cargo.toml's `[workspace.package]`, all crates
+# follow it) and the Helm chart's together, commits and tags that as `vX.Y.Z` on master, then
+# triggers build-and-publish.yml for that tag, which builds and publishes image and chart under
+# the real version instead of a snapshot.
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Part of the version to increase
+        type: choice
+        options: [ patch, minor, major ]
+        default: patch
+
+permissions:
+  contents: write
+  # To trigger build-and-publish.yml for the new tag: a tag pushed with the workflow's own
+  # token does not start other workflows by itself (GitHub's recursion guard), so it is
+  # triggered explicitly below instead.
+  actions: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Bump version
+        id: bump
+        run: |
+          CURRENT=$(grep -m1 '^version = ' Cargo.toml | sed -E 's/version = "(.*)"/\1/')
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+          case "${{ inputs.bump }}" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+          esac
+          VERSION="$MAJOR.$MINOR.$PATCH"
+          echo "Bumping $CURRENT -> $VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Write version
+        run: |
+          VERSION="${{ steps.bump.outputs.version }}"
+
+          sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
+          sed -i "s/^version: .*/version: ${VERSION}/" cable-editor-chart/Chart.yaml
+          sed -i "s/^appVersion: .*/appVersion: \"${VERSION}\"/" cable-editor-chart/Chart.yaml
+
+          # Cargo.lock also records each workspace crate's own version; a plain `cargo build`
+          # would refresh it too, but that needs the frontend's wasm target and libpq just to
+          # rewrite four version strings, so they are patched directly instead.
+          for pkg in cable-editor-backend cable-editor-binary cable-editor-common cable-editor-frontend; do
+            perl -0pi -e "s/(name = \"$pkg\"\nversion = )\"[^\"]*\"/\${1}\"${VERSION}\"/" Cargo.lock
+          done
+
+      - name: Commit, tag and push
+        run: |
+          VERSION="${{ steps.bump.outputs.version }}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Cargo.toml Cargo.lock cable-editor-chart/Chart.yaml
+          git commit -m "release v${VERSION}"
+          git tag "v${VERSION}"
+          git push origin HEAD:master
+          git push origin "v${VERSION}"
+
+      - name: Trigger build and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run build-and-publish.yml --ref "v${{ steps.bump.outputs.version }}"

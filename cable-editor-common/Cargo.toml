@@ -1,6 +1,6 @@
 [package]
 name = "cable-editor-common"
-version = "0.1.0"
+version.workspace = true
 edition = "2024"
 
 # Shared by backend and frontend (wasm): the errors refusing a request and the rules behind

@@ -3,4 +3,9 @@ resolver = "2"
 members = ["cable-editor-backend", "cable-editor-binary", "cable-editor-common", "cable-editor-frontend"]
 default-members = ["cable-editor-binary"]
 
+# The single source of truth for the release version (`.github/workflows/release.yml` bumps it
+# and the Helm chart's `appVersion` together); crates refer to it with `version.workspace = true`.
+[workspace.package]
+version = "0.1.0"
+
 
