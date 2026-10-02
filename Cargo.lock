@@ -832,7 +832,7 @@ version = "0.1.0"
 dependencies = [
  "async-graphql",
  "async-recursion",
- "base64 0.22.1",
+ "base64 0.23.1",
  "cable-editor-common",
  "chrono",
  "config",
@@ -850,7 +850,7 @@ dependencies = [
  "reqwest 0.13.5",
  "serde",
  "serde_json",
- "sha2 0.10.9",
+ "sha2 0.11.0",
  "thiserror 2.0.21",
  "tokio",
  "zip",
