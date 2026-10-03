@@ -8,6 +8,7 @@ use crate::components::menu::{MenuDropdown, MenuEntry, MenuEntryGroup};
 use crate::{
     components::{
         netbox::NetboxHint,
+        page_layout::PageLayout,
         panel::{attach_fiber::AttachFiber, loop_editor::LoopPortEditor, show::ShowPanel},
         recovery::RetryScope,
         user::{RequireRole, UserMenu},
@@ -103,7 +104,6 @@ pub enum DuctView {
 #[derive(Debug, Clone, PartialEq, Eq, Target)]
 pub enum CabinetView {
     Overview,
-    Properties,
     Edit,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Target)]
@@ -387,9 +387,11 @@ impl PlanView {
         match self {
             PlanView::Edit => html!(<EditPlan {plan_id}/>),
             PlanView::ListOfCabinets => html! {<ListOfCabinets {plan_id}/>},
-            PlanView::NewCabinet { id } => {
-                html!(<CabinetProperties {plan_id} cabinet={IdOrNew::Temporary(id)}/>)
-            }
+            PlanView::NewCabinet { id } => html! {
+                <PageLayout title="Neuer Schacht">
+                    <CabinetProperties {plan_id} cabinet={IdOrNew::Temporary(id)} onsaved={Callback::noop()}/>
+                </PageLayout>
+            },
             PlanView::Cabinet { id, view } => view.content(plan_id, id),
             PlanView::ListOfCables => html! {<ListOfCables/>},
             PlanView::NewCable { id } => {
@@ -452,20 +454,16 @@ impl CabinetView {
     fn content(self, plan_id: i32, cabinet_id: i32) -> Html {
         match self {
             CabinetView::Overview => html!(<CabinetOverview {plan_id} {cabinet_id}/>),
-            CabinetView::Properties => {
-                html!(<CabinetProperties {plan_id} cabinet={IdOrNew::Id(cabinet_id)}/>)
-            }
             CabinetView::Edit => html!(<EditCabinetPanels {plan_id} {cabinet_id}/>),
         }
     }
 
-    /// The views in the breadcrumb menu; `Properties` opens from the overview's button
+    /// The views in the breadcrumb menu
     pub const ALL: [CabinetView; 2] = [CabinetView::Overview, CabinetView::Edit];
 
     pub fn title(&self) -> &'static str {
         match self {
             CabinetView::Overview => "Übersicht",
-            CabinetView::Properties => "Bearbeiten",
             CabinetView::Edit => "Panels bearbeiten",
         }
     }

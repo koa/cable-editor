@@ -60,8 +60,10 @@ und was das Backend liefert, steht in `fehlermeldungen.md`, der Aufbau des Bread
 - Im Menü einer Ebene stehen die Ansichten, mit denen man am Objekt arbeitet (Übersicht,
   Panels bearbeiten, Fasern auflegen). „Bearbeiten“ der Eigenschaften eines Objekts steht nicht
   im Menü, sondern als Knopf auf der Übersicht des Objekts, sichtbar ab der nötigen Rolle.
-  Ausnahme ist das Kabel: Es hat nur eine Seite, die die Einstellungen zeigt und, mit der nötigen
-  Rolle, ändern lässt (für Leser schreibgeschützt); dort gibt es keinen Knopf „Bearbeiten“.
+  Ausnahmen sind Kabel und Schacht: Sie haben nur eine Seite, die die Einstellungen zeigt und,
+  mit der nötigen Rolle, ändern lässt (für Leser schreibgeschützt); dort gibt es keinen Knopf
+  „Bearbeiten“. Beim Schacht bleiben die Panels eine eigene Ansicht („Panels bearbeiten“), weil
+  sie kein Formularfeld sind, sondern ein eigener Editor.
 - Ein neues Objekt zeigt im Breadcrumb als letztes Element „Neuer Schacht“ usw., als Text, für
   alle Arten gleich.
 - Was wie ein Knopf aussieht und navigiert, ist ein `PlanLink` mit Knopf-Klassen; Seiten bauen
@@ -209,8 +211,11 @@ Schrittweise, je ein Commit, jeder vor dem Commit durchgesehen:
 - **Kabel anlegen und bearbeiten:** eine Seite mit `IdOrNew` als Schlüssel, kein Dialog; das
   Anlegen unterscheidet sich nur in Beschriftung und Vorgaben.
 - **Kabelseite:** Übersicht und Editor bleiben eine Seite; Leser sehen die Einstellungen,
-  Berechtigte ändern sie dort. Bei Schacht und Trasse bleibt die Übersicht mit dem Knopf
-  „Bearbeiten“, weil sie viel enthält, was nicht zum Formular gehört (Panels, Etiketten, Kabel).
+  Berechtigte ändern sie dort. Beim Schacht ist die Übersicht seit 02.10.2026 ebenso eine Seite:
+  Panels, Kabel und die Eigenschaften (eingebettet, für Leser schreibgeschützt) zusammen, kein
+  Knopf „Bearbeiten“ mehr. Bei der Trasse bleibt die Übersicht vorerst mit dem Knopf
+  „Bearbeiten“ getrennt, mit derselben Begründung wie zuvor beim Schacht (die Übersicht enthält
+  was nicht zum Formular gehört); das ist eine bewusste Inkonsistenz, keine vergessene Anpassung.
 - **Planung:** so heisst der Plan in der Oberfläche.
 - **Warnung beim Verlassen:** die App fragt selbst nach (siehe 5) und fängt Klicks und „Zurück“
   global ab, weil der Router den Wechsel nicht abfangen lässt; dadurch muss nicht jeder Link

@@ -954,6 +954,18 @@ body {
   }
 }
 
+// Panels and cables side by side on a wide screen (pages/cabinet/overview.rs), stacked on
+// narrower ones: alone, neither list fills the width
+.cabinet-overview__lists {
+  display: grid;
+  gap: var(--pf-t--global--spacer--lg);
+  grid-template-columns: minmax(0, 1fr);
+
+  @media screen and (min-width: 62rem) {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
 .map-layout__map {
   // Keeps Leaflet's z-indexes inside the map, see .map-view
   isolation: isolate;

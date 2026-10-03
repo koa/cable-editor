@@ -27,7 +27,6 @@ const ROUTES = [
   { v: ['PlanView::ListOfCabinets'], path: '/plan/0/listofcabinets' },
   { v: ['PlanView::NewCabinet'], path: `/plan/0/newcabinet/${NEW_ID}`, needs: 'PLANNER' },
   { v: ['PlanView::Cabinet', 'CabinetView::Overview'], path: '/plan/0/cabinet/1/overview' },
-  { v: ['CabinetView::Properties'], path: '/plan/0/cabinet/1/properties' },
   { v: ['CabinetView::Edit'], path: '/plan/0/cabinet/1/edit', needs: 'PLANNER' },
   { v: ['PlanView::ListOfCables'], path: '/plan/0/listofcables' },
   { v: ['PlanView::NewCable'], path: `/plan/0/newcable/${NEW_ID}`, needs: 'PLANNER' },
@@ -64,8 +63,8 @@ const NOT_FOUND = [
 // button of the dialog asking first.
 const FAILING_CHANGES = [
   { path: '/plan/0/duct/711/properties', needs: 'PLANNER', input: 2, click: /^Speichern$/, title: /Trasse konnte nicht gespeichert werden/ },
-  { path: '/plan/0/cabinet/1/properties', needs: 'PLANNER', input: 0, click: /^Speichern$/, title: /Schacht konnte nicht gespeichert werden/ },
-  { path: '/plan/0/cabinet/1/properties', needs: 'ADMIN', click: /^Löschen$/, confirm: /^(Ja|Löschen)$/, title: /Schacht konnte nicht gelöscht werden/ },
+  { path: '/plan/0/cabinet/1/overview', needs: 'PLANNER', input: 0, click: /^Speichern$/, title: /Schacht konnte nicht gespeichert werden/ },
+  { path: '/plan/0/cabinet/1/overview', needs: 'ADMIN', click: /^Löschen$/, confirm: /^(Ja|Löschen)$/, title: /Schacht konnte nicht gelöscht werden/ },
   { path: '/plan/1/edit', needs: 'PLANNER', input: 0, click: /^Umbenennen$/, title: /Plan(ung)? konnte nicht gespeichert werden/ },
   { path: '/plan/0/cabinettype/1', needs: 'ADMIN', input: 0, click: /^Speichern$/, title: /Schachttyp konnte nicht gespeichert werden/ },
   { path: '/plan/1/panel/22/edit', needs: 'PLANNER', input: 0, click: /Speichern$/, title: /(Ports|Panel) konnte(n)? nicht gespeichert werden/ },
@@ -78,7 +77,7 @@ const FAILING_CHANGES = [
 // (`untouched`: "Speichern" only with changes). Deleting comes last, it changes what the mock has.
 const SUCCESSFUL_CHANGES = [
   { path: '/plan/0/duct/711/properties', needs: 'PLANNER', input: 2, click: /^Speichern$/, untouched: true, title: /^Trasse gespeichert$/, then: '/plan/0/duct/711/show' },
-  { path: '/plan/0/cabinet/1/properties', needs: 'PLANNER', input: 0, click: /^Speichern$/, untouched: true, title: /^Schacht gespeichert$/, then: '/plan/0/cabinet/1/overview' },
+  { path: '/plan/0/cabinet/1/overview', needs: 'PLANNER', input: 0, click: /^Speichern$/, untouched: true, title: /^Schacht gespeichert$/ },
   { path: '/plan/1/edit', needs: 'PLANNER', input: 0, click: /^Umbenennen$/, untouched: true, title: /^Planung umbenannt$/ },
   { path: '/plan/0/cabinettype/1', needs: 'ADMIN', input: 0, click: /^Speichern$/, untouched: true, title: /^Schachttyp gespeichert$/ },
   { path: '/plan/1/panel/22/edit', needs: 'PLANNER', input: 0, click: /^Speichern$/, untouched: true, title: /^Ports gespeichert$/ },
@@ -95,7 +94,7 @@ const SUCCESSFUL_CHANGES = [
 // field to change (`text` the new value), `pickDuct` adds a path to a new cable.
 const LEAVE_FLOWS = [
   { path: '/plan/0/duct/711/properties', needs: 'PLANNER', input: 2 },
-  { path: '/plan/0/cabinet/1/properties', needs: 'PLANNER', input: 0 },
+  { path: '/plan/0/cabinet/1/overview', needs: 'PLANNER', input: 0 },
   { path: '/plan/1/edit', needs: 'PLANNER', input: 0 },
   { path: '/plan/0/cabinettype/1', needs: 'ADMIN', input: 0 },
   { path: '/plan/1/panel/22/edit', needs: 'PLANNER', input: 0 },

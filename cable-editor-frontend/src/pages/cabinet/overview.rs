@@ -1,18 +1,20 @@
 use crate::{
     components::{
         label_printer::{LabelText, PanelLabelButton, PrintLabelButton, check_printer_supported},
-        links::{CableLink, OwnerLink, PanelLink, SchachtLink, SchachtTypLink},
+        links::{CableLink, PanelLink, SchachtLink},
         page_layout::{PageLayout, object_title},
         plan_link::PlanLink,
         table::ListModel,
     },
     error::FrontendError,
-    geo::coordinates::CoordinateSystem,
     graphql::authenticated::{
-        current_user::Role,
+        IdOrNew,
         schacht_cables::{SchachtCableEnd, SchachtCables, SchachtPanelEntry},
     },
-    pages::router::{CabinetView, PlanView},
+    pages::{
+        cabinet::properties::CabinetProperties,
+        router::{CabinetView, PlanView},
+    },
     util::{get_credentials, get_role},
 };
 use patternfly_yew::prelude::{
@@ -87,34 +89,6 @@ fn view_panel(panel: &SchachtPanelEntry) -> Html {
                 </div>
             </div>
         </li>
-    }
-}
-
-/// Type, owner, position and Lagebestimmung of the Schacht, read-only (the button of the
-/// overview opens `CabinetView::Properties` to change them).
-fn view_properties(schacht: &SchachtCables) -> Html {
-    let typ = match &schacht.typ {
-        Some(typ) => {
-            let name = typ.name.as_deref().unwrap_or("(ohne Namen)");
-            html!(<SchachtTypLink id={typ.id} text={name.to_string()}/>)
-        }
-        None => html!("kein Typ"),
-    };
-    let position = match &schacht.position {
-        Some(point) => {
-            let (e, n) = CoordinateSystem::Lv95.format(point.e, point.n);
-            format!("{e} / {n}")
-        }
-        None => "keine".to_string(),
-    };
-    html! {
-        <DescriptionList>
-            <DescriptionGroup term="Typ">{typ}</DescriptionGroup>
-            <DescriptionGroup term="Eigentümer"><OwnerLink text={schacht.owner.name.clone()}/></DescriptionGroup>
-            <DescriptionGroup term="Position (LV95)">{position}</DescriptionGroup>
-            <DescriptionGroup term="Lagebestimmung">{schacht.lagebestimmung.title()}</DescriptionGroup>
-            <DescriptionGroup term="Geändert">{schacht.changed_at.local()}</DescriptionGroup>
-        </DescriptionList>
     }
 }
 
@@ -218,45 +192,49 @@ impl CabinetOverview {
             id: ctx.props().cabinet_id,
             view: CabinetView::Edit,
         };
-        let edit_properties = PlanView::Cabinet {
-            id: ctx.props().cabinet_id,
-            view: CabinetView::Properties,
-        };
         let role = get_role(ctx.link());
+        let onsaved = ctx.link().callback(|()| Msg::Fetch);
         html! {
             <PageLayout title={object_title("Schacht", Some(&schacht.name))}>
-                <Title level={Level::H2}>{"Panels"}</Title>
-                if panels.is_empty() {
-                    <p class="pf-v6-u-color-200">{"Keine Panels im Schacht."}</p>
-                } else {
-                    <ul class="pf-v6-c-data-list pf-m-compact schacht-panels" role="list" aria-label="Panels">
-                        {for panels.iter().map(view_panel)}
-                    </ul>
-                }
-                if role >= edit_panels.required_role() {
-                    <div class="pf-v6-u-mb-xl">
-                        <PlanLink to={edit_panels} class="pf-v6-c-button pf-m-secondary">
-                            {"Panels bearbeiten"}
-                        </PlanLink>
-                    </div>
-                }
-                <Title level={Level::H2}>{"Kabel"}</Title>
-                <Table<Columns, ListModel<Columns, MemoizedTableModel<SchachtCableEnd>>>
-                    mode={TableMode::Compact}
-                    grid={TableGridMode::Medium}
-                    {header}
-                    {entries}
-                />
                 <Title level={Level::H2}>{"Eigenschaften"}</Title>
-                {view_properties(schacht)}
-                // Readers may open the page too, but only to look at what is shown here already
-                if role >= Role::Planner {
-                    <div class="pf-v6-u-mt-md">
-                        <PlanLink to={edit_properties} class="pf-v6-c-button pf-m-secondary">
-                            {"Bearbeiten"}
-                        </PlanLink>
+                <DescriptionList>
+                    <DescriptionGroup term="Geändert">{schacht.changed_at.local()}</DescriptionGroup>
+                </DescriptionList>
+                // Editable for planners, read-only fields for readers (CabinetProperties itself).
+                // First on the page, so its map is visible without scrolling.
+                <CabinetProperties
+                    plan_id={ctx.props().plan_id}
+                    cabinet={IdOrNew::Id(ctx.props().cabinet_id)}
+                    {onsaved}
+                />
+                <div class="cabinet-overview__lists">
+                    <div>
+                        <Title level={Level::H2}>{"Panels"}</Title>
+                        if panels.is_empty() {
+                            <p class="pf-v6-u-color-200">{"Keine Panels im Schacht."}</p>
+                        } else {
+                            <ul class="pf-v6-c-data-list pf-m-compact schacht-panels" role="list" aria-label="Panels">
+                                {for panels.iter().map(view_panel)}
+                            </ul>
+                        }
+                        if role >= edit_panels.required_role() {
+                            <div class="pf-v6-u-mb-xl">
+                                <PlanLink to={edit_panels} class="pf-v6-c-button pf-m-secondary">
+                                    {"Panels bearbeiten"}
+                                </PlanLink>
+                            </div>
+                        }
                     </div>
-                }
+                    <div>
+                        <Title level={Level::H2}>{"Kabel"}</Title>
+                        <Table<Columns, ListModel<Columns, MemoizedTableModel<SchachtCableEnd>>>
+                            mode={TableMode::Compact}
+                            grid={TableGridMode::Medium}
+                            {header}
+                            {entries}
+                        />
+                    </div>
+                </div>
             </PageLayout>
         }
     }

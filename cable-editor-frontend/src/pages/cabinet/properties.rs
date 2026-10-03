@@ -1,9 +1,5 @@
 use crate::{
-    components::{
-        dialog::confirm_delete,
-        page_layout::{PageLayout, object_title},
-        unsaved::Unsaved,
-    },
+    components::{dialog::confirm_delete, unsaved::Unsaved},
     error::FrontendError,
     geo::{
         coordinates::{Check, CoordinateSystem, check, parse_number, split_pair},
@@ -34,7 +30,7 @@ use wasm_bindgen::{JsCast, JsValue, closure::Closure};
 // The stable (older) names of GeolocationPosition and GeolocationPositionError
 use web_sys::{Position, PositionError, PositionOptions};
 use yew::{
-    Component, Context, Html, Properties, html, html::IntoPropValue, html_nested,
+    Callback, Component, Context, Html, Properties, html, html::IntoPropValue, html_nested,
     platform::spawn_local,
 };
 
@@ -49,7 +45,9 @@ const POSITION_ZOOM: f64 = 18.0;
 /// unless set explicitly), also for a position from the device. The map also shows all other
 /// ducts and Schächte for context, so the position can be judged relative to them; the one being
 /// placed stands out with its own marker style (`.schacht-properties__marker`). Readers see the
-/// same page read-only.
+/// same form read-only. Renders only its form and map, no `PageLayout`: for an existing Schacht
+/// it's embedded in `CabinetOverview`'s page, for a new one (`PlanView::NewCabinet`) the router
+/// wraps it in one itself.
 pub struct CabinetProperties {
     /// The Schacht as stored (missing for a new one) and the types and owners to choose from
     loaded: Option<(Option<SchachtProperties>, SchachtChoices)>,
@@ -131,6 +129,9 @@ pub struct CabinetPropertiesProps {
     pub plan_id: i32,
     /// A temporary id: create a new Schacht
     pub cabinet: IdOrNew,
+    /// An existing Schacht was saved, so the embedding page can refresh what it shows of it
+    /// itself (its name, "Geändert"); not called after creating a new one, which navigates away
+    pub onsaved: Callback<()>,
 }
 
 impl Component for CabinetProperties {
@@ -300,17 +301,15 @@ impl Component for CabinetProperties {
             Msg::Saved(result) => {
                 self.saving = false;
                 match result {
-                    // Back to the Schacht's overview, which shows what was saved
+                    // Stays here (embedded in the Schacht's overview); the form and the
+                    // embedding page both take the saved values as the new baseline
                     Ok(schacht) => {
                         toast_success(ctx.link(), "Schacht gespeichert");
-                        navigate(
-                            ctx.link(),
-                            ctx.props().plan_id,
-                            PlanView::Cabinet {
-                                id: schacht.id,
-                                view: CabinetView::Overview,
-                            },
-                        );
+                        self.take_stored(ctx, Some(&schacht));
+                        if let Some(loaded) = &mut self.loaded {
+                            loaded.0 = Some(schacht);
+                        }
+                        ctx.props().onsaved.emit(());
                     }
                     Err(error) => {
                         toast_error(ctx.link(), "Schacht konnte nicht gespeichert werden", error)
@@ -373,17 +372,6 @@ impl Component for CabinetProperties {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        let is_new = matches!(ctx.props().cabinet, IdOrNew::Temporary(_));
-        let title = if is_new {
-            "Neuer Schacht".into()
-        } else {
-            let stored_name = self
-                .loaded
-                .as_ref()
-                .and_then(|(schacht, _)| schacht.as_ref())
-                .map(|schacht| schacht.name.clone());
-            object_title(CabinetView::Properties.title(), stored_name)
-        };
         let content = if let Some(error) = &self.error {
             error.into_prop_value()
         } else if let Some((stored, choices)) = &self.loaded {
@@ -399,12 +387,10 @@ impl Component for CabinetProperties {
         };
         // The map's div is always there, so Leaflet keeps its element (see pages/map.rs)
         html! {
-            <PageLayout {title}>
-                <div class="map-layout">
-                    <div class="schacht-properties__form">{content}</div>
-                    <div class="map-layout__map" ref={self.map.container()}/>
-                </div>
-            </PageLayout>
+            <div class="map-layout">
+                <div class="schacht-properties__form">{content}</div>
+                <div class="map-layout__map" ref={self.map.container()}/>
+            </div>
         }
     }
 
