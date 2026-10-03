@@ -12,6 +12,15 @@ use yew::{
     html::IntoPropValue, platform::spawn_local, use_context,
 };
 
+/// The version actually running: for a release, the workspace version (`Cargo.toml`'s
+/// `[workspace.package]`), which the Helm chart's `appVersion` follows too; the Dockerfile sets
+/// `APP_VERSION` from the snapshot version `build-and-publish.yml` computes for anything else
+/// (e.g. `0.0.0-snapshot.a1b2c3d`), unset for a plain `cargo`/`trunk` build.
+const VERSION: &str = match option_env!("APP_VERSION") {
+    Some(version) if !version.is_empty() => version,
+    _ => env!("CARGO_PKG_VERSION"),
+};
+
 #[derive(Properties, PartialEq)]
 pub struct UserProviderProps {
     #[prop_or_default]
@@ -99,7 +108,8 @@ pub fn RequireRole(props: &RequireRoleProps) -> Html {
 }
 
 /// Menu at the end of the breadcrumb bar showing who is logged in, the role and the groups it
-/// is derived from, for support ("why can't I change this?").
+/// is derived from, for support ("why can't I change this?"), and the running version ("which
+/// bug reports apply?").
 #[function_component]
 pub fn UserMenu() -> Html {
     let Some(user) = use_context::<CurrentUser>() else {
@@ -140,6 +150,9 @@ pub fn UserMenu() -> Html {
                 {entry("Benutzername", user.preferred_username.clone())}
                 {entry(user.role.description(), format!("Rolle: {}", user.role.title()))}
                 {entry("Gruppen beim Login-Anbieter", groups)}
+            </MenuGroup>
+            <MenuGroup divider=true>
+                {entry("Version", VERSION.to_string())}
             </MenuGroup>
         </PopupMenu>
     }

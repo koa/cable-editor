@@ -15,6 +15,12 @@ RUN wget -qO- https://github.com/trunk-rs/trunk/releases/latest/download/trunk-x
 WORKDIR /usr/src/app
 COPY . .
 
+# Version for the UI (components/user.rs): .git is excluded from the build context by
+# .dockerignore, so this comes from outside (build-and-publish.yml); empty for a local
+# `docker build` without --build-arg, where the UI then shows the Cargo.toml version.
+ARG APP_VERSION=""
+ENV APP_VERSION=${APP_VERSION}
+
 # ------------------------------------------------------------------------------
 # SCHRITT A: Frontend bauen
 # ------------------------------------------------------------------------------
