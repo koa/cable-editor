@@ -7,7 +7,7 @@ Stand: 27.09.2026.
   lässt sich jedes Element direkt verlinken. Der Plan ist eher eine globale Einstellung der UI,
   die beim Wechseln die aktuelle Ansicht behält.
 - Jede Art von Element ist ein Bereich im Bereichsmenü des Breadcrumbs („Planung bearbeiten“,
-  „Karte“, „Schacht“, „Kabel“, „Trasse“, „Eigentümer“, „Schachttyp“, „Leitungskataster“,
+  „Arbeitsauftrag“ (nur bei einer Planung, der Ist-Zustand plant nichts), „Karte“, „Schacht“, „Kabel“, „Trasse“, „Eigentümer“, „Schachttyp“, „Leitungskataster“,
   „Netbox“), nach Zweck gruppiert in Planung, Objekte, Stammdaten und Lieferung; neue Arten
   kommen als weitere Bereiche dazu.
 - Jedes Menü im Breadcrumb bietet genau eine Ebene an, und genau ein Eintrag ist aktiv: das

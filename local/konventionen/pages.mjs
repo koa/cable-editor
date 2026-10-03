@@ -24,6 +24,7 @@ const NEW_ID = '00000000-0000-4000-8000-000000000001';
 const ROUTES = [
   { v: ['AppRoute::ListOfPlans'], path: '/listofplans' },
   { v: ['AppRoute::Plan', 'PlanView::Edit'], path: '/plan/1/edit' },
+  { v: ['PlanView::WorkOrder'], path: '/plan/1/workorder' },
   { v: ['PlanView::ListOfCabinets'], path: '/plan/0/listofcabinets' },
   { v: ['PlanView::NewCabinet'], path: `/plan/0/newcabinet/${NEW_ID}`, needs: 'PLANNER' },
   { v: ['PlanView::Cabinet', 'CabinetView::Overview'], path: '/plan/0/cabinet/1/overview' },

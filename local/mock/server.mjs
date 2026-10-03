@@ -181,6 +181,17 @@ portsOf(24).slice(0, 6).forEach((p, i) => baseUsage.push([p.id, 'FRONT', 12, 1, 
 portsOf(32).slice(0, 8).forEach((p, i) => baseUsage.push([p.id, 'FRONT', 11, 1, i + 1]));
 portsOf(32).slice(0, 4).forEach((p, i) => baseUsage.push([p.id, 'BACK', 14, 1, i + 1]));
 portsOf(23).slice(6, 8).forEach((p, i) => planUsage[1].push([p.id, 'FRONT', 15, 1, i + 1]));
+// Loops: fibers 1-4 of bundle 2 pass through from K-1002 to K-1001 uncut; plan 1 cuts 3 and 4
+// (a row without cable removes the fiber) and splices them: K-1002 to K-1005 in Spleisskassette 2,
+// K-1001 to a pigtail on the patch panel, whose front gets plugged
+portsOf(25).forEach((p, i) => {
+  baseUsage.push([p.id, 'FRONT', 12, 2, i + 1], [p.id, 'BACK', 11, 2, i + 1]);
+  if (i >= 2) planUsage[1].push([p.id, 'FRONT', null, null, null], [p.id, 'BACK', null, null, null]);
+});
+portsOf(23).slice(6, 8).forEach((p, i) => planUsage[1].push([p.id, 'BACK', 12, 2, i + 3]));
+planUsage[1].push([portsOf(24)[6].id, 'BACK', 11, 2, 3], [portsOf(24)[6].id, 'FRONT', 15, 1, 3]);
+// Schacht 2: a splice moves to another fiber
+planUsage[1].push([portsOf(32)[0].id, 'BACK', 14, 1, 5]);
 
 function usageRow(planId, portId, side) {
   const inPlan = (planUsage[planId] || []).find((u) => u[0] === portId && u[1] === side);
@@ -373,6 +384,29 @@ const plan = (id) => {
     rootPanels: () => panelRows.filter((r) => r[3] === null).map((r) => plannedPanel(r[0], id)),
     panel: ({ panelId }) => plannedPanel(panelId, id),
     usage: () => (planUsage[id] || []).map((u) => portUsage(id, u[0], u[1])),
+    // Like the backend: the ports the plan's rows change, by panel and position
+    changedPorts: () => {
+      const fiberOf = (row) => (row && row[2] !== null ? { cable: () => cable(row[2]), bundle: row[3], fiber: row[4] } : null);
+      const same = (a, b) => (a?.[2] ?? null) === (b?.[2] ?? null) && a?.[3] === b?.[3] && a?.[4] === b?.[4];
+      const rows = planUsage[id] || [];
+      return [...new Set(rows.map((u) => u[0]))]
+        .map((portId) => {
+          const side = (s) => {
+            const current = baseUsage.find((u) => u[0] === portId && u[1] === s) ?? null;
+            const planned = rows.find((u) => u[0] === portId && u[1] === s) ?? current;
+            return [current, planned];
+          };
+          const [currentFront, plannedFront] = side('FRONT');
+          const [currentBack, plannedBack] = side('BACK');
+          if (same(currentFront, plannedFront) && same(currentBack, plannedBack)) return null;
+          return {
+            port: panelPort(portId), currentFront: fiberOf(currentFront), currentBack: fiberOf(currentBack),
+            plannedFront: fiberOf(plannedFront), plannedBack: fiberOf(plannedBack),
+          };
+        })
+        .filter(Boolean)
+        .sort((a, b) => a.port.panelId - b.port.panelId || a.port.orderNumber - b.port.orderNumber);
+    },
   };
 };
 // The last run of the automatic Netbox sync, as MOCK_NETBOX says
@@ -408,7 +442,8 @@ const portUsage = (planId, portId, side) => {
   const [, , cableId, bundle, fiber] = u.row;
   return {
     side, modifiedInPlan: u.modified,
-    fiber: { bundle, fiber, cable: () => cable(cableId) },
+    // A row of a plan without cable removes the fiber
+    fiber: cableId === null ? null : { bundle, fiber, cable: () => cable(cableId) },
     port: () => panelPort(portId), plan: () => plan(planId),
     otherSide: () => portUsage(planId, portId, side === 'FRONT' ? 'BACK' : 'FRONT'),
     // Simplified trace: the fiber ends at this port
@@ -456,7 +491,11 @@ const plannedPanel = (panelId, planId) => {
     children: () => p.children().map((c) => plannedPanel(c.id, planId)),
     ports: () => portsOf(panelId).map((x) => ({
       ...x,
-      usage: ({ side }) => portUsage(planId, x.id, side),
+      // Like the backend: a removed fiber is no usage
+      usage: ({ side }) => {
+        const u = portUsage(planId, x.id, side);
+        return u?.fiber ? u : null;
+      },
       currentUsage: ({ side }) => portUsage(0, x.id, side),
     })),
     allChildrenRecursive: () => p.allChildrenRecursive().map((c) => plannedPanel(c.id, planId)),

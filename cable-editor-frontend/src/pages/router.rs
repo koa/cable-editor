@@ -13,7 +13,7 @@ use crate::{
         recovery::RetryScope,
         user::{RequireRole, UserMenu},
     },
-    graphql::authenticated::{IdOrNew, current_user::Role},
+    graphql::authenticated::{IdOrNew, current_user::Role, list_plans::BASELINE_PLAN_ID},
     pages::{
         cabinet::{
             edit::EditCabinetPanels, list::ListOfCabinets, overview::CabinetOverview,
@@ -29,6 +29,7 @@ use crate::{
         owner::list::ListOfOwners,
         panel::EditPanel,
         planning::{edit::EditPlan, list::ListOfPlannings},
+        work_order::WorkOrder,
     },
 };
 use patternfly_yew::prelude::{Breadcrumb, BreadcrumbItem, PageSection, PageSectionType};
@@ -145,6 +146,8 @@ impl PanelView {
 #[derive(Debug, Clone, PartialEq, Eq, Target)]
 pub enum PlanView {
     Edit,
+    /// What is to be done in the field to implement the plan
+    WorkOrder,
     ListOfCabinets,
     /// `id` tells new Schächte apart (see `IdOrNew`), kept in the path so it stays the same
     NewCabinet {
@@ -201,6 +204,7 @@ impl PlanView {
         // The area the current page lies in: its entry leads to the area's start page
         let (title, area): (Cow<'static, str>, PlanView) = match self {
             PlanView::Edit => ("Planung bearbeiten".into(), PlanView::Edit),
+            PlanView::WorkOrder => ("Arbeitsauftrag".into(), PlanView::WorkOrder),
             PlanView::Cabinet { .. }
             | PlanView::ListOfCabinets
             | PlanView::NewCabinet { .. }
@@ -220,15 +224,22 @@ impl PlanView {
             PlanView::Netbox => ("Netbox".into(), PlanView::Netbox),
         };
 
-        // The areas of the plan in groups, each leading to its start page
+        // The areas of the plan in groups, each leading to its start page; the baseline plans no
+        // changes, so it has no work order
+        let planung: &[(&str, PlanView)] = if plan_id == BASELINE_PLAN_ID {
+            &[
+                ("Planung bearbeiten", PlanView::Edit),
+                ("Karte", PlanView::Map),
+            ]
+        } else {
+            &[
+                ("Planung bearbeiten", PlanView::Edit),
+                ("Arbeitsauftrag", PlanView::WorkOrder),
+                ("Karte", PlanView::Map),
+            ]
+        };
         let areas: [(&'static str, &[(&str, PlanView)]); 4] = [
-            (
-                "Planung",
-                &[
-                    ("Planung bearbeiten", PlanView::Edit),
-                    ("Karte", PlanView::Map),
-                ],
-            ),
+            ("Planung", planung),
             (
                 "Objekte",
                 &[
@@ -386,6 +397,7 @@ impl PlanView {
     fn content(self, plan_id: i32) -> Html {
         match self {
             PlanView::Edit => html!(<EditPlan {plan_id}/>),
+            PlanView::WorkOrder => html!(<WorkOrder {plan_id}/>),
             PlanView::ListOfCabinets => html! {<ListOfCabinets {plan_id}/>},
             PlanView::NewCabinet { id } => html! {
                 <PageLayout title="Neuer Schacht">

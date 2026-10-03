@@ -145,6 +145,31 @@ const bergPorts = planned.plan.rootPanels.find((root) => root.panel.schacht.id =
 const described = bergPorts.map((port) => `${port.label}:${port.usage?.fiber.cable.name}${port.usage?.modifiedInPlan ? '*' : ''}/${port.currentUsage?.fiber.cable.name}`).join();
 check('plan usage against the baseline', described === '1:K4*/K1,2:K4*/K1,3:K4*/K1,4:K1/K1,5:K1/K1,6:K1/K1', described);
 
+// The work order: in Berg K4 instead of K1 on port 1, K2 removed from port 4, port 5 set to what
+// it holds already (no change)
+const work = await planId('Arbeitsauftrag Berg');
+await gql('mutation($pl:Int!,$c:[PortUsageInput!]!){ setPortUsage(planId:$pl, changes:$c) }', {
+  pl: work,
+  c: [
+    attach(ports[4][0], 'BACK', cables.K4, 1),
+    { portId: ports[4][3], side: 'FRONT', fiber: { remove: true } },
+    attach(ports[4][4], 'BACK', cables.K1, 5),
+  ],
+});
+const fiberText = (fiber) => (fiber ? `${fiber.cable.name}-${fiber.fiber}` : '-');
+const workOrder = await gql(`query($pl:Int!){ plan(planId:$pl) { changedPorts { port { label panel { schacht { id } } }
+  currentFront { cable { name } fiber } currentBack { cable { name } fiber } plannedFront { cable { name } fiber } plannedBack { cable { name } fiber } } } }`, { pl: work });
+console.log(`changed ports${statements(workOrder)}`);
+const changes = workOrder.plan.changedPorts.map((c) =>
+  `${c.port.label}:${fiberText(c.currentFront)}/${fiberText(c.currentBack)}>${fiberText(c.plannedFront)}/${fiberText(c.plannedBack)}`).join();
+check('changed ports of a plan', changes === '1:K2-1/K1-1>K2-1/K4-1,4:K2-4/K1-4>-/K1-4', changes);
+check('the baseline changes no ports', (await gql('{ plan(planId:0) { changedPorts { port { id } } } }')).plan.changedPorts.length === 0);
+// Back to the current state, so the plan holds no cables for the checks below
+await gql('mutation($pl:Int!,$c:[PortUsageInput!]!){ setPortUsage(planId:$pl, changes:$c) }', {
+  pl: work,
+  c: [[ports[4][0], 'BACK'], [ports[4][3], 'FRONT'], [ports[4][4], 'BACK']].map(([portId, side]) => ({ portId, side, fiber: { reset: true } })),
+});
+
 const end = await gql('query($c:Int!){ cable(cableId:$c) { end(schachtId:6) { usedPorts(planId:0) { side } fibers { fiber usedPort(planId:0) { otherSide { fiber { cable { name } } } } otherEnd { cable { schacht { name } } } } } } }', { c: cables.K2 });
 console.log(`cable end${statements(end)}`);
 const spliced = end.cable.end.fibers.filter((fiber) => fiber.usedPort).map((fiber) => fiber.usedPort.otherSide.fiber.cable.name);

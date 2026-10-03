@@ -23,6 +23,7 @@ pub mod plan_details;
 pub mod schacht_cables;
 pub mod schacht_properties;
 pub mod schacht_types;
+pub mod work_order;
 
 #[cynic::schema("authenticated")]
 mod schema {}

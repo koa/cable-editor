@@ -1,10 +1,13 @@
 use crate::graphql::error::ApiResult;
 use crate::{
     db::{
-        entity::panel::{Panel, PortUsage},
+        entity::panel::{Panel, PanelPort, PortUsage},
         schema,
     },
-    graphql::authenticated::{get_connection, planned::PlannedPanel},
+    graphql::authenticated::{
+        get_connection,
+        planned::{PlannedPanel, PortChange},
+    },
 };
 use async_graphql::{Context, Object};
 use diesel::{
@@ -113,6 +116,30 @@ WHERE a.parent_panel IS NULL;
                     plan: self.clone(),
                 }))
         }
+    }
+    /// The ports whose fibers this plan changes, with their fibers in the current state and in
+    /// the plan, by panel and position: what is to be done to implement it (the work order).
+    /// None for the baseline.
+    async fn changed_ports(&self, ctx: &Context<'_>) -> ApiResult<Box<[PortChange]>> {
+        if self.is_baseline() {
+            return Ok(Box::default());
+        }
+        let mut connection = get_connection(ctx).await?;
+        let planned = PortUsage::query()
+            .filter(schema::port_usage::plan_id.eq(self.id))
+            .load(&mut connection)
+            .await?;
+        let port_ids = planned.iter().map(|row| row.port_id).collect::<Box<[_]>>();
+        let current = PortUsage::query()
+            .filter(schema::port_usage::plan_id.eq(BASELINE_PLAN_ID))
+            .filter(schema::port_usage::port_id.eq_any(&port_ids))
+            .load(&mut connection)
+            .await?;
+        let ports = PanelPort::query()
+            .filter(schema::panel_port::id.eq_any(&port_ids))
+            .load(&mut connection)
+            .await?;
+        Ok(PortChange::of(ports, &current, &planned))
     }
     async fn usage(&self, ctx: &Context<'_>) -> ApiResult<Vec<PortUsage>> {
         let mut connection = get_connection(ctx).await?;

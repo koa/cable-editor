@@ -118,6 +118,18 @@ pub struct PortUsage {
     pub bundle: Option<i32>,
 }
 impl PortUsage {
+    /// The cable and fiber, if used (a row of a plan removing the fiber has none)
+    pub fn used_fiber(&self) -> Option<Fiber> {
+        if let (Some(cable), Some(bundle), Some(fiber)) = (self.cable, self.bundle, self.fiber) {
+            Some(Fiber {
+                cable,
+                bundle,
+                fiber,
+            })
+        } else {
+            None
+        }
+    }
     pub async fn other_side_of_port(
         &self,
         plan_id: i32,
@@ -159,17 +171,9 @@ impl PortUsage {
     async fn side(&self) -> PortSide {
         self.side
     }
-    // The cable and fiber, if used (tombstones have None here)
+    /// The cable and fiber, if used (a row of a plan removing the fiber has none)
     async fn fiber(&self) -> Option<Fiber> {
-        if let (Some(cable), Some(bundle), Some(fiber)) = (self.cable, self.bundle, self.fiber) {
-            Some(Fiber {
-                cable,
-                bundle,
-                fiber,
-            })
-        } else {
-            None
-        }
+        self.used_fiber()
     }
     async fn port(&self, ctx: &Context<'_>) -> ApiResult<PanelPort> {
         load_one(ctx, PanelPortId(self.port_id)).await

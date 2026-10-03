@@ -55,8 +55,8 @@ und was das Backend liefert, steht in `fehlermeldungen.md`, der Aufbau des Bread
 ## 2. Menüführung
 
 - Jede Art von Objekt ist ein Bereich im Bereichsmenü. Die Bereiche sind nach Zweck gruppiert:
-  Planung (Planung bearbeiten, Karte), Objekte (Schacht, Kabel, Trasse), Stammdaten (Eigentümer,
-  Schachttyp), Lieferung (Leitungskataster, Netbox).
+  Planung (Planung bearbeiten, Arbeitsauftrag, Karte), Objekte (Schacht, Kabel, Trasse),
+  Stammdaten (Eigentümer, Schachttyp), Lieferung (Leitungskataster, Netbox).
 - Im Menü einer Ebene stehen die Ansichten, mit denen man am Objekt arbeitet (Übersicht,
   Panels bearbeiten, Fasern auflegen). „Bearbeiten“ der Eigenschaften eines Objekts steht nicht
   im Menü, sondern als Knopf auf der Übersicht des Objekts, sichtbar ab der nötigen Rolle.

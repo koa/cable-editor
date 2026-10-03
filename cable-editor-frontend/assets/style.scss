@@ -966,6 +966,130 @@ body {
   }
 }
 
+// The work order of a plan (pages/work_order.rs)
+.work-order__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--pf-t--global--spacer--md);
+  margin-block-end: var(--pf-t--global--spacer--lg);
+}
+
+.work-order__schacht + .work-order__schacht {
+  margin-block-start: var(--pf-t--global--spacer--2xl);
+}
+
+.work-order__panel {
+  margin-block-start: var(--pf-t--global--spacer--md);
+
+  h4 {
+    margin-block-start: var(--pf-t--global--spacer--md);
+  }
+}
+
+.work-order__fiber {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--xs);
+}
+
+// A line per cable pair, its fibers beside it on wide screens, below it on phones
+.work-order__loops {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.work-order__loop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
+  padding-block: var(--pf-t--global--spacer--sm);
+  border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+}
+
+.work-order__loop-cables {
+  @media print, screen and (min-width: 48rem) {
+    flex: 0 0 38%;
+  }
+}
+
+.work-order__loop-fibers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pf-t--global--spacer--xs);
+}
+
+// Place and work line up across the tables of a panel, the fibers share the rest
+.work-order__table {
+  @media print, screen and (min-width: 48rem) {
+    table-layout: fixed;
+
+    th:nth-child(1) {
+      width: 22%;
+    }
+
+    th:nth-child(2) {
+      width: 16%;
+    }
+  }
+
+  // On phones a block per row, each cell labelled with its column
+  @media screen and (max-width: 47.99rem) {
+    thead {
+      display: none;
+    }
+
+    tr {
+      display: block;
+      padding-block: var(--pf-t--global--spacer--sm);
+    }
+
+    td {
+      display: grid;
+      grid-template-columns: 6rem minmax(0, 1fr);
+      gap: var(--pf-t--global--spacer--sm);
+      padding-block: var(--pf-t--global--spacer--xs);
+
+      &::before {
+        content: attr(data-label);
+        font-weight: var(--pf-t--global--font--weight--body--bold);
+      }
+    }
+  }
+}
+
+// Names the plan on every sheet, as each Schacht starts a new one
+.work-order__print-line {
+  display: none;
+}
+
+@media print {
+  .work-order__print-line {
+    display: block;
+    font-size: 9pt;
+    color: #444;
+  }
+
+  .work-order__schacht + .work-order__schacht {
+    break-before: page;
+    margin-block-start: 0;
+  }
+
+  .work-order__table tr,
+  .work-order__loop {
+    break-inside: avoid;
+  }
+
+  .work-order h2,
+  .work-order h3,
+  .work-order h4 {
+    break-after: avoid;
+  }
+}
+
 .map-layout__map {
   // Keeps Leaflet's z-indexes inside the map, see .map-view
   isolation: isolate;

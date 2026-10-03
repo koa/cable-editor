@@ -10,6 +10,7 @@ pub mod owner;
 pub mod panel;
 pub mod planning;
 pub mod router;
+pub mod work_order;
 
 use crate::components::{
     label_printer::PrinterStatusBar, recovery::Recovery, unsaved::UnsavedGuard, user::UserProvider,
