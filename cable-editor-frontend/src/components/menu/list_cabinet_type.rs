@@ -1,5 +1,5 @@
 use crate::components::load::Load;
-use crate::components::menu::{MenuDropdown, MenuEntry, view_load};
+use crate::components::menu::{BreadcrumbItem, MenuDropdown, MenuEntry, view_load};
 use crate::error::FrontendError;
 use crate::graphql::authenticated::schacht_types::{SchachtTypEntry, fetch_schacht_typ_list};
 use crate::pages::router::{AppRoute, PlanView};
@@ -72,6 +72,6 @@ impl ListCabinetType {
                 },
             })
             .collect::<Box<[_]>>();
-        html!(<MenuDropdown {title} {entries}/>)
+        html!(<BreadcrumbItem><MenuDropdown {title} {entries}/></BreadcrumbItem>)
     }
 }

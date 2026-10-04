@@ -1,5 +1,5 @@
 use crate::components::load::Load;
-use crate::components::menu::{MenuDropdown, MenuEntry, view_load};
+use crate::components::menu::{BreadcrumbItem, MenuDropdown, MenuEntry, view_load};
 use crate::error::FrontendError;
 use crate::graphql::authenticated::list_cables::{CableListEntry, fetch_cables_list};
 use crate::pages::router::{AppRoute, CableView, PlanView};
@@ -89,7 +89,7 @@ impl Component for ListCable {
                 })
                 .collect::<Box<[_]>>();
             html! {
-                <MenuDropdown {title} {entries}/>
+                <BreadcrumbItem><MenuDropdown {title} {entries}/></BreadcrumbItem>
             }
         })
     }

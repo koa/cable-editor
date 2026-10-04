@@ -1,5 +1,5 @@
 use crate::components::load::Load;
-use crate::components::menu::{MenuDropdown, MenuEntry, view_load};
+use crate::components::menu::{BreadcrumbItem, MenuDropdown, MenuEntry, view_load};
 use crate::error::FrontendError;
 use crate::graphql::authenticated::list_plans::PlanListEntry;
 use crate::pages::router::{AppRoute, PlanView};
@@ -90,7 +90,7 @@ impl Component for ListPlan {
             }))
             .collect::<Box<[_]>>();
             html! {
-                <MenuDropdown {title} {entries}/>
+                <BreadcrumbItem><MenuDropdown {title} {entries}/></BreadcrumbItem>
             }
         })
     }

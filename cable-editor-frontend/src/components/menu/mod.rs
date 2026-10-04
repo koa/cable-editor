@@ -6,7 +6,9 @@ use crate::{
 use patternfly_yew::prelude::{Icon, MenuToggleVariant, Spinner};
 use popup::{MenuActionItem, MenuGroup, MenuLinkItem, PopupMenu};
 use std::borrow::Cow;
-use yew::{AttrValue, Html, Properties, function_component, html, use_context};
+use yew::{
+    AttrValue, Html, Properties, function_component, html, html::ChildrenProps, use_context,
+};
 
 pub mod list_cabinet;
 pub mod list_cabinet_type;
@@ -42,13 +44,17 @@ pub struct MenuEntryGroup {
     pub entries: Box<[MenuEntry]>,
 }
 
-/// Divider between the menus of a path inside one breadcrumb item (`.breadcrumb-path`).
+/// One item of the breadcrumb, with the divider before it (PatternFly hides the first one). The
+/// router renders the list itself, as patternfly-yew's `Breadcrumb` takes only its own items,
+/// one per child: so a menu component spanning several levels (a Schacht and its view, a
+/// panel's path) renders one item per menu.
 #[function_component]
-pub fn BreadcrumbDivider() -> Html {
+pub fn BreadcrumbItem(props: &ChildrenProps) -> Html {
     html! {
-        <span class="pf-v6-c-breadcrumb__item-divider breadcrumb-path__divider">
-            {patternfly_yew::prelude::Icon::AngleRight}
-        </span>
+        <li class="pf-v6-c-breadcrumb__item">
+            <span class="pf-v6-c-breadcrumb__item-divider">{Icon::AngleRight}</span>
+            {props.children.clone()}
+        </li>
     }
 }
 
@@ -136,13 +142,15 @@ pub fn MenuError(props: &MenuErrorProps) -> Html {
     }
 }
 
-/// A menu once its entries are loaded: a spinner before, the error as `MenuError` if they
-/// couldn't be
-pub fn view_load<T>(load: &Load<T>, menu: impl FnOnce(&T) -> Html) -> Html {
+/// The breadcrumb items of menus once their entries are loaded: an item with a spinner before,
+/// with the error as `MenuError` if they couldn't be
+pub fn view_load<T>(load: &Load<T>, items: impl FnOnce(&T) -> Html) -> Html {
     match load {
-        Load::Pending => html!(<Spinner/>),
-        Load::Failed(error) => html!(<MenuError ..MenuErrorProps::from_error(error)/>),
-        Load::Loaded(entries) => menu(entries),
+        Load::Pending => html!(<BreadcrumbItem><Spinner/></BreadcrumbItem>),
+        Load::Failed(error) => {
+            html!(<BreadcrumbItem><MenuError ..MenuErrorProps::from_error(error)/></BreadcrumbItem>)
+        }
+        Load::Loaded(entries) => items(entries),
     }
 }
 

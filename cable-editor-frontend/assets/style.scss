@@ -702,19 +702,6 @@ body {
   gap: var(--pf-t--global--spacer--sm);
 }
 
-// Schacht and panel chain inside one breadcrumb item (components/menu/list_panel.rs). Breadcrumb
-// items don't wrap, so without this a deep panel path widens the whole page on phones.
-.breadcrumb-path {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  row-gap: var(--pf-t--global--spacer--xs);
-}
-
-.breadcrumb-path__divider {
-  margin-inline-start: var(--pf-t--global--spacer--sm);
-}
-
 // Breadcrumb and user menu (components/user.rs) in one row, the user menu at the end
 /* Buttons of an error alert to recover from a failed request (components/recovery.rs) */
 .error-recovery {
@@ -793,9 +780,24 @@ body {
     min-width: 0;
   }
 
-  // A plain last item (e.g. "Neuer Schacht") in the size of the menus before it
+  // A plain last item (e.g. "Neuer Schacht") in the size of the menus before it. Breadcrumb
+  // items don't wrap, so a long name (a plan's, a Schacht's) set the page's least width and
+  // widened it on phones: names wrap instead.
   .pf-v6-c-breadcrumb__item {
     font-size: var(--pf-t--global--font--size--body--default);
+    white-space: normal;
+    min-width: 0;
+  }
+
+  .popup-menu,
+  .pf-v6-c-menu-toggle {
+    max-width: 100%;
+  }
+
+  .pf-v6-c-menu-toggle__text {
+    white-space: normal;
+    text-align: start;
+    overflow-wrap: anywhere;
   }
 }
 

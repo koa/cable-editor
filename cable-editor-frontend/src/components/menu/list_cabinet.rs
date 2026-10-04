@@ -1,7 +1,5 @@
 use crate::components::load::Load;
-use crate::components::menu::{
-    BreadcrumbDivider, MenuDropdown, MenuEntry, MenuEntryGroup, view_load,
-};
+use crate::components::menu::{BreadcrumbItem, MenuDropdown, MenuEntry, MenuEntryGroup, view_load};
 use crate::error::FrontendError;
 use crate::graphql::authenticated::list_schacht::{SchachtListEntry, fetch_schacht_list};
 use crate::pages::router::{AppRoute, CabinetView, PanelView, PlanView};
@@ -123,7 +121,7 @@ impl ListCabinet {
             })
             .collect::<Box<[_]>>();
         cabinet_entries.sort_by(|a, b| a.text.cmp(&b.text));
-        let cabinet_menu = html!(<MenuDropdown {title} entries={cabinet_entries}/>);
+        let cabinet_menu = html!(<BreadcrumbItem><MenuDropdown {title} entries={cabinet_entries}/></BreadcrumbItem>);
 
         let Some(view) = view else {
             return cabinet_menu;
@@ -155,11 +153,10 @@ impl ListCabinet {
             entries: panels,
         }]);
         html! {
-            <span class="breadcrumb-path">
+            <>
                 {cabinet_menu}
-                <BreadcrumbDivider/>
-                <MenuDropdown {title} {entries} {groups}/>
-            </span>
+                <BreadcrumbItem><MenuDropdown {title} {entries} {groups}/></BreadcrumbItem>
+            </>
         }
     }
 }

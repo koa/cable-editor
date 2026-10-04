@@ -4,7 +4,7 @@ use crate::components::menu::list_cable::ListCable;
 use crate::components::menu::list_duct::ListDuct;
 use crate::components::menu::list_panel::ListPanel;
 use crate::components::menu::list_plan::ListPlan;
-use crate::components::menu::{MenuDropdown, MenuEntry, MenuEntryGroup};
+use crate::components::menu::{BreadcrumbItem, MenuDropdown, MenuEntry, MenuEntryGroup};
 use crate::{
     components::{
         netbox::NetboxHint,
@@ -32,11 +32,11 @@ use crate::{
         work_order::WorkOrder,
     },
 };
-use patternfly_yew::prelude::{Breadcrumb, BreadcrumbItem, PageSection, PageSectionType};
+use patternfly_yew::prelude::{PageSection, PageSectionType};
 use std::borrow::Cow;
 use uuid::Uuid;
 use yew::virtual_dom::VNode;
-use yew::{Callback, Html, Properties, function_component, html, html_nested, use_effect_with};
+use yew::{Callback, Html, Properties, function_component, html, use_effect_with};
 use yew_nested_router::prelude::{Target, use_router};
 
 #[derive(Clone, Debug, PartialEq, Properties)]
@@ -200,7 +200,7 @@ pub enum PlanView {
 }
 
 impl PlanView {
-    pub fn append_breadcrumbs(&self, plan_id: i32, item_contents: &mut Vec<VNode>) {
+    pub fn append_breadcrumbs(&self, plan_id: i32, items: &mut Vec<VNode>) {
         // The area the current page lies in: its entry leads to the area's start page
         let (title, area): (Cow<'static, str>, PlanView) = match self {
             PlanView::Edit => ("Planung bearbeiten".into(), PlanView::Edit),
@@ -280,30 +280,37 @@ impl PlanView {
                     .collect(),
             })
             .collect::<Box<[_]>>();
-        item_contents.push(html!(<MenuDropdown {title} {groups}/>));
+        items.push(html!(<BreadcrumbItem><MenuDropdown {title} {groups}/></BreadcrumbItem>));
 
         match self {
             PlanView::Cabinet { id, view } => {
-                item_contents.push(
+                items.push(
                     html!(<ListCabinet plan_id={plan_id} cabinet_id={*id} view={Some(view.clone())}/>),
                 );
             }
             PlanView::Cable { id, view } => {
-                item_contents.push(html!(<ListCable {plan_id} cable_id={id} view={view.clone()}/>))
+                items.push(html!(<ListCable {plan_id} cable_id={id} view={view.clone()}/>))
             }
             PlanView::Panel { id, view } => {
-                item_contents
-                    .push(html!(<ListPanel {plan_id} panel_id={*id} view={view.clone()}/>));
+                items.push(html!(<ListPanel {plan_id} panel_id={*id} view={view.clone()}/>));
             }
-            PlanView::NewCabinet { .. } => item_contents.push(html!("Neuer Schacht")),
-            PlanView::NewCable { .. } => item_contents.push(html!("Neues Kabel")),
-            PlanView::NewDuct { .. } => item_contents.push(html!("Neue Trasse")),
-            PlanView::NewCabinetType { .. } => item_contents.push(html!("Neuer Schachttyp")),
+            PlanView::NewCabinet { .. } => {
+                items.push(html!(<BreadcrumbItem>{"Neuer Schacht"}</BreadcrumbItem>))
+            }
+            PlanView::NewCable { .. } => {
+                items.push(html!(<BreadcrumbItem>{"Neues Kabel"}</BreadcrumbItem>))
+            }
+            PlanView::NewDuct { .. } => {
+                items.push(html!(<BreadcrumbItem>{"Neue Trasse"}</BreadcrumbItem>))
+            }
+            PlanView::NewCabinetType { .. } => {
+                items.push(html!(<BreadcrumbItem>{"Neuer Schachttyp"}</BreadcrumbItem>))
+            }
             PlanView::CabinetType { id } => {
-                item_contents.push(html!(<ListCabinetType {plan_id} typ_id={*id}/>))
+                items.push(html!(<ListCabinetType {plan_id} typ_id={*id}/>))
             }
             PlanView::Duct { id, view } => {
-                item_contents.push(html!(<ListDuct {plan_id} duct_id={*id} view={view.clone()}/>))
+                items.push(html!(<ListDuct {plan_id} duct_id={*id} view={view.clone()}/>))
             }
             _ => {}
         }
@@ -350,8 +357,8 @@ impl AppRoute {
         }
     }
     fn breadcrumb(&self) -> Html {
-        let mut item_contents = Vec::new();
-        item_contents.push(match self {
+        let mut items = Vec::new();
+        items.push(match self {
             AppRoute::ListOfPlans => {
                 html!(<ListPlan/>)
             }
@@ -360,15 +367,13 @@ impl AppRoute {
             }
         });
         if let AppRoute::Plan { plan_id, view } = self {
-            view.append_breadcrumbs(*plan_id, &mut item_contents);
+            view.append_breadcrumbs(*plan_id, &mut items);
         }
-        let items = item_contents
-            .into_iter()
-            .map(|item_content| html_nested!(<BreadcrumbItem>{item_content}</BreadcrumbItem>));
+        // The menu components render their items themselves (`menu::BreadcrumbItem`)
         html! {
-            <Breadcrumb>
-                {for items}
-            </Breadcrumb>
+            <nav class="pf-v6-c-breadcrumb" aria-label="breadcrumb">
+                <ol class="pf-v6-c-breadcrumb__list" role="list">{for items}</ol>
+            </nav>
         }
     }
 }

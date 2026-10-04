@@ -1,5 +1,5 @@
 use crate::components::load::Load;
-use crate::components::menu::{BreadcrumbDivider, MenuDropdown, MenuEntry, view_load};
+use crate::components::menu::{BreadcrumbItem, MenuDropdown, MenuEntry, view_load};
 use crate::error::FrontendError;
 use crate::graphql::authenticated::list_ducts::{DuctListEntry, fetch_duct_list};
 use crate::pages::router::{AppRoute, DuctView, PlanView};
@@ -102,7 +102,8 @@ impl ListDuct {
             })
             .collect::<Box<[_]>>();
         duct_entries.sort_by(|a, b| a.text.cmp(&b.text));
-        let duct_menu = html!(<MenuDropdown {title} entries={duct_entries}/>);
+        let duct_menu =
+            html!(<BreadcrumbItem><MenuDropdown {title} entries={duct_entries}/></BreadcrumbItem>);
         let Some(view) = view else {
             return duct_menu;
         };
@@ -125,11 +126,10 @@ impl ListDuct {
             })
             .collect::<Box<[_]>>();
         html! {
-            <span class="breadcrumb-path">
+            <>
                 {duct_menu}
-                <BreadcrumbDivider/>
-                <MenuDropdown {title} {entries}/>
-            </span>
+                <BreadcrumbItem><MenuDropdown {title} {entries}/></BreadcrumbItem>
+            </>
         }
     }
 }

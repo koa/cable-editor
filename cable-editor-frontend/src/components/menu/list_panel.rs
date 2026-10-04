@@ -1,8 +1,6 @@
 use crate::components::load::Load;
 use crate::components::menu::list_cabinet::{ListCabinet, view_entries};
-use crate::components::menu::{
-    BreadcrumbDivider, MenuDropdown, MenuEntry, MenuEntryGroup, view_load,
-};
+use crate::components::menu::{BreadcrumbItem, MenuDropdown, MenuEntry, MenuEntryGroup, view_load};
 use crate::error::FrontendError;
 use crate::graphql::authenticated::list_plans::BASELINE_PLAN_ID;
 use crate::graphql::authenticated::panel_navigation::{ChildPanelNav, PanelHierarchy};
@@ -81,7 +79,7 @@ impl Component for ListPanel {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        let divider = html!(<BreadcrumbDivider/>);
+        let step = |menu: Html| html!(<BreadcrumbItem>{menu}</BreadcrumbItem>);
 
         view_load(&self.loaded_panel, |panel| {
             let plan_id = ctx.props().plan_id;
@@ -102,34 +100,30 @@ impl Component for ListPanel {
             let mut views = view_entries(plan_id, panel.schacht.id, None);
             let mut group_title = "Panels";
             for (id, name, parent_order, siblings) in levels {
-                elements.push(divider.clone());
-                elements.push(panel_menu(
+                elements.push(step(panel_menu(
                     plan_id,
                     panel_name(id, name),
                     views,
                     group_title,
                     &with_self(siblings, id, name, parent_order),
                     Some(id),
-                ));
+                )));
                 views = panel_view_entries(plan_id, id, None);
                 group_title = "Unterpanels";
             }
 
             // The current panel's views and children
-            elements.push(divider.clone());
-            elements.push(panel_menu(
+            elements.push(step(panel_menu(
                 plan_id,
                 current_view.title().into(),
                 panel_view_entries(plan_id, panel.id, Some(current_view)),
                 group_title,
                 &panel.children,
                 None,
-            ));
+            )));
 
             html! {
-                <span class="breadcrumb-path">
-                    { for elements }
-                </span>
+                <>{ for elements }</>
             }
         })
     }
