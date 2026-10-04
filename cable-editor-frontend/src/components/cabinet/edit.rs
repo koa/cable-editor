@@ -3,7 +3,6 @@ use crate::graphql::authenticated::list_plans::BASELINE_PLAN_ID;
 use crate::{
     components::table::{TreeModel, TreeState, TreeTable, TreeTableColumn, TreeTableContext},
     components::{icon_button::IconButton, plan_link::PlanLink, unsaved::Unsaved},
-    create_simple_dialog,
     error::FrontendError,
     graphql::authenticated::{IdOrNew, cabinet_details::PanelTreeEntry},
     pages::router::{PanelView, PlanView},
@@ -15,17 +14,14 @@ use crate::graphql::authenticated::edit_cabinet::{
     FlatPanelInput, OverviewNetboxDevice, update_panels_in_cabinet,
 };
 use patternfly_yew::prelude::{
-    ActionGroup, Button, ButtonType, ButtonVariant, Cell, Form, FormGroup, Icon, Modal, Spinner,
-    TableColumn, TableHeader, TableMode, TextInput,
+    ActionGroup, Button, ButtonVariant, Cell, Icon, Spinner, TableColumn, TableHeader, TableMode,
+    TextInput,
 };
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use yew::{
-    Callback, Component, Context, Html, Properties, classes, html,
-    html::IntoPropValue,
-    html_nested,
-    platform::spawn_local,
-    prelude::{SubmitEvent, function_component, use_state},
+    Callback, Component, Context, Html, Properties, classes, html, html::IntoPropValue,
+    html_nested, platform::spawn_local,
 };
 
 pub struct EditCabinet {
@@ -583,8 +579,6 @@ impl EditCabinet {
         false
     }
 }
-
-create_simple_dialog!(NewPanel, NewPanelProps, NewPanelData, (name, "Name"),);
 
 #[derive(Debug, Clone, PartialEq)]
 struct FlatPanelNode {
