@@ -371,7 +371,10 @@ impl PortEditor {
 
             let on_netbox_change = ctx.link().callback(move |port_id| Msg::UpdateNetboxId { idx, port_id });
             let netbox_options = self.netbox_ports.iter().map(|np| html_nested! {
-                <FormSelectOption<i32> value={np.id} description={np.name.clone()}/>
+                // Selected by the option itself: the ports of Netbox arrive after the panel's, and
+                // FormSelect sets its value only when the value changes
+                <FormSelectOption<i32> value={np.id} description={np.name.clone()}
+                    selected={port.netbox_port == Some(np.id)}/>
             });
 
             html! {

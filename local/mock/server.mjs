@@ -175,6 +175,8 @@ for (const [id, , , , , spec] of panelRows) {
 const baseUsage = [];
 const planUsage = { 1: [] };
 const portsOf = (panelId) => ports.filter((p) => p.panelId === panelId);
+// The splices below ODF Rack 1 (Netbox device 501) on its rear ports
+portsOf(22).forEach((p, i) => { p.netboxPortId = 600 + i; });
 portsOf(22).forEach((p, i) => baseUsage.push([p.id, 'FRONT', 11, 1, i + 1]));
 portsOf(23).slice(0, 6).forEach((p, i) => baseUsage.push([p.id, 'FRONT', 13, 2, i + 1]));
 portsOf(24).slice(0, 6).forEach((p, i) => baseUsage.push([p.id, 'FRONT', 12, 1, i + 1]));
@@ -457,7 +459,10 @@ const effectiveUsage = (planId, portId, side) => {
 };
 const panelPort = (id) => {
   const p = ports.find((x) => x.id === id);
-  return { ...p, panel: () => panel(p.panelId), netboxPort: () => null };
+  return {
+    ...p, panel: () => panel(p.panelId),
+    netboxPort: () => (p.netboxPortId === undefined ? null : device(501).rearPorts().find((r) => r.id === p.netboxPortId)),
+  };
 };
 const panel = (id) => {
   const r = panelRows.find((p) => p[0] === id);
