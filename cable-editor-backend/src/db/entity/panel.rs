@@ -7,7 +7,10 @@ use crate::{
     },
     graphql::{
         authenticated::get_connection,
-        loader::{PanelId, PanelPortId, PlanId, SchachtId, load_one},
+        loader::{
+            EffectiveUsage, PanelId, PanelPortId, PanelPorts, PlanId, SchachtId, get_loader,
+            load_one,
+        },
     },
     netbox::{
         fetch::{DeviceWithRearPorts, RearPort},
@@ -18,11 +21,11 @@ use crate::{
 use async_graphql::{Context, Enum, Object};
 use async_recursion::async_recursion;
 use diesel::{
-    Associations, BoolExpressionMethods, ExpressionMethods, HasQuery, Identifiable, Insertable,
-    OptionalExtension, QueryDsl, QueryResult, QueryableByName,
+    Associations, ExpressionMethods, HasQuery, Identifiable, Insertable, OptionalExtension,
+    QueryDsl, QueryResult, QueryableByName,
     pg::Pg,
     sql_query,
-    sql_types::{Bool, Integer, Nullable},
+    sql_types::{Array, Bool, Integer, Nullable},
 };
 use diesel_async::{AsyncPgConnection, RunQueryDsl, pooled_connection::deadpool};
 use diesel_derive_enum::DbEnum;
@@ -146,12 +149,17 @@ impl PortUsage {
             .await
             .optional()
     }
-    pub async fn other_side_of_port(
-        &self,
-        plan_id: i32,
+    /// What the ports hold in the plan, both sides (`effective_port_usage`)
+    pub async fn effective_of_ports(
         connection: &mut AsyncPgConnection,
-    ) -> QueryResult<Option<PortUsage>> {
-        PortUsage::effective(connection, plan_id, self.port_id, self.side.other()).await
+        plan_id: i32,
+        port_ids: &[i32],
+    ) -> QueryResult<Vec<PortUsage>> {
+        sql_query("select * from effective_port_usage($1) where port_id = any($2)")
+            .bind::<Integer, _>(plan_id)
+            .bind::<Array<Integer>, _>(port_ids)
+            .load(connection)
+            .await
     }
     /// The usages a signal reaches from this one in the plan, in order: along the fiber to the
     /// next port and through a port to its other side, alternately, `first` first. It stops
@@ -264,8 +272,13 @@ impl PortUsage {
     }
     /// What the other side of the port holds in the plan
     async fn other_side(&self, ctx: &Context<'_>, plan_id: i32) -> ApiResult<Option<PortUsage>> {
-        let mut connection = get_connection(ctx).await?;
-        Ok(self.other_side_of_port(plan_id, &mut connection).await?)
+        Ok(get_loader(ctx)?
+            .load_one(EffectiveUsage {
+                plan: plan_id,
+                port: self.port_id,
+                side: self.side.other(),
+            })
+            .await?)
     }
     async fn modified_in_plan(&self) -> bool {
         self.plan_id != BASELINE_PLAN_ID
@@ -421,22 +434,15 @@ impl Panel {
         &self,
         ctx: &Context<'_>,
         port_type: Option<PanelPortType>,
-    ) -> ApiResult<Vec<PanelPort>> {
-        let mut connection = get_connection(ctx).await?;
-        let filter = schema::panel_port::panel_id.eq(self.id);
-        Ok(if let Some(pt) = port_type {
-            PanelPort::query()
-                .filter(filter.and(schema::panel_port::port_type.eq(pt)))
-                .order_by(schema::panel_port::port_order.asc())
-                .load(&mut connection)
-                .await?
-        } else {
-            PanelPort::query()
-                .filter(filter)
-                .order_by(schema::panel_port::port_order.asc())
-                .load(&mut connection)
-                .await?
-        })
+    ) -> ApiResult<Box<[PanelPort]>> {
+        let ports = get_loader(ctx)?
+            .load_one(PanelPorts(self.id))
+            .await?
+            .unwrap_or_default();
+        Ok(ports
+            .into_iter()
+            .filter(|port| port_type.is_none_or(|port_type| port.port_type == port_type))
+            .collect())
     }
     async fn count_ports(
         &self,

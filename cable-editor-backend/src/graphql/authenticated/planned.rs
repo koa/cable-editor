@@ -7,9 +7,12 @@ use crate::{
             panel::{Panel, PanelPort, PanelPortType, PortSide, PortUsage},
             plan::Plan,
         },
-        schema::{panel, panel_port},
+        schema::panel,
     },
-    graphql::authenticated::get_connection,
+    graphql::{
+        authenticated::get_connection,
+        loader::{EffectiveUsage, PanelPorts, get_loader},
+    },
 };
 use async_graphql::{Context, Object};
 use diesel::{ExpressionMethods, HasQuery, QueryDsl};
@@ -136,15 +139,11 @@ impl PlannedPanel {
                     .collect()
             })?)
     }
-    async fn ports(&self, ctx: &Context<'_>) -> ApiResult<Vec<PlannedPort>> {
-        let mut connection = get_connection(ctx).await?;
-
-        let ports = PanelPort::query()
-            .filter(panel_port::panel_id.eq(self.panel.id))
-            .order_by(panel_port::port_order.asc())
-            .load::<PanelPort>(&mut connection)
-            .await?;
-
+    async fn ports(&self, ctx: &Context<'_>) -> ApiResult<Box<[PlannedPort]>> {
+        let ports = get_loader(ctx)?
+            .load_one(PanelPorts(self.panel.id))
+            .await?
+            .unwrap_or_default();
         Ok(ports
             .into_iter()
             .map(|port| PlannedPort {
@@ -167,6 +166,23 @@ impl PlannedPanel {
         )
     }
 }
+impl PlannedPort {
+    async fn usage_in(
+        &self,
+        ctx: &Context<'_>,
+        plan: i32,
+        side: PortSide,
+    ) -> ApiResult<Option<PortUsage>> {
+        get_loader(ctx)?
+            .load_one(EffectiveUsage {
+                plan,
+                port: self.port.id,
+                side,
+            })
+            .await
+    }
+}
+
 #[Object]
 impl PlannedPort {
     async fn id(&self) -> i32 {
@@ -184,8 +200,7 @@ impl PlannedPort {
 
     /// What the side holds in the plan
     async fn usage(&self, ctx: &Context<'_>, side: PortSide) -> ApiResult<Option<PortUsage>> {
-        let mut connection = get_connection(ctx).await?;
-        Ok(PortUsage::effective(&mut connection, self.plan.id, self.port.id, side).await?)
+        self.usage_in(ctx, self.plan.id, side).await
     }
     /// What the side holds in the current state
     async fn current_usage(
@@ -193,8 +208,7 @@ impl PlannedPort {
         ctx: &Context<'_>,
         side: PortSide,
     ) -> ApiResult<Option<PortUsage>> {
-        let mut connection = get_connection(ctx).await?;
-        Ok(PortUsage::effective(&mut connection, BASELINE_PLAN_ID, self.port.id, side).await?)
+        self.usage_in(ctx, BASELINE_PLAN_ID, side).await
     }
 }
 

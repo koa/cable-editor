@@ -11,7 +11,7 @@ use crate::{
             Duct, WGS84,
             cable::{Cable, cable_usages_at},
             eigentuemer::Eigentuemer,
-            panel::{Panel, PanelPort, PortUsage},
+            panel::{Panel, PanelPort, PortSide, PortUsage},
             plan::Plan,
             schacht::{Schacht, SchachtTyp},
             st_length, st_transform,
@@ -153,6 +153,18 @@ pub struct PanelId(pub i32);
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct PanelPortId(pub i32);
+
+/// The ports of a panel, in their order.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct PanelPorts(pub i32);
+
+/// What a port's side holds in a plan (`effective_port_usage`), missing if nothing.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct EffectiveUsage {
+    pub plan: i32,
+    pub port: i32,
+    pub side: PortSide,
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct PlanId(pub i32);
@@ -536,6 +548,63 @@ impl Loader<PanelPortId> for DbLoader {
             .load(&mut connection)
             .await?;
         Ok(list.into_iter().map(|p| (PanelPortId(p.id), p)).collect())
+    }
+}
+
+impl Loader<PanelPorts> for DbLoader {
+    type Value = Box<[PanelPort]>;
+    type Error = ApiError;
+
+    async fn load(
+        &self,
+        keys: &[PanelPorts],
+    ) -> Result<HashMap<PanelPorts, Box<[PanelPort]>>, Self::Error> {
+        let mut connection = self.connection.lock().await;
+        let list: Vec<PanelPort> = PanelPort::query()
+            .filter(schema::panel_port::panel_id.eq_any(ids(keys, |k| k.0)))
+            .order((
+                schema::panel_port::panel_id,
+                schema::panel_port::port_order.asc(),
+            ))
+            .load(&mut connection)
+            .await?;
+        let mut ports: HashMap<PanelPorts, Vec<PanelPort>> = HashMap::new();
+        for port in list {
+            ports
+                .entry(PanelPorts(port.panel_id))
+                .or_default()
+                .push(port);
+        }
+        Ok(boxed(ports))
+    }
+}
+
+impl Loader<EffectiveUsage> for DbLoader {
+    type Value = PortUsage;
+    type Error = ApiError;
+
+    /// One query per plan.
+    async fn load(
+        &self,
+        keys: &[EffectiveUsage],
+    ) -> Result<HashMap<EffectiveUsage, PortUsage>, Self::Error> {
+        let mut ports: HashMap<i32, Vec<i32>> = HashMap::new();
+        for key in keys {
+            ports.entry(key.plan).or_default().push(key.port);
+        }
+        let mut connection = self.connection.lock().await;
+        let mut usages = HashMap::new();
+        for (plan, ports) in ports {
+            for usage in PortUsage::effective_of_ports(&mut connection, plan, &ports).await? {
+                let key = EffectiveUsage {
+                    plan,
+                    port: usage.port_id,
+                    side: usage.side,
+                };
+                usages.insert(key, usage);
+            }
+        }
+        Ok(usages)
     }
 }
 
