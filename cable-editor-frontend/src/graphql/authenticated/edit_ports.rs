@@ -78,11 +78,10 @@ pub struct NetboxPortId {
     pub id: i32,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct FetchedPanelWithPorts {
     pub ports: Vec<PanelPortEntry>,
     pub panel_name: Option<String>,
-    pub schacht_name: Option<String>,
     pub netbox_device_id: Option<i32>,
 }
 
@@ -92,19 +91,18 @@ impl FetchedPanelWithPorts {
         panel_id: i32,
     ) -> Result<FetchedPanelWithPorts, FrontendError> {
         let variables = FetchPanelPortsVariables { panel_id };
-        Ok(query::<FetchPanelPortsQuery, _>(variables, credentials)
+        query::<FetchPanelPortsQuery, _>(variables, credentials)
             .await?
             .panel
             .map(|p| FetchedPanelWithPorts {
                 ports: p.ports,
                 panel_name: p.name,
-                schacht_name: None,
                 netbox_device_id: p
                     .netbox_device
                     .or(p.parent_chain.into_iter().find_map(|p| p.netbox_device))
                     .map(|p| p.id),
             })
-            .unwrap_or_default())
+            .ok_or_else(|| FrontendError::not_found(ObjectKind::Panel, panel_id))
     }
 }
 

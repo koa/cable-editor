@@ -116,7 +116,6 @@ impl Component for PortEditor {
                                 |FetchedPanelWithPorts {
                                      ports,
                                      panel_name,
-                                     schacht_name: _,
                                      netbox_device_id,
                                  }| {
                                     Msg::PortsFetched {
