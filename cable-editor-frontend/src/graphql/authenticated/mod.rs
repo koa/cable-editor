@@ -1,4 +1,7 @@
-use std::fmt::{self, Write};
+use std::{
+    borrow::Cow,
+    fmt::{self, Write},
+};
 use uuid::Uuid;
 
 pub mod cabinet_details;
@@ -49,6 +52,14 @@ pub fn write_panel_path<'a>(
         separator = " > ";
     }
     Ok(())
+}
+
+/// A port as users see it: its label, "Port <n>" without one.
+pub fn port_label(label: Option<&str>, order_number: i32) -> Cow<'_, str> {
+    match label {
+        Some(label) => Cow::Borrowed(label),
+        None => Cow::Owned(format!("Port {order_number}")),
+    }
 }
 
 /// Writes a port after the path of its panel: " : label".
@@ -154,12 +165,16 @@ impl DateTime {
     /// Date and time in the browser's time zone, e.g. "27.9.2026, 15:28:24".
     pub fn local(&self) -> String {
         match self.date() {
-            Some(date) => date
-                .to_locale_string("de-CH", &wasm_bindgen::JsValue::UNDEFINED)
-                .into(),
+            Some(date) => local_time(&date),
             None => self.0.clone(),
         }
     }
+}
+
+/// Date and time in the browser's time zone, e.g. "27.9.2026, 15:28:24".
+pub fn local_time(date: &js_sys::Date) -> String {
+    date.to_locale_string("de-CH", &wasm_bindgen::JsValue::UNDEFINED)
+        .into()
 }
 
 /// The day in the browser's time zone, e.g. "27.9.2026".

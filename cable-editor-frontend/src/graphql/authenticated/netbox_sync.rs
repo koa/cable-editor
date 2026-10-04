@@ -1,4 +1,4 @@
-use crate::graphql::authenticated::{DateTime, write_panel_path, write_port_label};
+use crate::graphql::authenticated::{DateTime, port_label, write_panel_path, write_port_label};
 use crate::{
     error::FrontendError,
     graphql::{authenticated::schema, mutate, query},
@@ -120,10 +120,7 @@ pub struct PanelPortInfo {
 impl PanelPortInfo {
     pub fn port_label(&self) -> String {
         let panel = &self.panel;
-        let label = match &self.label {
-            Some(label) => label.clone(),
-            None => format!("Port {}", self.order_number),
-        };
+        let label = port_label(self.label.as_deref(), self.order_number);
         // Writing into a String can't fail
         let mut result = String::new();
         let _ = write_panel_path(

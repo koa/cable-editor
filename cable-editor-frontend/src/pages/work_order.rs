@@ -8,15 +8,16 @@
 use crate::components::select::Select;
 use crate::{
     components::{
-        fiber::FiberLabel,
+        fiber::FiberNumber,
         links::{CableLink, PanelLink, SchachtLink},
         page_layout::{PageLayout, object_title},
         print_page::PrintPageButton,
     },
     error::FrontendError,
     graphql::authenticated::{
-        PortType,
+        PortType, local_time, port_label,
         work_order::{PortChange, WorkOrderFiber, WorkOrderPlan, WorkOrderSchacht},
+        write_panel_path, write_port_label,
     },
     util::get_credentials,
 };
@@ -129,7 +130,7 @@ impl WorkOrder {
             };
         }
         let onchange = ctx.link().callback(Msg::Filter);
-        let stand = self.loaded_at.as_ref().map(format_time).unwrap_or_default();
+        let stand = self.loaded_at.as_ref().map(local_time).unwrap_or_default();
         html! {
             <div class="work-order">
                 <div class="work-order__toolbar no-print">
@@ -357,7 +358,7 @@ fn view_loops(loops: &[&PortChange]) -> Html {
                             {view_cable(change.current_back.as_ref())}
                         </span>
                         <span class="work-order__loop-fibers">
-                            { for fibers.into_iter().map(view_fiber_number) }
+                            { for fibers.into_iter().map(|fiber| html!(<FiberNumber bundle={fiber.bundle} fiber={fiber.fiber}/>)) }
                         </span>
                     </li>
                 }
@@ -393,7 +394,7 @@ fn view_table(columns: &[&'static str], rows: impl Iterator<Item = Vec<Html>>) -
     }
 }
 
-/// The panel below the root panel and the port, e.g. "Spleisskassette 2 · S2-7"
+/// The panels below the root panel and the port, e.g. "Spleisskassette 2 : S2-7"
 fn view_location(change: &PortChange, root_id: i32) -> Html {
     let port = &change.port;
     let panel = &port.panel;
@@ -402,18 +403,21 @@ fn view_location(change: &PortChange, root_id: i32) -> Html {
         .iter()
         .filter(|parent| parent.id != root_id)
         .filter_map(|parent| parent.name.as_deref())
-        .collect::<Vec<_>>();
-    if panel.id != root_id {
-        path.push(panel.name.as_deref().unwrap_or("Panel"));
-    }
-    let label = port
-        .label
-        .clone()
-        .unwrap_or_else(|| format!("Port {}", port.order_number));
-    let text = if path.is_empty() {
-        label
+        .chain(
+            (panel.id != root_id)
+                .then_some(panel.name.as_deref())
+                .flatten(),
+        )
+        .peekable();
+    let label = port_label(port.label.as_deref(), port.order_number);
+    let text = if path.peek().is_none() {
+        label.into_owned()
     } else {
-        format!("{} · {label}", path.join(" › "))
+        // Writing into a String can't fail
+        let mut text = String::new();
+        let _ = write_panel_path(&mut text, None, path)
+            .and_then(|()| write_port_label(&mut text, &label));
+        text
     };
     html!(<PanelLink id={panel.id} {text}/>)
 }
@@ -434,16 +438,9 @@ fn view_fiber(fiber: Option<&WorkOrderFiber>) -> Html {
             <span class="work-order__fiber">
                 <CableLink id={fiber.cable.id} text={fiber.cable.name.clone()}/>
                 {" "}
-                {view_fiber_number(fiber)}
+                <FiberNumber bundle={fiber.bundle} fiber={fiber.fiber}/>
             </span>
         },
-    }
-}
-
-fn view_fiber_number(fiber: &WorkOrderFiber) -> Html {
-    let number = u8::try_from(fiber.fiber).unwrap_or_default();
-    html! {
-        <FiberLabel fiber={number}>{format!("{}-{}", fiber.bundle, fiber.fiber)}</FiberLabel>
     }
 }
 
@@ -452,16 +449,4 @@ fn view_cable(fiber: Option<&WorkOrderFiber>) -> Html {
         None => html!("—"),
         Some(fiber) => html!(<CableLink id={fiber.cable.id} text={fiber.cable.name.clone()}/>),
     }
-}
-
-/// Local time as "dd.mm.yyyy hh:mm"
-fn format_time(time: &js_sys::Date) -> String {
-    format!(
-        "{:02}.{:02}.{} {:02}:{:02}",
-        time.get_date(),
-        time.get_month() + 1,
-        time.get_full_year(),
-        time.get_hours(),
-        time.get_minutes()
-    )
 }

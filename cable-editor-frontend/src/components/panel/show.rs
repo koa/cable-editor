@@ -2,10 +2,11 @@ use crate::components::page_layout::{PageLayout, object_title};
 use crate::components::print_page::PrintPageButton;
 use crate::graphql::authenticated::current_user::Role;
 use crate::graphql::authenticated::list_plans::BASELINE_PLAN_ID;
+use crate::graphql::authenticated::{local_time, port_label};
 use crate::util::{get_role, is_wide_screen};
 use crate::{
     components::{
-        fiber::FiberLabel,
+        fiber::FiberNumber,
         label_printer::PanelLabelButton,
         links::{CableLink, PanelLink, SchachtLink},
         plan_link::PlanLink,
@@ -423,7 +424,7 @@ impl ShowPanel {
                 <div class="print-only pf-v6-u-mt-xl" style="border-top: 1px solid #ccc; padding-top: 8px; font-size: 9pt; color: #666; text-align: right;">
                     {format!(
                         "Datenstand {} | Kabel-Editor Dokumentation",
-                        self.loaded_at.as_ref().map(format_time).unwrap_or_default()
+                        self.loaded_at.as_ref().map(local_time).unwrap_or_default()
                     )}
                 </div>
             </div>
@@ -473,10 +474,7 @@ impl ShowPanel {
     }
 
     fn render_port_row(&self, port: &PlannedPortOverview, schacht: &SchachtOverview) -> Html {
-        let port_label = port
-            .label
-            .clone()
-            .unwrap_or_else(|| format!("Port {}", port.order_number));
+        let port_label = port_label(port.label.as_deref(), port.order_number).into_owned();
 
         let (type_text, type_class) = match port.port_type {
             PortType::Splice => ("Spleiss", "pf-m-green"),
@@ -556,9 +554,7 @@ impl ShowPanel {
             html! {
                 <div class="port-identity">
                     <div class="port-name-wrapper">
-                        <FiberLabel fiber={fiber_info.fiber as u8}>
-                            {format!("{}-{}", fiber_info.bundle, fiber_info.fiber)}
-                        </FiberLabel>
+                        <FiberNumber bundle={fiber_info.bundle} fiber={fiber_info.fiber}/>
                         if is_modified {
                             <span class="modified-dot" title="In dieser Planung geändert" />
                         }
@@ -615,10 +611,7 @@ impl ShowPanel {
         port: &PlannedPortOverview,
         schacht: &SchachtOverview,
     ) -> Html {
-        let port_label = port
-            .label
-            .clone()
-            .unwrap_or_else(|| format!("Port {}", port.order_number));
+        let port_label = port_label(port.label.as_deref(), port.order_number).into_owned();
 
         let (type_text, type_class) = match port.port_type {
             PortType::Splice => ("Spleiss", "pf-m-green"),
@@ -651,9 +644,7 @@ impl ShowPanel {
         let mobile_port_title = if let Some(loop_fiber) = loop_fiber {
             html! {
                 <div class="mobile-port-title">
-                    <FiberLabel fiber={loop_fiber.fiber as u8}>
-                        {format!("{}-{}", loop_fiber.bundle, loop_fiber.fiber)}
-                    </FiberLabel>
+                    <FiberNumber bundle={loop_fiber.bundle} fiber={loop_fiber.fiber}/>
                     <span class="pf-v6-u-font-size-xs pf-v6-u-color-200 pf-v6-u-ml-xs">
                         {format!("(#{})", port.order_number)}
                     </span>
@@ -767,9 +758,7 @@ impl ShowPanel {
                     }
                 </div>
                 <div class="slot-fiber-row pf-v6-u-my-xs">
-                    <FiberLabel fiber={fiber_info.fiber as u8}>
-                        {format!("{}-{}", fiber_info.bundle, fiber_info.fiber)}
-                    </FiberLabel>
+                    <FiberNumber bundle={fiber_info.bundle} fiber={fiber_info.fiber}/>
                 </div>
                 if let Some(dest) = destination {
                     <div class="slot-destination-row pf-v6-u-font-size-xs">
@@ -811,16 +800,4 @@ fn cable_end_port(option: Option<&FiberOwnEndOverview>) -> Option<&UsedEndPortOv
         .and_then(|f| f.other_end.as_ref())
         .and_then(|e| e.used_port.as_ref())
         .and_then(|p| p.panel_side_end_port.as_ref())
-}
-
-/// Local time as "dd.mm.yyyy hh:mm".
-fn format_time(time: &js_sys::Date) -> String {
-    format!(
-        "{:02}.{:02}.{} {:02}:{:02}",
-        time.get_date(),
-        time.get_month() + 1,
-        time.get_full_year(),
-        time.get_hours(),
-        time.get_minutes()
-    )
 }

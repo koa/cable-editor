@@ -1,5 +1,7 @@
+use crate::components::fiber::FiberNumber;
 use crate::components::page_layout::{PageLayout, object_title};
 use crate::components::unsaved::Unsaved;
+use crate::graphql::authenticated::port_label;
 use crate::{
     components::{
         links::{CableLink, PanelLink, SchachtLink},
@@ -65,10 +67,11 @@ impl TableEntryRenderer<UsageColumn> for PortUsageRow {
         match context.column {
             UsageColumn::Location => Cell::new(html! {
                 <>
+                    // Separated like `write_panel_path`, "Schacht: Parent > Panel"
                     <SchachtLink id={self.schacht_id} text={self.schacht_name.clone()}/>
-                    {for self.panel.iter().map(|panel| html! {
+                    {for self.panel.iter().enumerate().map(|(index, panel)| html! {
                         <>
-                            {" - "}
+                            {if index == 0 { ": " } else { " > " }}
                             <PanelLink id={panel.panel_id} text={panel.panel_name.clone()}/>
                         </>
                     })}
@@ -97,7 +100,8 @@ fn render_action(usage: &Option<PortUsage>) -> Html {
                         <IconLink/>
                         <span class="pf-v6-u-ml-sm">
                             <CableLink id={fiber.cable.id} text={fiber.cable.name.clone()}/>
-                            {format!(" ({}-{})", fiber.bundle, fiber.fiber)}
+                            {" "}
+                            <FiberNumber bundle={fiber.bundle} fiber={fiber.fiber}/>
                         </span>
                     </>
                 }
@@ -421,7 +425,8 @@ impl EditPlan {
                     schacht_id: u.port.panel.schacht.id,
                     schacht_name: u.port.panel.schacht.name.clone(),
 
-                    port_label: u.port.label.clone().unwrap_or_default(),
+                    port_label: port_label(u.port.label.as_deref(), u.port.order_number)
+                        .into_owned(),
                     front: None,
                     back: None,
                     panel: panel_chain.into_boxed_slice(),
@@ -448,7 +453,7 @@ impl EditPlan {
 
         let header = html_nested! {
             <TableHeader<UsageColumn>>
-                <TableColumn<UsageColumn> label="Schacht - Panel" index={UsageColumn::Location} />
+                <TableColumn<UsageColumn> label="Schacht: Panel" index={UsageColumn::Location} />
                 <TableColumn<UsageColumn> label="Port" index={UsageColumn::Port} />
                 <TableColumn<UsageColumn> label="Vorne" index={UsageColumn::Front} />
                 <TableColumn<UsageColumn> label="Hinten" index={UsageColumn::Back} />

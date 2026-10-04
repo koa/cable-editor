@@ -4,7 +4,10 @@ use crate::components::page_layout::{PageLayout, object_title};
 use crate::components::select::Select;
 use crate::components::unsaved::Unsaved;
 use crate::{
-    components::{fiber::FiberLabel, table::ListModel},
+    components::{
+        fiber::{FiberLabel, FiberNumber},
+        table::ListModel,
+    },
     error::FrontendError,
     graphql::authenticated::{
         PortSide, PortType,
@@ -12,6 +15,7 @@ use crate::{
             CableEnd, FiberKeyInput, FiberOwnEnd, PlannedPanel, PlannedPort, PortUsageInput,
             PortUsageUpdateAction, UpdatePortUsage, UsedEndPort,
         },
+        port_label,
     },
     icons::IconLink,
     util::{get_credentials, toast_error, toast_success},
@@ -474,10 +478,7 @@ impl AttachFiber {
     }
 
     fn view_port_info(&self, ctx: &Context<Self>, port: &PlannedPort) -> Html {
-        let label = port
-            .label
-            .clone()
-            .unwrap_or_else(|| format!("Port {}", port.order_number));
+        let label = port_label(port.label.as_deref(), port.order_number).into_owned();
 
         let type_text = match port.port_type {
             PortType::Splice => "Spleiss",
@@ -529,9 +530,7 @@ impl AttachFiber {
             if let Some(fiber_info) = loop_fiber {
                 html! {
                     <div style="display: flex; align-items: center; gap: 6px;">
-                        <FiberLabel fiber={fiber_info.fiber as u8}>
-                            {format!("{}-{}", fiber_info.bundle, fiber_info.fiber)}
-                        </FiberLabel>
+                        <FiberNumber bundle={fiber_info.bundle} fiber={fiber_info.fiber}/>
                         <span class="pf-v6-u-font-size-xs pf-v6-u-color-200">
                             {format!("(#{})", port.order_number)}
                         </span>
@@ -635,7 +634,7 @@ impl AttachFiber {
             <>
                 <div style="font-weight: bold;">{cable_name}</div>
                 <div style="margin-top: 4px; margin-bottom: 4px;">
-                    <FiberLabel fiber={key.fiber as u8}>{format!("{}-{}", key.bundle, key.fiber)}</FiberLabel>
+                    <FiberNumber bundle={key.bundle} fiber={key.fiber}/>
                 </div>
                 {endpoint}
             </>
@@ -704,7 +703,7 @@ impl AttachFiber {
 
                 html! {
                     <MenuActionItem key={fiber_num} {onclick}>
-                        <FiberLabel fiber={fiber_num as u8}>
+                        <FiberLabel fiber={fiber_num}>
                             {fiber_num.to_string()}
                         </FiberLabel>
                         {extra_text}

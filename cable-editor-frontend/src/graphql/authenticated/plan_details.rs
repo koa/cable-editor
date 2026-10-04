@@ -57,6 +57,7 @@ pub struct CableDetails {
 #[cynic(graphql_type = "PanelPort")]
 pub struct Port {
     pub id: i32,
+    pub order_number: i32,
     pub label: Option<String>,
     pub panel: PortPanel,
 }

@@ -1,4 +1,4 @@
-use crate::graphql::authenticated::{write_panel_path, write_port_label};
+use crate::graphql::authenticated::{port_label, write_panel_path, write_port_label};
 use crate::{
     error::FrontendError,
     graphql::{
@@ -210,16 +210,17 @@ pub struct UsedEndPortOverview {
 impl Display for UsedEndPortOverview {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.port.panel)?;
-        if let Some(label) = self.port.label.as_deref() {
-            write_port_label(f, label)?;
-        }
-        Ok(())
+        write_port_label(
+            f,
+            &port_label(self.port.label.as_deref(), self.port.order_number),
+        )
     }
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
 #[cynic(graphql_type = "PanelPort")]
 pub struct EndPortOverview {
+    pub order_number: i32,
     pub label: Option<String>,
     pub panel: EndPortPanelOverview,
 }

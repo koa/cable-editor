@@ -2,7 +2,8 @@ use yew::{Html, Properties, classes, function_component, html};
 
 #[derive(Properties, PartialEq)]
 pub struct FiberLabelProps {
-    pub fiber: u8,
+    /// Its number in the bundle, which gives its colour
+    pub fiber: i32,
     #[prop_or_default]
     pub children: Html,
 }
@@ -11,7 +12,7 @@ pub struct FiberLabelProps {
 pub fn fiber_label(props: &FiberLabelProps) -> Html {
     let n = props.fiber;
     let children = props.children.clone();
-    if n == 0 {
+    if n < 1 {
         return children;
     }
 
@@ -32,5 +33,19 @@ pub fn fiber_label(props: &FiberLabelProps) -> Html {
                 { children }
             </span>
         </span>
+    }
+}
+
+#[derive(Properties, PartialEq)]
+pub struct FiberNumberProps {
+    pub bundle: i32,
+    pub fiber: i32,
+}
+
+/// A fiber as "<bundle>-<fiber>" in its colour
+#[function_component(FiberNumber)]
+pub fn fiber_number(props: &FiberNumberProps) -> Html {
+    html! {
+        <FiberLabel fiber={props.fiber}>{format!("{}-{}", props.bundle, props.fiber)}</FiberLabel>
     }
 }

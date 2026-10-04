@@ -2,7 +2,7 @@ use crate::components::icon_button::IconButton;
 use crate::components::page_layout::{PageLayout, object_title};
 use crate::components::unsaved::Unsaved;
 use crate::{
-    components::{fiber::FiberLabel, table::ListModel},
+    components::{fiber::FiberNumber, table::ListModel},
     error::FrontendError,
     graphql::authenticated::{
         PortSide, PortType,
@@ -85,9 +85,9 @@ struct FiberLoopEntry {
 impl TableEntryRenderer<LoopColumn> for FiberLoopEntry {
     fn render_cell(&self, context: CellContext<'_, LoopColumn>) -> Cell {
         match context.column {
-            LoopColumn::Fiber => Cell::new(
-                html!(<FiberLabel fiber={self.fiber as u8}>{format!("{}-{}", self.bundle, self.fiber)}</FiberLabel>),
-            ),
+            LoopColumn::Fiber => {
+                Cell::new(html!(<FiberNumber bundle={self.bundle} fiber={self.fiber}/>))
+            }
             LoopColumn::Status => {
                 let (icon, text) = match &self.data.status {
                     FiberStatus::Free => (html!(<IconFiberCut/>), "Frei "),
