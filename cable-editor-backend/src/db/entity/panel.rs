@@ -8,8 +8,8 @@ use crate::{
     graphql::{
         authenticated::get_connection,
         loader::{
-            EffectiveUsage, PanelId, PanelPortId, PanelPorts, PlanId, SchachtId, get_loader,
-            load_one,
+            EffectiveUsage, PanelId, PanelParentChain, PanelPortId, PanelPorts, PlanId, SchachtId,
+            get_loader, load_one,
         },
     },
     netbox::{
@@ -19,7 +19,6 @@ use crate::{
     },
 };
 use async_graphql::{Context, Enum, Object};
-use async_recursion::async_recursion;
 use diesel::{
     Associations, ExpressionMethods, HasQuery, Identifiable, Insertable, OptionalExtension,
     QueryDsl, QueryResult, QueryableByName,
@@ -373,31 +372,15 @@ impl Panel {
             Ok(None)
         }
     }
+    /// The panels above, from the root panel down to the parent
     async fn parent_chain(&self, ctx: &Context<'_>) -> ApiResult<Box<[Panel]>> {
-        #[async_recursion]
-        async fn fetch_parent_chain(
-            transaction: &mut AsyncPgConnection,
-            entry: &Panel,
-            parents: &mut Vec<Panel>,
-        ) -> QueryResult<()> {
-            if let Some(parent_panel_id) = entry.parent_panel {
-                let parent_panel = Panel::query()
-                    .filter(schema::panel::id.eq(parent_panel_id))
-                    .first(transaction)
-                    .await?;
-                fetch_parent_chain(transaction, &parent_panel, parents).await?;
-                parents.push(parent_panel);
-            }
-            Ok(())
+        if self.parent_panel.is_none() {
+            return Ok(Box::default());
         }
-        if self.parent_panel.is_some() {
-            let mut connection = get_connection(ctx).await?;
-            let mut result = Vec::new();
-            fetch_parent_chain(&mut connection, self, &mut result).await?;
-            Ok(result.into_boxed_slice())
-        } else {
-            Ok(Box::default())
-        }
+        Ok(get_loader(ctx)?
+            .load_one(PanelParentChain(self.id))
+            .await?
+            .unwrap_or_default())
     }
     async fn children(&self, ctx: &Context<'_>) -> ApiResult<Vec<Panel>> {
         let mut connection = get_connection(ctx).await?;

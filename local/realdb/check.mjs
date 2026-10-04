@@ -163,6 +163,18 @@ console.log(`changed ports${statements(workOrder)}`);
 const changes = workOrder.plan.changedPorts.map((c) =>
   `${c.port.label}:${fiberText(c.currentFront)}/${fiberText(c.currentBack)}>${fiberText(c.plannedFront)}/${fiberText(c.plannedBack)}`).join();
 check('changed ports of a plan', changes === '1:K2-1/K1-1>K2-1/K4-1,4:K2-4/K1-4>-/K1-4', changes);
+
+// The panels above each panel, from the root down, loaded together for all panels
+const tree = await gql('{ listSchacht { rootPanels { name parentChain { name } children { name parentChain { name } children { name parentChain { name } } } } } }');
+console.log(`parent chains${statements(tree)}`);
+const wrongChains = [];
+const walk = (panel, above) => {
+  const chain = panel.parentChain.map((parent) => parent.name).join(' > ');
+  if (chain !== above.join(' > ')) wrongChains.push(`${panel.name}: ${chain}`);
+  (panel.children ?? []).forEach((child) => walk(child, [...above, panel.name]));
+};
+tree.listSchacht.forEach((schacht) => schacht.rootPanels.forEach((root) => walk(root, [])));
+check('parent chains from the root down', wrongChains.length === 0, wrongChains.join());
 check('the baseline changes no ports', (await gql('{ plan(planId:0) { changedPorts { port { id } } } }')).plan.changedPorts.length === 0);
 // What a port holds in a plan: the plan's rows over the current state's, a removed fiber none
 const frontOfBerg1 = async (pl) => (await gql(`query($pl:Int!,$p:Int!){ plan(planId:$pl) { panel(panelId:$p) {

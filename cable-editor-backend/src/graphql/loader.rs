@@ -23,8 +23,10 @@ use crate::{
 use async_graphql::{Context, dataloader::DataLoader, dataloader::Loader};
 use cable_editor_common::{ObjectKind, UserError};
 use diesel::{
-    ExpressionMethods, HasQuery, QueryDsl, SelectableHelper,
+    ExpressionMethods, HasQuery, QueryDsl, QueryableByName, SelectableHelper,
     dsl::{count_star, sum},
+    sql_query,
+    sql_types::{Array, Integer},
 };
 use diesel_async::{AsyncPgConnection, RunQueryDsl, pooled_connection::deadpool::Object};
 use postgis_diesel::types::{LineString, Point};
@@ -157,6 +159,10 @@ pub struct PanelPortId(pub i32);
 /// The ports of a panel, in their order.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct PanelPorts(pub i32);
+
+/// The panels above a panel, from its root panel down to its parent; missing for a root panel.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct PanelParentChain(pub i32);
 
 /// What a port's side holds in a plan (`effective_port_usage`), missing if nothing.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -576,6 +582,56 @@ impl Loader<PanelPorts> for DbLoader {
                 .push(port);
         }
         Ok(boxed(ports))
+    }
+}
+
+/// A panel above the panel `below`.
+#[derive(QueryableByName)]
+struct ParentRow {
+    #[diesel(sql_type = Integer)]
+    below: i32,
+    #[diesel(embed)]
+    panel: Panel,
+}
+
+impl Loader<PanelParentChain> for DbLoader {
+    type Value = Box<[Panel]>;
+    type Error = ApiError;
+
+    /// One recursive query up the parents of all the panels.
+    async fn load(
+        &self,
+        keys: &[PanelParentChain],
+    ) -> Result<HashMap<PanelParentChain, Box<[Panel]>>, Self::Error> {
+        let mut connection = self.connection.lock().await;
+        let list: Vec<ParentRow> = sql_query(
+            r#"
+WITH RECURSIVE chain AS (
+    SELECT p.id AS below, p.parent_panel AS next, 0 AS depth
+    FROM panel p
+    WHERE p.id = ANY($1)
+    UNION ALL
+    SELECT c.below, p.parent_panel, c.depth + 1
+    FROM chain c
+    JOIN panel p ON p.id = c.next
+)
+SELECT c.below, p.id, p.name, p.schacht_id, p.parent_panel, p.parent_order, p.netbox_device_id
+FROM chain c
+JOIN panel p ON p.id = c.next
+ORDER BY c.below, c.depth DESC
+"#,
+        )
+        .bind::<Array<Integer>, _>(ids(keys, |k| k.0))
+        .load(&mut connection)
+        .await?;
+        let mut chains: HashMap<PanelParentChain, Vec<Panel>> = HashMap::new();
+        for row in list {
+            chains
+                .entry(PanelParentChain(row.below))
+                .or_default()
+                .push(row.panel);
+        }
+        Ok(boxed(chains))
     }
 }
 

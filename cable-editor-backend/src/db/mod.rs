@@ -26,10 +26,10 @@ pub async fn connect() -> Result<DB, BackendError> {
 pub fn run_sync_migrations() {
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
-    let mut conn = PgConnection::establish(&database_url)
-        .expect("Konnte keine Verbindung für Migrationen herstellen");
+    let mut conn =
+        PgConnection::establish(&database_url).expect("cannot connect to run the migrations");
     let migrations = conn
         .run_pending_migrations(MIGRATIONS)
-        .expect("Fehler beim Ausführen der Migrationen");
+        .expect("running the migrations failed");
     info!("Migrations: {:?}", migrations);
 }
