@@ -1,3 +1,4 @@
+use crate::components::select::Select;
 use crate::{
     components::{
         dialog::confirm_delete,
@@ -26,8 +27,7 @@ use crate::{
 use cable_editor_common::ObjectKind;
 use patternfly_yew::prelude::{
     ActionGroup, Alert, AlertType, Button, ButtonVariant, Checkbox, CheckboxState, Form, FormGroup,
-    FormSelect, FormSelectOption, Icon, Spinner, TextInput, TextInputType, ToggleGroup,
-    ToggleGroupItem,
+    Icon, Spinner, TextInput, TextInputType, ToggleGroup, ToggleGroupItem,
 };
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
@@ -630,14 +630,11 @@ impl EditDuctProperties {
                     .unwrap_or_default();
                 html!(<TextInput {value} readonly=true/>)
             } else {
-                let options = schaechte.iter().map(|s| {
-                    html_nested!(<FormSelectOption<i32> value={s.id} description={s.name.clone()}/>)
-                });
-                html! {
-                    <FormSelect<i32> {value} {onchange} placeholder=" - ">
-                        {for options}
-                    </FormSelect<i32>>
-                }
+                let options = schaechte
+                    .iter()
+                    .map(|s| (s.id, s.name.clone()))
+                    .collect::<Box<[_]>>();
+                html!(<Select<i32> {value} {onchange} placeholder=" - " {options}/>)
             }
         };
         html! {
@@ -696,13 +693,13 @@ impl EditDuctProperties {
                 .unwrap_or_default();
             html!(<TextInput {value} readonly=true/>)
         } else {
-            let options = choices.owners.iter().map(|o| {
-                html_nested!(<FormSelectOption<i32> value={o.id} description={o.name.clone()}/>)
-            });
+            let options = choices
+                .owners
+                .iter()
+                .map(|o| (o.id, o.name.clone()))
+                .collect::<Box<[_]>>();
             html! {
-                <FormSelect<i32> value={self.owner} onchange={link.callback(Msg::SetOwner)} placeholder=" - ">
-                    {for options}
-                </FormSelect<i32>>
+                <Select<i32> value={self.owner} onchange={link.callback(Msg::SetOwner)} placeholder=" - " {options}/>
             }
         };
         // Without course the Leitungskataster gets a straight line between the Schächte, which
@@ -713,16 +710,16 @@ impl EditDuctProperties {
         } else if readonly {
             html!(<TextInput value={self.lagebestimmung.title()} readonly=true/>)
         } else {
-            let options = Genauigkeit::ALL.iter().map(|g| {
-                html_nested!(<FormSelectOption<Genauigkeit> value={*g} description={g.title()}/>)
-            });
+            let options = Genauigkeit::ALL
+                .iter()
+                .map(|g| (*g, g.title().to_string()))
+                .collect::<Box<[_]>>();
             html! {
-                <FormSelect<Genauigkeit>
+                <Select<Genauigkeit>
                     value={Some(self.lagebestimmung)}
                     onchange={link.callback(Msg::SetLagebestimmung)}
-                >
-                    {for options}
-                </FormSelect<Genauigkeit>>
+                    {options}
+                />
             }
         };
         let checked = if self.leitungskataster {
@@ -865,17 +862,20 @@ impl EditDuctProperties {
         };
         let link = ctx.link();
         let line_choice = (file.content.lines.len() > 1).then(|| {
-            let options = file.content.lines.iter().enumerate().map(|(index, line)| {
-                html_nested!(<FormSelectOption<usize> value={index} description={line.name.clone()}/>)
-            });
+            let options = file
+                .content
+                .lines
+                .iter()
+                .enumerate()
+                .map(|(index, line)| (index, line.name.clone()))
+                .collect::<Box<[_]>>();
             html! {
                 <FormGroup label="Linie">
-                    <FormSelect<usize>
+                    <Select<usize>
                         value={Some(file.line)}
                         onchange={link.callback(|line: Option<usize>| Msg::SelectLine(line.unwrap_or_default()))}
-                    >
-                        {for options}
-                    </FormSelect<usize>>
+                        {options}
+                    />
                 </FormGroup>
             }
         });

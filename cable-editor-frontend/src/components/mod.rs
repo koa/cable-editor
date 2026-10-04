@@ -12,6 +12,7 @@ pub mod panel;
 pub mod plan_link;
 pub mod print_page;
 pub mod recovery;
+pub mod select;
 pub mod select_duct;
 pub mod table;
 pub mod unsaved;

@@ -7,7 +7,7 @@ use crate::{
 use yew_oauth2::context::OAuth2Context;
 
 /// `Objektart` of a type's Schächte in the Leitungskataster (SIA405 `LKPunkt`); `Display` and
-/// `FromStr` are the value of its `FormSelect` option.
+/// `FromStr` are the value of its `Select` option.
 #[derive(
     cynic::Enum, Debug, Clone, Copy, PartialEq, Eq, Hash, strum::Display, strum::EnumString,
 )]

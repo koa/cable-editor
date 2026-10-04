@@ -112,7 +112,7 @@ impl From<IdOrNew> for IdOrNewInput {
 }
 
 /// `Lagebestimmung` of a Schacht or duct in the Leitungskataster (SIA405 `Genauigkeit`);
-/// `Display` and `FromStr` are the value of its `FormSelect` option.
+/// `Display` and `FromStr` are the value of its `Select` option.
 #[derive(
     Clone, Copy, PartialEq, Eq, Debug, Hash, cynic::Enum, strum::Display, strum::EnumString,
 )]

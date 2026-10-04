@@ -1,3 +1,4 @@
+use crate::components::select::Select;
 use crate::{
     components::{dialog::confirm_delete, unsaved::Unsaved},
     error::FrontendError,
@@ -23,8 +24,8 @@ use cable_editor_common::ObjectKind;
 use gloo_timers::callback::Timeout;
 use leaflet::{DragEvents, Marker, MarkerOptions, MouseEvent};
 use patternfly_yew::prelude::{
-    ActionGroup, Alert, AlertType, Button, ButtonVariant, Form, FormGroup, FormSelect,
-    FormSelectOption, Icon, Spinner, TextInput, ToggleGroup, ToggleGroupItem,
+    ActionGroup, Alert, AlertType, Button, ButtonVariant, Form, FormGroup, Icon, Spinner,
+    TextInput, ToggleGroup, ToggleGroupItem,
 };
 use wasm_bindgen::{JsCast, JsValue, closure::Closure};
 // The stable (older) names of GeolocationPosition and GeolocationPositionError
@@ -678,11 +679,16 @@ impl CabinetProperties {
         let link = ctx.link();
         let types = &choices.types;
 
-        let type_options = types.iter().map(|t| {
-            let description = t.name.clone().unwrap_or_else(|| format!("Typ {}", t.id));
-            html_nested!(<FormSelectOption<i32> value={t.id} {description}/>)
-        });
-        // FormSelect ignores its `disabled`, so readers get a text field
+        let type_options = types
+            .iter()
+            .map(|t| {
+                (
+                    t.id,
+                    t.name.clone().unwrap_or_else(|| format!("Typ {}", t.id)),
+                )
+            })
+            .collect::<Box<[_]>>();
+        // A select ignores its `disabled`, so readers get a text field
         let type_field = if readonly {
             let value = self
                 .type_id
@@ -692,13 +698,12 @@ impl CabinetProperties {
             html!(<TextInput {value} readonly=true/>)
         } else {
             html! {
-                <FormSelect<i32>
+                <Select<i32>
                     value={self.type_id}
                     onchange={link.callback(Msg::SetType)}
                     placeholder=" - "
-                >
-                    {for type_options}
-                </FormSelect<i32>>
+                    options={type_options}
+                />
             }
         };
         let system_item = |system: CoordinateSystem| {
@@ -788,13 +793,13 @@ impl CabinetProperties {
                 .unwrap_or_default();
             return html!(<TextInput {value} readonly=true/>);
         }
-        let options = choices.owners.iter().map(
-            |o| html_nested!(<FormSelectOption<i32> value={o.id} description={o.name.clone()}/>),
-        );
+        let options = choices
+            .owners
+            .iter()
+            .map(|o| (o.id, o.name.clone()))
+            .collect::<Box<[_]>>();
         html! {
-            <FormSelect<i32> value={self.owner} onchange={ctx.link().callback(Msg::SetOwner)} placeholder=" - ">
-                {for options}
-            </FormSelect<i32>>
+            <Select<i32> value={self.owner} onchange={ctx.link().callback(Msg::SetOwner)} placeholder=" - " {options}/>
         }
     }
 
@@ -803,16 +808,16 @@ impl CabinetProperties {
         if !self.can_edit(ctx) {
             return html!(<TextInput value={self.lagebestimmung.title()} readonly=true/>);
         }
-        let options = Genauigkeit::ALL.iter().map(
-            |g| html_nested!(<FormSelectOption<Genauigkeit> value={*g} description={g.title()}/>),
-        );
+        let options = Genauigkeit::ALL
+            .iter()
+            .map(|g| (*g, g.title().to_string()))
+            .collect::<Box<[_]>>();
         html! {
-            <FormSelect<Genauigkeit>
+            <Select<Genauigkeit>
                 value={Some(self.lagebestimmung)}
                 onchange={ctx.link().callback(Msg::SetLagebestimmung)}
-            >
-                {for options}
-            </FormSelect<Genauigkeit>>
+                {options}
+            />
         }
     }
 

@@ -12,4 +12,5 @@ disallowed-macros = [
 ]
 disallowed-types = [
     { path = "yew_nested_router::components::Link", reason = "PlanLink and the links of components/links.rs keep the plan of the path (components/plan_link.rs is the only place)" },
+    { path = "patternfly_yew::components::form::select::FormSelect", reason = "components/select.rs Select lets its options select themselves, FormSelect would show the placeholder for options added after the value" },
 ]

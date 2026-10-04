@@ -16,12 +16,13 @@ use crate::{
 };
 use cable_editor_common::ObjectKind;
 
+use crate::components::select::Select;
 use crate::graphql::authenticated::connections::{FiberOwnEnd, PortUsageUpdateAction, UsedEndPort};
 use itertools::Itertools;
 use patternfly_yew::prelude::{
     ActionGroup, Alert, AlertType, Button, ButtonVariant, Cell, CellContext, ExpansionState,
-    FormGroup, FormSelect, FormSelectOption, Grid, GridItem, Icon, MemoizedTableModel, Spinner,
-    Table, TableColumn, TableEntryRenderer, TableGridMode, TableHeader, TableMode,
+    FormGroup, Grid, GridItem, Icon, MemoizedTableModel, Spinner, Table, TableColumn,
+    TableEntryRenderer, TableGridMode, TableHeader, TableMode,
 };
 use std::{
     cell::RefCell,
@@ -30,7 +31,7 @@ use std::{
 };
 use yew::{
     Callback, Component, Context, Html, Properties, html, html::IntoPropValue, html_nested,
-    platform::spawn_local, virtual_dom::VChild,
+    platform::spawn_local,
 };
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -42,24 +43,18 @@ enum LoopColumn {
     TerminationB,
 }
 
-/// Option of the cable selects, keyed by the cable id.
-///
-/// A native `FormSelect` instead of patternfly-yew's `SimpleSelect`: that one is built on its
-/// popper-based `Dropdown`, which logged errors to the console when opened here (see
-/// `components/menu/popup.rs`).
-fn cable_option(cable: &CableEnd) -> VChild<FormSelectOption<i32>> {
-    html_nested! {
-        <FormSelectOption<i32>
-            value={cable.cable.id}
-            description={format!(
-                "{} ({}x{}) -> {}",
-                cable.cable.name,
-                cable.cable.bundle_count,
-                cable.cable.fiber_count,
-                cable.path.far_schacht.name
-            )}
-        />
-    }
+/// Option of the cable selects, keyed by the cable id
+fn cable_option(cable: &CableEnd) -> (i32, String) {
+    (
+        cable.cable.id,
+        format!(
+            "{} ({}x{}) -> {}",
+            cable.cable.name,
+            cable.cable.bundle_count,
+            cable.cable.fiber_count,
+            cable.path.far_schacht.name
+        ),
+    )
 }
 
 #[derive(Clone, PartialEq, Debug, Copy)]
@@ -565,13 +560,12 @@ impl LoopPortEditor {
 
             html! {
                 <FormGroup label="Zulauf-Kabel (A)">
-                    <FormSelect<i32>
+                    <Select<i32>
                         value={self.cable_a.as_ref().map(|c| c.cable.id)}
                         {onchange}
                         placeholder="- Kabel A wählen -"
-                    >
-                        { for entries.iter().map(cable_option) }
-                    </FormSelect<i32>>
+                        options={entries.iter().map(cable_option).collect::<Box<[_]>>()}
+                    />
                 </FormGroup>
             }
         };
@@ -600,13 +594,12 @@ impl LoopPortEditor {
 
             html! {
                 <FormGroup label="Ablauf-Kabel (B)">
-                    <FormSelect<i32>
+                    <Select<i32>
                         value={self.cable_b.as_ref().map(|c| c.cable.id)}
                         {onchange}
                         placeholder="- Zugehöriges Kabel B wählen -"
-                    >
-                        { for entries.iter().map(cable_option) }
-                    </FormSelect<i32>>
+                        options={entries.iter().map(cable_option).collect::<Box<[_]>>()}
+                    />
                 </FormGroup>
             }
         } else {

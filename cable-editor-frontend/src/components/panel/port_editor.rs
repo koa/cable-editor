@@ -1,5 +1,6 @@
 use crate::components::icon_button::IconButton;
 use crate::components::page_layout::{PageLayout, object_title};
+use crate::components::select::Select;
 use crate::components::unsaved::Unsaved;
 use crate::{
     error::FrontendError,
@@ -10,13 +11,9 @@ use crate::{
     util::{get_credentials, toast_error, toast_success},
 };
 use patternfly_yew::prelude::{
-    ActionGroup, Button, ButtonVariant, FormSelect, FormSelectOption, Icon, Spinner, TextInput,
-    ToggleGroup, ToggleGroupItem,
+    ActionGroup, Button, ButtonVariant, Icon, Spinner, TextInput, ToggleGroup, ToggleGroupItem,
 };
-use yew::{
-    Component, Context, Html, Properties, html, html::IntoPropValue, html_nested,
-    platform::spawn_local,
-};
+use yew::{Component, Context, Html, Properties, html, html::IntoPropValue, platform::spawn_local};
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct EditablePort {
@@ -370,12 +367,11 @@ impl PortEditor {
             let selected=port.port_type;
 
             let on_netbox_change = ctx.link().callback(move |port_id| Msg::UpdateNetboxId { idx, port_id });
-            let netbox_options = self.netbox_ports.iter().map(|np| html_nested! {
-                // Selected by the option itself: the ports of Netbox arrive after the panel's, and
-                // FormSelect sets its value only when the value changes
-                <FormSelectOption<i32> value={np.id} description={np.name.clone()}
-                    selected={port.netbox_port == Some(np.id)}/>
-            });
+            let netbox_options = self
+                .netbox_ports
+                .iter()
+                .map(|np| (np.id, np.name.clone()))
+                .collect::<Box<[_]>>();
 
             html! {
                 <tr class="pf-v6-c-table__tr" key={row_key}>
@@ -406,9 +402,7 @@ impl PortEditor {
                         </ToggleGroup>
                     </td>
                     <td class="pf-v6-c-table__td">
-                        <FormSelect<i32> value={port.netbox_port} onchange={on_netbox_change} placeholder=" - ">
-                            {for netbox_options}
-                        </FormSelect<i32>>
+                        <Select<i32> value={port.netbox_port} onchange={on_netbox_change} placeholder=" - " options={netbox_options}/>
                     </td>
                     <td class="pf-v6-c-table__td">
                         <IconButton icon={Icon::AngleUp} name="Nach oben" onclick={on_up} disabled={is_first} />

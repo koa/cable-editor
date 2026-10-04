@@ -1,6 +1,7 @@
 use crate::components::icon_button::IconButton;
 use crate::components::menu::popup::{MenuActionItem, MenuGroup, PopupMenu};
 use crate::components::page_layout::{PageLayout, object_title};
+use crate::components::select::Select;
 use crate::components::unsaved::Unsaved;
 use crate::{
     components::{fiber::FiberLabel, table::ListModel},
@@ -18,9 +19,9 @@ use crate::{
 use cable_editor_common::ObjectKind;
 use itertools::Itertools;
 use patternfly_yew::prelude::{
-    Alert, AlertType, Button, ButtonVariant, Cell, CellContext, ExpansionState, FormSelect,
-    FormSelectOption, Icon, MemoizedTableModel, SelectItemRenderer, Spinner, Table, TableColumn,
-    TableEntryRenderer, TableGridMode, TableHeader, TableMode,
+    Alert, AlertType, Button, ButtonVariant, Cell, CellContext, ExpansionState, Icon,
+    MemoizedTableModel, SelectItemRenderer, Spinner, Table, TableColumn, TableEntryRenderer,
+    TableGridMode, TableHeader, TableMode,
 };
 use std::{
     cell::RefCell,
@@ -672,18 +673,14 @@ impl AttachFiber {
         let bundle_options = available_bundles
             .iter()
             .enumerate()
-            .map(|(idx, b)| {
-                html_nested!(<FormSelectOption<usize> value={idx} description={b.label()}/>)
-            })
-            .collect::<Vec<_>>();
+            .map(|(idx, b)| (idx, b.label()))
+            .collect::<Box<[_]>>();
         let onchange = ctx.link().batch_callback(move |idx: Option<usize>| {
             idx.and_then(|idx| available_bundles.get(idx).cloned())
                 .map(Msg::SelectCableBundle)
         });
         let cable_bundle_select = html! {
-            <FormSelect<usize> value={selected_bundle} {onchange} placeholder="Kabel & Bündel wählen">
-                {for bundle_options}
-            </FormSelect<usize>>
+            <Select<usize> value={selected_bundle} {onchange} placeholder="Kabel & Bündel wählen" options={bundle_options}/>
         };
 
         let fiber_select = if let Some(cable_bundle) = &edit.cable_bundle {

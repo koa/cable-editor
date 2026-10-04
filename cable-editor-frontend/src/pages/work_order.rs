@@ -5,6 +5,7 @@
 //! A loop only means a fiber is not cut: a fiber cut once can't be looped again, only spliced, so
 //! a loop the plan adds is nothing to do.
 
+use crate::components::select::Select;
 use crate::{
     components::{
         fiber::FiberLabel,
@@ -20,14 +21,9 @@ use crate::{
     util::get_credentials,
 };
 use cable_editor_common::ObjectKind;
-use patternfly_yew::prelude::{
-    Alert, AlertType, FormGroup, FormSelect, FormSelectOption, Level, Spinner, Title,
-};
+use patternfly_yew::prelude::{Alert, AlertType, FormGroup, Level, Spinner, Title};
 use std::collections::BTreeMap;
-use yew::{
-    Component, Context, Html, Properties, html, html::IntoPropValue, html_nested,
-    platform::spawn_local, virtual_dom::VChild,
-};
+use yew::{Component, Context, Html, Properties, html, html::IntoPropValue, platform::spawn_local};
 
 #[derive(Properties, PartialEq)]
 pub struct WorkOrderProps {
@@ -138,9 +134,8 @@ impl WorkOrder {
             <div class="work-order">
                 <div class="work-order__toolbar no-print">
                     <FormGroup label="Schacht">
-                        <FormSelect<i32> value={self.schacht} {onchange} placeholder="Alle Schächte">
-                            { for orders.iter().map(|order| html_option(order.schacht)) }
-                        </FormSelect<i32>>
+                        <Select<i32> value={self.schacht} {onchange} placeholder="Alle Schächte"
+                            options={orders.iter().map(|order| (order.schacht.id, order.schacht.name.clone())).collect::<Box<[_]>>()}/>
                     </FormGroup>
                     <PrintPageButton/>
                 </div>
@@ -150,12 +145,6 @@ impl WorkOrder {
                     .map(|order| view_schacht(order, &plan.name, &stand)) }
             </div>
         }
-    }
-}
-
-fn html_option(schacht: &WorkOrderSchacht) -> VChild<FormSelectOption<i32>> {
-    html_nested! {
-        <FormSelectOption<i32> value={schacht.id} description={schacht.name.clone()}/>
     }
 }
 

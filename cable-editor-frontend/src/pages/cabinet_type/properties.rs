@@ -2,6 +2,7 @@
 //! (`IdOrNew::Temporary`); changed by admins, as the type gives the Objektart of its Schächte in
 //! the delivery to the Leitungskataster. Everyone else sees the page read-only.
 
+use crate::components::select::Select;
 use crate::{
     components::{
         dialog::confirm_delete,
@@ -22,8 +23,7 @@ use crate::{
 };
 use cable_editor_common::ObjectKind;
 use patternfly_yew::prelude::{
-    ActionGroup, Button, ButtonVariant, Form, FormGroup, FormSelect, FormSelectOption, Icon,
-    Spinner, TextInput, TextInputType,
+    ActionGroup, Button, ButtonVariant, Form, FormGroup, Icon, Spinner, TextInput, TextInputType,
 };
 use wasm_bindgen_futures::JsFuture;
 use web_sys::HtmlInputElement;
@@ -350,16 +350,16 @@ impl CabinetTypeProperties {
         let objektart = if readonly {
             html!(<TextInput value={self.objektart.title()} readonly=true/>)
         } else {
-            let options = LkmapPunktObjektart::ALL.iter().map(|objektart| {
-                html_nested!(<FormSelectOption<LkmapPunktObjektart> value={*objektart} description={objektart.title()}/>)
-            });
+            let options = LkmapPunktObjektart::ALL
+                .iter()
+                .map(|objektart| (*objektart, objektart.title().to_string()))
+                .collect::<Box<[_]>>();
             html! {
-                <FormSelect<LkmapPunktObjektart>
+                <Select<LkmapPunktObjektart>
                     value={Some(self.objektart)}
                     onchange={link.callback(Msg::SetObjektart)}
-                >
-                    {for options}
-                </FormSelect<LkmapPunktObjektart>>
+                    {options}
+                />
             }
         };
         let dimension = |value: &String, onchange| {

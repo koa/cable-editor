@@ -9,12 +9,13 @@ use crate::{
     util::{get_credentials, toast_error, toast_success},
 };
 
+use crate::components::select::Select;
 use crate::graphql::authenticated::edit_cabinet::{
     FlatPanelInput, OverviewNetboxDevice, update_panels_in_cabinet,
 };
 use patternfly_yew::prelude::{
-    ActionGroup, Button, ButtonType, ButtonVariant, Cell, Form, FormGroup, FormSelect,
-    FormSelectOption, Icon, Modal, Spinner, TableColumn, TableHeader, TableMode, TextInput,
+    ActionGroup, Button, ButtonType, ButtonVariant, Cell, Form, FormGroup, Icon, Modal, Spinner,
+    TableColumn, TableHeader, TableMode, TextInput,
 };
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
@@ -176,15 +177,12 @@ impl TreeTableColumn<IdOrNew, PanelEntry, PanelEditAction> for PanelColumn {
                     .callback
                     .reform(move |netbox_id| PanelEditAction::SetNetboxId { id, netbox_id });
                 Cell::new(html! {
-                    <FormSelect<i32>
+                    <Select<i32>
                         value={context.row.netbox_device_id}
                         {onchange}
                         placeholder=" - "
-                    >
-                        {for devices.iter().map(|device| html_nested! {
-                            <FormSelectOption<i32> value={device.id} description={device.to_string()}/>
-                        })}
-                    </FormSelect<i32>>
+                        options={devices.iter().map(|device| (device.id, device.to_string())).collect::<Box<[_]>>()}
+                    />
                 })
             }
         }
