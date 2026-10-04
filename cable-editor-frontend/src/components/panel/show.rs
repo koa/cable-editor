@@ -1,3 +1,4 @@
+use crate::components::load::Load;
 use crate::components::page_layout::{PageLayout, object_title};
 use crate::components::print_page::PrintPageButton;
 use crate::graphql::authenticated::current_user::Role;
@@ -22,12 +23,8 @@ use crate::{
     util::get_credentials,
 };
 use cable_editor_common::ObjectKind;
-use patternfly_yew::prelude::{
-    Button, ButtonVariant, Card, CardBody, CardTitle, Divider, Icon, Level, Spinner, Title,
-};
-use yew::{
-    Component, Context, Html, Properties, classes, html, html::IntoPropValue, platform::spawn_local,
-};
+use patternfly_yew::prelude::{Card, CardBody, CardTitle, Divider, Icon, Level, Title};
+use yew::{Component, Context, Html, Properties, classes, html, platform::spawn_local};
 
 #[derive(Properties, PartialEq, Clone)]
 pub struct ShowPanelProps {
@@ -37,16 +34,14 @@ pub struct ShowPanelProps {
 
 pub enum Msg {
     FetchData,
-    DataFetched(Option<PlannedPanelOverview>),
+    DataFetched(PlannedPanelOverview),
     Error(FrontendError),
 }
 
 pub struct ShowPanel {
     plan_id: i32,
     panel_id: i32,
-    data: Option<PlannedPanelOverview>,
-    loading: bool,
-    error: Option<FrontendError>,
+    data: Load<PlannedPanelOverview>,
     /// When the shown data was loaded, printed in the footer
     loaded_at: Option<js_sys::Date>,
 }
@@ -59,9 +54,7 @@ impl Component for ShowPanel {
         Self {
             plan_id: ctx.props().plan_id,
             panel_id: ctx.props().panel_id,
-            data: None,
-            loading: true,
-            error: None,
+            data: Load::Pending,
             loaded_at: None,
         }
     }
@@ -69,32 +62,34 @@ impl Component for ShowPanel {
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Msg::FetchData => {
-                self.loading = true;
-                self.error = None;
+                self.data = Load::Pending;
                 let scope = ctx.link().clone();
                 let credentials = get_credentials(ctx.link());
                 let plan_id = self.plan_id;
                 let panel_id = self.panel_id;
 
                 spawn_local(async move {
-                    match PlannedPanelOverview::fetch(credentials.as_ref(), plan_id, panel_id).await
-                    {
-                        Ok(data) => scope.send_message(Msg::DataFetched(data.map(|(_plan, p)| p))),
-                        Err(err) => scope.send_message(Msg::Error(err)),
-                    }
+                    scope.send_message(
+                        match PlannedPanelOverview::fetch(credentials.as_ref(), plan_id, panel_id)
+                            .await
+                        {
+                            Ok(Some((_plan, panel))) => Msg::DataFetched(panel),
+                            Ok(None) => {
+                                Msg::Error(FrontendError::not_found(ObjectKind::Panel, panel_id))
+                            }
+                            Err(error) => Msg::Error(error),
+                        },
+                    );
                 });
                 true
             }
             Msg::DataFetched(data) => {
-                self.loading = false;
-                self.data = data;
+                self.data = Load::Loaded(data);
                 self.loaded_at = Some(js_sys::Date::new_0());
-                self.error = None;
                 true
             }
             Msg::Error(err) => {
-                self.loading = false;
-                self.error = Some(err);
+                self.data = Load::Failed(err);
                 true
             }
         }
@@ -119,46 +114,20 @@ impl Component for ShowPanel {
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         html! {
-            <PageLayout title={object_title("Verbindungsübersicht", self.data.as_ref().and_then(|data| data.panel.name.as_deref()))}>{self.view_content(ctx)}</PageLayout>
+            <PageLayout title={object_title("Verbindungsübersicht", self.data.loaded().and_then(|data| data.panel.name.as_deref()))}>{self.view_content(ctx)}</PageLayout>
         }
     }
 }
 
 impl ShowPanel {
     fn view_content(&self, ctx: &Context<Self>) -> Html {
+        self.data
+            .view(|root_planned| self.view_panel(ctx, root_planned))
+    }
+
+    fn view_panel(&self, ctx: &Context<Self>, root_planned: &PlannedPanelOverview) -> Html {
         // Links to the editors of a planned change, not in the current state
         let can_plan = self.plan_id != BASELINE_PLAN_ID && get_role(ctx.link()) >= Role::Planner;
-        if self.loading {
-            return html! {
-                <div class="pf-v6-u-p-xl pf-v6-u-text-align-center">
-                    <Spinner />
-                    <div class="pf-v6-u-mt-md">{"Lade Verbindungsübersicht..."}</div>
-                </div>
-            };
-        }
-
-        if let Some(error) = &self.error {
-            return html! {
-                <div class="pf-v6-u-p-lg">
-                    { IntoPropValue::<Html>::into_prop_value(error) }
-                    <div class="pf-v6-u-mt-md">
-                        <Button
-                            variant={ButtonVariant::Primary}
-                            label="Erneut versuchen"
-                            onclick={ctx.link().callback(|_| Msg::FetchData)}
-                        />
-                    </div>
-                </div>
-            };
-        }
-
-        let Some(root_planned) = &self.data else {
-            return html! {
-                <div class="pf-v6-u-p-lg">
-                    { IntoPropValue::<Html>::into_prop_value(&FrontendError::not_found(ObjectKind::Panel, self.panel_id)) }
-                </div>
-            };
-        };
 
         let schacht = &root_planned.panel.schacht;
         let root_panel = &root_planned.panel;

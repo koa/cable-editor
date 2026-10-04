@@ -62,6 +62,8 @@ pub struct CableMapProps {
 
 pub struct CableMap {
     data: Option<MapData>,
+    /// Why the data couldn't be loaded or the map not created: not a `Load`, as the data
+    /// arriving after the map failed mustn't hide that
     error: Option<FrontendError>,
     /// Its layers: the path and the clickable ducts, redrawn on each change of the path
     map: MapHolder,

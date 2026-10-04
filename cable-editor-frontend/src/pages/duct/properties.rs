@@ -1,3 +1,4 @@
+use crate::components::load::Load;
 use crate::components::select::Select;
 use crate::graphql::authenticated::map::MapSchacht;
 use crate::{
@@ -44,8 +45,7 @@ use yew::{
 /// preview before it is stored. Readers see the page read-only.
 pub struct EditDuctProperties {
     /// The duct as stored (missing for a new one) and the Schächte and owners to choose from
-    loaded: Option<(Option<DuctProperties>, DuctChoices)>,
-    error: Option<FrontendError>,
+    loaded: Load<(Option<DuctProperties>, DuctChoices)>,
     schacht_a: Option<i32>,
     schacht_z: Option<i32>,
     description: String,
@@ -127,8 +127,7 @@ impl Component for EditDuctProperties {
     fn create(ctx: &Context<Self>) -> Self {
         Self::fetch(ctx);
         Self {
-            loaded: None,
-            error: None,
+            loaded: Load::Pending,
             schacht_a: None,
             schacht_z: None,
             description: String::new(),
@@ -164,7 +163,6 @@ impl Component for EditDuctProperties {
         }
         match msg {
             Msg::Loaded(duct, choices) => {
-                self.error = None;
                 self.schacht_a = duct.as_ref().map(|d| d.schacht_a.id);
                 self.schacht_z = duct.as_ref().map(|d| d.schacht_z.id);
                 self.description = duct
@@ -185,10 +183,10 @@ impl Component for EditDuctProperties {
                     .and_then(|d| d.width_mm)
                     .map(|w| w.to_string())
                     .unwrap_or_default();
-                self.loaded = Some((duct, choices));
+                self.loaded = Load::Loaded((duct, choices));
                 self.check(ctx);
             }
-            Msg::LoadError(error) => self.error = Some(error),
+            Msg::LoadError(error) => self.loaded = Load::Failed(error),
             Msg::SetSchachtA(id) => {
                 self.schacht_a = id;
                 self.check(ctx);
@@ -324,7 +322,7 @@ impl Component for EditDuctProperties {
         // A new duct's temporary id comes from the route, so it's stable
         let other = ctx.props().duct != old_props.duct;
         if other {
-            self.loaded = None;
+            self.loaded = Load::Pending;
             self.file = None;
             self.check = CheckState::None;
             Self::fetch(ctx);
@@ -346,9 +344,7 @@ impl Component for EditDuctProperties {
             });
             object_title(DuctView::Properties.title(), stored)
         };
-        let content = if let Some(error) = &self.error {
-            error.into_prop_value()
-        } else if let Some((stored, choices)) = &self.loaded {
+        let content = self.loaded.view(|(stored, choices)| {
             if stored.is_none()
                 && let IdOrNew::Id(id) = ctx.props().duct
             {
@@ -356,9 +352,7 @@ impl Component for EditDuctProperties {
             } else {
                 self.view_form(ctx, choices)
             }
-        } else {
-            html!(<Spinner/>)
-        };
+        });
         // The map's div is always there, so Leaflet keeps its element (see pages/map.rs)
         html! {
             <PageLayout {title}>
@@ -377,7 +371,7 @@ impl Component for EditDuctProperties {
         }
         match self.map.create() {
             Ok(()) => self.redraw(),
-            Err(error) => self.error = Some(error),
+            Err(error) => self.loaded = Load::Failed(error),
         }
     }
 }
@@ -409,12 +403,12 @@ impl EditDuctProperties {
     }
 
     fn stored(&self) -> Option<&DuctProperties> {
-        self.loaded.as_ref()?.0.as_ref()
+        self.loaded.loaded()?.0.as_ref()
     }
 
     fn schaechte(&self) -> &[MapSchacht] {
         self.loaded
-            .as_ref()
+            .loaded()
             .map(|(_, choices)| &*choices.schaechte)
             .unwrap_or_default()
     }

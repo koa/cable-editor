@@ -5,6 +5,7 @@ pub mod fiber;
 pub mod icon_button;
 pub mod label_printer;
 pub mod links;
+pub mod load;
 pub mod menu;
 pub mod netbox;
 pub mod page_layout;

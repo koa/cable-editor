@@ -1,3 +1,4 @@
+use crate::components::load::Load;
 use crate::graphql::authenticated::list_plans::BASELINE_PLAN_ID;
 use crate::{
     components::table::{TreeModel, TreeState, TreeTable, TreeTableColumn, TreeTableContext},
@@ -28,11 +29,12 @@ use yew::{
 };
 
 pub struct EditCabinet {
-    loading: bool,
-    error: Option<FrontendError>,
+    saving: bool,
+    /// Why the Netbox devices couldn't be loaded, shown above the panels
+    netbox_error: Option<FrontendError>,
     state: TreeState<IdOrNew>,
     model: TreeModel<IdOrNew, PanelEntry>,
-    loaded_panels: Option<Box<[PanelTreeEntry]>>,
+    loaded_panels: Load<Box<[PanelTreeEntry]>>,
     netbox_devices: Rc<[OverviewNetboxDevice]>,
     unsaved: Unsaved,
 }
@@ -51,6 +53,7 @@ pub enum Msg {
     PanelsFetched(Box<[PanelTreeEntry]>),
     CreatePanel,
     Error(FrontendError),
+    NetboxError(FrontendError),
     Saved,
     SaveFailed(FrontendError),
     PanelEvent(PanelEditAction),
@@ -195,11 +198,11 @@ impl Component for EditCabinet {
     fn create(ctx: &Context<Self>) -> Self {
         Self {
             unsaved: Unsaved::new(ctx.link()),
-            loading: true,
-            error: None,
+            saving: false,
+            netbox_error: None,
             state: TreeState::default(),
             model: TreeModel::default(),
-            loaded_panels: None,
+            loaded_panels: Load::Pending,
             netbox_devices: Rc::default(),
         }
     }
@@ -208,8 +211,8 @@ impl Component for EditCabinet {
         match msg {
             Msg::FetchPanels => {
                 if let Some(credentials) = get_credentials(ctx.link()) {
-                    self.loading = true;
-                    self.error = None;
+                    self.loaded_panels = Load::Pending;
+                    self.netbox_error = None;
                     let cabinet_id = ctx.props().cabinet_id;
                     let scope = ctx.link().clone();
                     spawn_local(async move {
@@ -222,15 +225,13 @@ impl Component for EditCabinet {
                             OverviewNetboxDevice::list_devices(Some(credentials))
                                 .await
                                 .map(Rc::from)
-                                .map_or_else(Msg::Error, Msg::NetboxDevicesFetched),
+                                .map_or_else(Msg::NetboxError, Msg::NetboxDevicesFetched),
                         );
                     });
                 }
                 true
             }
             Msg::PanelsFetched(panel_entries) => {
-                self.loading = false;
-                self.error = None;
                 let mut entries = HashMap::new();
                 let mut child_rels = HashMap::new();
                 let mut roots = Vec::with_capacity(panel_entries.len());
@@ -256,7 +257,7 @@ impl Component for EditCabinet {
                     );
                     append_children(&mut entries, &mut child_rels, id.into(), children);
                 }
-                self.loaded_panels = Some(panel_entries);
+                self.loaded_panels = Load::Loaded(panel_entries);
                 self.model = TreeModel::new(roots.into_boxed_slice(), entries, child_rels);
                 true
             }
@@ -297,17 +298,21 @@ impl Component for EditCabinet {
                 true
             }
             Msg::Error(error) => {
-                self.error = Some(error);
-                self.loading = false;
+                self.loaded_panels = Load::Failed(error);
+                true
+            }
+            Msg::NetboxError(error) => {
+                self.netbox_error = Some(error);
                 true
             }
             Msg::Saved => {
+                self.saving = false;
                 toast_success(ctx.link(), "Panels gespeichert");
                 ctx.link().send_message(Msg::FetchPanels);
                 true
             }
             Msg::SaveFailed(error) => {
-                self.loading = false;
+                self.saving = false;
                 toast_error(ctx.link(), "Panels konnten nicht gespeichert werden", error);
                 true
             }
@@ -368,11 +373,11 @@ impl Component for EditCabinet {
                 true
             }
             Msg::Save => {
-                self.loading = true;
+                self.saving = true;
 
                 // 1. Original-Zustand flachklopfen
                 let mut original_nodes = HashMap::new();
-                if let Some(loaded) = &self.loaded_panels {
+                if let Load::Loaded(loaded) = &self.loaded_panels {
                     flatten_loaded(loaded, None, &mut original_nodes);
                 }
 
@@ -446,7 +451,7 @@ impl Component for EditCabinet {
     fn changed(&mut self, ctx: &Context<Self>, old_props: &Self::Properties) -> bool {
         let props = ctx.props();
         if props.cabinet_id != old_props.cabinet_id {
-            self.loaded_panels = None;
+            self.loaded_panels = Load::Pending;
             //self.model = TreeModel::default();
             ctx.link().send_message(Msg::FetchPanels);
         }
@@ -454,9 +459,10 @@ impl Component for EditCabinet {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        if self.loading {
-            html!(<Spinner />)
-        } else {
+        if self.saving {
+            return html!(<Spinner />);
+        }
+        self.loaded_panels.view(|_| {
             let modified = self.has_changes();
             let plan_id = ctx.props().plan_id;
             let netbox_devices = self.netbox_devices.clone();
@@ -470,7 +476,7 @@ impl Component for EditCabinet {
             };
             let model = self.model.clone();
             let error = self
-                .error
+                .netbox_error
                 .as_ref()
                 .map(IntoPropValue::<Html>::into_prop_value);
             let create_panel_callback = ctx.link().callback(|_| Msg::CreatePanel);
@@ -502,11 +508,12 @@ impl Component for EditCabinet {
                  </ActionGroup>
                 </>
             }
-        }
+        })
     }
 
     fn rendered(&mut self, ctx: &Context<Self>, first_render: bool) {
-        self.unsaved.set(!self.loading && self.has_changes());
+        self.unsaved
+            .set(!self.saving && self.loaded_panels.loaded().is_some() && self.has_changes());
         if first_render {
             ctx.link().send_message(Msg::FetchPanels);
         }
@@ -548,7 +555,7 @@ fn append_children(
 impl EditCabinet {
     fn has_changes(&self) -> bool {
         let mut original_nodes = HashMap::new();
-        if let Some(loaded) = &self.loaded_panels {
+        if let Load::Loaded(loaded) = &self.loaded_panels {
             flatten_loaded(loaded, None, &mut original_nodes);
         }
 

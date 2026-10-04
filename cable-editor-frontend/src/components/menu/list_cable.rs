@@ -1,16 +1,15 @@
-use crate::components::menu::{MenuDropdown, MenuEntry, MenuError, MenuErrorProps};
+use crate::components::load::Load;
+use crate::components::menu::{MenuDropdown, MenuEntry, view_load};
 use crate::error::FrontendError;
 use crate::graphql::authenticated::list_cables::{CableListEntry, fetch_cables_list};
 use crate::pages::router::{AppRoute, CableView, PlanView};
 use crate::util::get_credentials;
-use patternfly_yew::prelude::Spinner;
 use std::borrow::Cow;
 use yew::platform::spawn_local;
 use yew::{Component, Context, Html, Properties, html};
 
 pub struct ListCable {
-    loaded_cables: Option<Box<[CableListEntry]>>,
-    error: Option<FrontendError>,
+    loaded_cables: Load<Box<[CableListEntry]>>,
 }
 
 #[derive(Debug)]
@@ -35,16 +34,14 @@ impl Component for ListCable {
 
     fn create(_ctx: &Context<Self>) -> Self {
         ListCable {
-            loaded_cables: None,
-            error: None,
+            loaded_cables: Load::Pending,
         }
     }
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Msg::FetchCables => {
-                self.error = None;
-                self.loaded_cables = None;
+                self.loaded_cables = Load::Pending;
                 let scope = ctx.link().clone();
                 let credentials = get_credentials(&scope);
                 spawn_local(async move {
@@ -57,54 +54,44 @@ impl Component for ListCable {
                 true
             }
             Msg::Error(error) => {
-                self.error = Some(error);
+                self.loaded_cables = Load::Failed(error);
                 true
             }
             Msg::UpdateCableList(list) => {
-                self.error = None;
-                self.loaded_cables = Some(list);
+                self.loaded_cables = Load::Loaded(list);
                 true
             }
         }
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        if let Some(error) = &self.error {
-            html!(<MenuError ..MenuErrorProps::from_error(error)/>)
-        } else {
-            match &self.loaded_cables {
-                None => {
-                    html!(<Spinner/>)
-                }
-                Some(cables) => {
-                    let plan_id = ctx.props().plan_id;
-                    let title = ctx
-                        .props()
-                        .cable_id
-                        .and_then(|cid| cables.iter().find(|cables| cables.id == cid))
-                        .map(|cable| Cow::Owned(cable.name.clone()))
-                        .unwrap_or(Cow::Borrowed(" - "));
-                    let view = ctx.props().view.as_ref().unwrap_or(&CableView::Edit);
-                    let entries = cables
-                        .iter()
-                        .map(|e| MenuEntry {
-                            selected: false,
-                            text: e.name.clone().into_boxed_str(),
-                            target: AppRoute::Plan {
-                                plan_id,
-                                view: PlanView::Cable {
-                                    id: e.id,
-                                    view: view.clone(),
-                                },
-                            },
-                        })
-                        .collect::<Box<[_]>>();
-                    html! {
-                        <MenuDropdown {title} {entries}/>
-                    }
-                }
+        view_load(&self.loaded_cables, |cables| {
+            let plan_id = ctx.props().plan_id;
+            let title = ctx
+                .props()
+                .cable_id
+                .and_then(|cid| cables.iter().find(|cables| cables.id == cid))
+                .map(|cable| Cow::Owned(cable.name.clone()))
+                .unwrap_or(Cow::Borrowed(" - "));
+            let view = ctx.props().view.as_ref().unwrap_or(&CableView::Edit);
+            let entries = cables
+                .iter()
+                .map(|e| MenuEntry {
+                    selected: false,
+                    text: e.name.clone().into_boxed_str(),
+                    target: AppRoute::Plan {
+                        plan_id,
+                        view: PlanView::Cable {
+                            id: e.id,
+                            view: view.clone(),
+                        },
+                    },
+                })
+                .collect::<Box<[_]>>();
+            html! {
+                <MenuDropdown {title} {entries}/>
             }
-        }
+        })
     }
     fn rendered(&mut self, ctx: &Context<Self>, first_render: bool) {
         if first_render {

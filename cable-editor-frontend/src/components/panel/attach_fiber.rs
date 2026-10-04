@@ -1,4 +1,5 @@
 use crate::components::icon_button::IconButton;
+use crate::components::load::Load;
 use crate::components::menu::popup::{MenuActionItem, MenuGroup, PopupMenu};
 use crate::components::page_layout::{PageLayout, object_title};
 use crate::components::select::Select;
@@ -32,10 +33,7 @@ use std::{
     collections::{BTreeMap, HashMap, HashSet},
     rc::Rc,
 };
-use yew::{
-    Component, Context, Html, Properties, html, html::IntoPropValue, html_nested,
-    platform::spawn_local,
-};
+use yew::{Component, Context, Html, Properties, html, html_nested, platform::spawn_local};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 enum AttachColumn {
@@ -81,13 +79,12 @@ pub struct AttachFiberProps {
 }
 
 pub struct AttachFiber {
-    current_situation: Option<PlannedPanel>,
+    current_situation: Load<PlannedPanel>,
     slot_states: BTreeMap<(i32, PortSide), SlotState>,
     edit_slot: Option<SlotEdit>,
     reset_ports: HashSet<i32>,
     table_state: Rc<RefCell<HashMap<usize, ExpansionState<AttachColumn>>>>,
-    loading: bool,
-    error: Option<FrontendError>,
+    saving: bool,
     unsaved: Unsaved,
 }
 
@@ -114,20 +111,19 @@ impl Component for AttachFiber {
     fn create(ctx: &Context<Self>) -> Self {
         Self {
             unsaved: Unsaved::new(ctx.link()),
-            current_situation: None,
+            current_situation: Load::Pending,
             slot_states: BTreeMap::new(),
             edit_slot: None,
             reset_ports: HashSet::new(),
             table_state: Rc::default(),
-            loading: true,
-            error: None,
+            saving: false,
         }
     }
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Msg::FetchData => {
-                self.loading = true;
+                self.current_situation = Load::Pending;
                 let plan_id = ctx.props().plan_id;
                 let panel_id = ctx.props().panel_id;
 
@@ -143,16 +139,14 @@ impl Component for AttachFiber {
                 true
             }
             Msg::DataFetched(Some(data)) => {
-                self.loading = false;
                 self.slot_states = calculate_current_states(&data);
                 self.reset_ports.clear();
                 self.edit_slot = None;
-                self.current_situation = Some(data);
+                self.current_situation = Load::Loaded(data);
                 true
             }
             Msg::DataFetched(None) => {
-                self.loading = false;
-                self.error = Some(FrontendError::not_found(
+                self.current_situation = Load::Failed(FrontendError::not_found(
                     ObjectKind::Panel,
                     ctx.props().panel_id,
                 ));
@@ -200,7 +194,7 @@ impl Component for AttachFiber {
                 self.reset_ports.insert(port_id);
 
                 // Setze UI-State auf initialen Zustand zur
-                if let Some(situation) = &self.current_situation
+                if let Load::Loaded(situation) = &self.current_situation
                     && let Some(port) = situation.ports.iter().find(|p| p.id == port_id)
                 {
                     for (side, usage) in [
@@ -228,11 +222,11 @@ impl Component for AttachFiber {
                 true
             }
             Msg::Save => {
-                self.loading = true;
+                self.saving = true;
                 let scope = ctx.link().clone();
                 let plan_id = ctx.props().plan_id;
 
-                if let Some(situation) = &self.current_situation {
+                if let Load::Loaded(situation) = &self.current_situation {
                     let mut usages = Vec::new();
 
                     for port in &situation.ports {
@@ -306,12 +300,13 @@ impl Component for AttachFiber {
                 true
             }
             Msg::Saved => {
+                self.saving = false;
                 toast_success(ctx.link(), "Verbindungen gespeichert");
                 ctx.link().send_message(Msg::FetchData);
                 true
             }
             Msg::SaveFailed(error) => {
-                self.loading = false;
+                self.saving = false;
                 toast_error(
                     ctx.link(),
                     "Verbindungen konnten nicht gespeichert werden",
@@ -320,8 +315,7 @@ impl Component for AttachFiber {
                 true
             }
             Msg::Error(error) => {
-                self.error = Some(error);
-                self.loading = false;
+                self.current_situation = Load::Failed(error);
                 true
             }
         }
@@ -329,12 +323,12 @@ impl Component for AttachFiber {
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         html! {
-            <PageLayout title={object_title("Fasern auflegen", self.current_situation.as_ref().and_then(|situation| situation.panel.name.as_deref()))}>{self.view_content(ctx)}</PageLayout>
+            <PageLayout title={object_title("Fasern auflegen", self.current_situation.loaded().and_then(|situation| situation.panel.name.as_deref()))}>{self.view_content(ctx)}</PageLayout>
         }
     }
 
     fn rendered(&mut self, ctx: &Context<Self>, first_render: bool) {
-        self.unsaved.set(!self.loading && self.has_changes());
+        self.unsaved.set(!self.saving && self.has_changes());
         if first_render {
             ctx.link().send_message(Msg::FetchData);
         }
@@ -343,10 +337,13 @@ impl Component for AttachFiber {
 
 impl AttachFiber {
     fn view_content(&self, ctx: &Context<Self>) -> Html {
-        if self.loading {
+        if self.saving {
             return html!(<Spinner />);
         }
+        self.current_situation.view(|_| self.view_form(ctx))
+    }
 
+    fn view_form(&self, ctx: &Context<Self>) -> Html {
         let validation_errors = self.validate();
         let has_changes = self.has_changes();
 
@@ -356,9 +353,6 @@ impl AttachFiber {
             <div class="pf-v6-c-panel">
                 <div class="pf-v6-c-panel__main">
                     <div class="pf-v6-c-panel__main-body">
-                        if let Some(err) = &self.error {
-                            { IntoPropValue::<Html>::into_prop_value(err) }
-                        }
                         { for validation_errors.iter().map(|err| html! {
                             <Alert title={err.clone()} r#type={AlertType::Warning} inline=true />
                         }) }
@@ -384,7 +378,7 @@ impl AttachFiber {
     fn validate(&self) -> Box<[String]> {
         let mut errors = Vec::new();
 
-        if let Some(situation) = &self.current_situation {
+        if let Load::Loaded(situation) = &self.current_situation {
             for port in &situation.ports {
                 if port.port_type == PortType::Loop {
                     continue;
@@ -429,7 +423,7 @@ impl AttachFiber {
         if !self.reset_ports.is_empty() {
             return true;
         }
-        if let Some(situation) = &self.current_situation {
+        if let Load::Loaded(situation) = &self.current_situation {
             let initial_states = calculate_current_states(situation);
             return self.slot_states != initial_states;
         }
@@ -437,7 +431,7 @@ impl AttachFiber {
     }
 
     fn render_port_table(&self, ctx: &Context<Self>) -> Html {
-        let Some(situation) = &self.current_situation else {
+        let Load::Loaded(situation) = &self.current_situation else {
             return Html::default();
         };
 
@@ -642,7 +636,7 @@ impl AttachFiber {
     }
 
     fn view_inline_edit(&self, ctx: &Context<Self>, edit: &SlotEdit) -> Html {
-        let Some(situation) = &self.current_situation else {
+        let Load::Loaded(situation) = &self.current_situation else {
             return Html::default();
         };
 
@@ -731,7 +725,7 @@ impl AttachFiber {
     }
 
     fn find_cable(&self, cable_id: i32) -> Option<&CableEnd> {
-        self.current_situation.as_ref().and_then(|s| {
+        self.current_situation.loaded().and_then(|s| {
             s.panel
                 .schacht
                 .cables

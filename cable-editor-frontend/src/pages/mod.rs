@@ -12,6 +12,7 @@ pub mod planning;
 pub mod router;
 pub mod work_order;
 
+use crate::components::load::Load;
 use crate::components::{
     label_printer::PrinterStatusBar, recovery::Recovery, unsaved::UnsavedGuard, user::UserProvider,
 };
@@ -42,8 +43,7 @@ use yew_oauth2::{
 
 #[derive(Debug)]
 pub struct App {
-    oauth2_config: Option<AuthenticationData>,
-    error: Option<FrontendError>,
+    oauth2_config: Load<AuthenticationData>,
 }
 #[derive(Debug)]
 pub enum AppMessage {
@@ -56,39 +56,34 @@ impl yew::Component for App {
     type Properties = ();
     fn create(_ctx: &Context<Self>) -> Self {
         Self {
-            oauth2_config: None,
-            error: None,
+            oauth2_config: Load::Pending,
         }
     }
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             AppMessage::AuthenticationData(config) => {
-                self.oauth2_config = Some(config);
+                self.oauth2_config = Load::Loaded(config);
                 true
             }
             AppMessage::Error(e) => {
-                self.error = Some(e);
+                self.oauth2_config = Load::Failed(e);
                 true
             }
         }
     }
 
     fn view(&self, _ctx: &Context<Self>) -> Html {
-        if let Some(error) = &self.error {
-            let error: Html = error.into_prop_value();
-            html! {
-                <ContextProvider<Recovery> context={Recovery::Reload}>
-                    <Bullseye><div class="app-error">{error}</div></Bullseye>
-                </ContextProvider<Recovery>>
+        match &self.oauth2_config {
+            Load::Failed(error) => {
+                let error: Html = error.into_prop_value();
+                html! {
+                    <ContextProvider<Recovery> context={Recovery::Reload}>
+                        <Bullseye><div class="app-error">{error}</div></Bullseye>
+                    </ContextProvider<Recovery>>
+                }
             }
-        } else if let Some(config) = self.oauth2_config.clone() {
-            html! {
-                <MainOAuth2 {config}/>
-            }
-        } else {
-            html! {
-                <Bullseye><Spinner/></Bullseye>
-            }
+            Load::Loaded(config) => html!(<MainOAuth2 config={config.clone()}/>),
+            Load::Pending => html!(<Bullseye><Spinner/></Bullseye>),
         }
     }
     fn rendered(&mut self, ctx: &Context<Self>, first_render: bool) {

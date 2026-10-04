@@ -5,6 +5,7 @@
 //! A loop only means a fiber is not cut: a fiber cut once can't be looped again, only spliced, so
 //! a loop the plan adds is nothing to do.
 
+use crate::components::load::Load;
 use crate::components::select::Select;
 use crate::graphql::authenticated::SchachtRef;
 use crate::{
@@ -23,7 +24,7 @@ use crate::{
     util::get_credentials,
 };
 use cable_editor_common::ObjectKind;
-use patternfly_yew::prelude::{Alert, AlertType, FormGroup, Level, Spinner, Title};
+use patternfly_yew::prelude::{Alert, AlertType, FormGroup, Level, Title};
 use std::collections::BTreeMap;
 use yew::{Component, Context, Html, Properties, html, html::IntoPropValue, platform::spawn_local};
 
@@ -34,13 +35,13 @@ pub struct WorkOrderProps {
 
 pub enum Msg {
     Fetch,
-    Loaded(Result<Option<WorkOrderPlan>, FrontendError>),
+    Loaded(Result<WorkOrderPlan, FrontendError>),
     Filter(Option<i32>),
 }
 
 pub struct WorkOrder {
     /// `None` while loading
-    plan: Option<Result<Option<WorkOrderPlan>, FrontendError>>,
+    plan: Load<WorkOrderPlan>,
     /// The Schacht shown alone, e.g. to print its order, `None` for all
     schacht: Option<i32>,
     /// When the shown data was loaded, printed with every Schacht
@@ -54,7 +55,7 @@ impl Component for WorkOrder {
     fn create(ctx: &Context<Self>) -> Self {
         ctx.link().send_message(Msg::Fetch);
         Self {
-            plan: None,
+            plan: Load::Pending,
             schacht: None,
             loaded_at: None,
         }
@@ -67,13 +68,17 @@ impl Component for WorkOrder {
                 let credentials = get_credentials(&scope);
                 let plan_id = ctx.props().plan_id;
                 spawn_local(async move {
-                    let plan = WorkOrderPlan::fetch(credentials.as_ref(), plan_id).await;
+                    let plan = WorkOrderPlan::fetch(credentials.as_ref(), plan_id)
+                        .await
+                        .and_then(|plan| {
+                            plan.ok_or_else(|| FrontendError::not_found(ObjectKind::Plan, plan_id))
+                        });
                     scope.send_message(Msg::Loaded(plan));
                 });
                 false
             }
             Msg::Loaded(plan) => {
-                self.plan = Some(plan);
+                self.plan = Load::from(plan);
                 self.loaded_at = Some(js_sys::Date::new_0());
                 true
             }
@@ -86,7 +91,7 @@ impl Component for WorkOrder {
 
     fn changed(&mut self, ctx: &Context<Self>, old_props: &Self::Properties) -> bool {
         if ctx.props().plan_id != old_props.plan_id {
-            self.plan = None;
+            self.plan = Load::Pending;
             self.schacht = None;
             ctx.link().send_message(Msg::Fetch);
         }
@@ -94,23 +99,9 @@ impl Component for WorkOrder {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        let plan = match &self.plan {
-            None => return html!(<PageLayout title="Arbeitsauftrag"><Spinner/></PageLayout>),
-            Some(Err(error)) => {
-                let error: Html = error.into_prop_value();
-                return html!(<PageLayout title="Arbeitsauftrag">{error}</PageLayout>);
-            }
-            Some(Ok(None)) => {
-                let error = FrontendError::not_found(ObjectKind::Plan, ctx.props().plan_id);
-                let error: Html = (&error).into_prop_value();
-                return html!(<PageLayout title="Arbeitsauftrag">{error}</PageLayout>);
-            }
-            Some(Ok(Some(plan))) => plan,
-        };
+        let title = object_title("Arbeitsauftrag", self.plan.loaded().map(|plan| &plan.name));
         html! {
-            <PageLayout title={object_title("Arbeitsauftrag", Some(&plan.name))}>
-                {self.view_plan(ctx, plan)}
-            </PageLayout>
+            <PageLayout {title}>{self.plan.view(|plan| self.view_plan(ctx, plan))}</PageLayout>
         }
     }
 }

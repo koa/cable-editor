@@ -1,3 +1,4 @@
+use crate::components::load::Load;
 use crate::{
     components::{
         label_printer::{LabelText, PanelLabelButton, PrintLabelButton, check_printer_supported},
@@ -19,8 +20,8 @@ use crate::{
 };
 use patternfly_yew::prelude::{
     Cell, CellContext, DescriptionGroup, DescriptionList, ExpansionState, Level,
-    MemoizedTableModel, Spinner, Table, TableColumn, TableEntryRenderer, TableGridMode,
-    TableHeader, TableMode, Title,
+    MemoizedTableModel, Table, TableColumn, TableEntryRenderer, TableGridMode, TableHeader,
+    TableMode, Title,
 };
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use yew::{
@@ -95,7 +96,7 @@ fn view_panel(panel: &SchachtPanelEntry) -> Html {
 /// Schacht overview: panels and cables ending here, its properties.
 pub struct CabinetOverview {
     /// `None` while loading
-    schacht: Option<Result<SchachtCables, FrontendError>>,
+    schacht: Load<SchachtCables>,
     /// The cables of `schacht`, sorted by name
     cables: Rc<Vec<SchachtCableEnd>>,
     /// Required by `ListModel`; the rows don't expand
@@ -117,7 +118,7 @@ impl Component for CabinetOverview {
         ctx.link().send_message(Msg::Fetch);
         check_printer_supported(ctx.link(), Msg::PrinterSupported);
         Self {
-            schacht: None,
+            schacht: Load::Pending,
             cables: Rc::default(),
             table_state: Rc::default(),
             printing: false,
@@ -143,7 +144,7 @@ impl Component for CabinetOverview {
                     .unwrap_or_default();
                 cables.sort_by(|a, b| a.cable.name.cmp(&b.cable.name));
                 self.cables = Rc::new(cables);
-                self.schacht = Some(schacht);
+                self.schacht = Load::from(schacht);
                 true
             }
             Msg::PrinterSupported(printing) => {
@@ -155,20 +156,19 @@ impl Component for CabinetOverview {
 
     fn changed(&mut self, ctx: &Context<Self>, old_props: &Self::Properties) -> bool {
         if ctx.props().cabinet_id != old_props.cabinet_id {
-            self.schacht = None;
+            self.schacht = Load::Pending;
             ctx.link().send_message(Msg::Fetch);
         }
         true
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        match &self.schacht {
-            None => html!(<PageLayout title="Schacht"><Spinner/></PageLayout>),
-            Some(Err(error)) => {
-                let error: Html = error.into_prop_value();
-                html!(<PageLayout title="Schacht">{error}</PageLayout>)
-            }
-            Some(Ok(schacht)) => self.view_schacht(ctx, schacht),
+        let title = object_title(
+            "Schacht",
+            self.schacht.loaded().map(|schacht| &schacht.name),
+        );
+        html! {
+            <PageLayout {title}>{self.schacht.view(|schacht| self.view_schacht(ctx, schacht))}</PageLayout>
         }
     }
 }
@@ -195,7 +195,7 @@ impl CabinetOverview {
         let role = get_role(ctx.link());
         let onsaved = ctx.link().callback(|()| Msg::Fetch);
         html! {
-            <PageLayout title={object_title("Schacht", Some(&schacht.name))}>
+            <>
                 <Title level={Level::H2}>{"Eigenschaften"}</Title>
                 <DescriptionList>
                     <DescriptionGroup term="Geändert">{schacht.changed_at.local()}</DescriptionGroup>
@@ -235,7 +235,7 @@ impl CabinetOverview {
                         />
                     </div>
                 </div>
-            </PageLayout>
+            </>
         }
     }
 }

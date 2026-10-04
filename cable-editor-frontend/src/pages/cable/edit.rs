@@ -1,3 +1,4 @@
+use crate::components::load::Load;
 use crate::components::{
     cable_map::{CableMap, PathEdit, PathEnd},
     dialog::confirm_delete,
@@ -195,7 +196,7 @@ fn DuctSelectionDialog(props: &DuctSelectionDialogProperties) -> Html {
 
 #[derive(Debug, Default)]
 pub struct EditCable {
-    state: DataState,
+    state: Load<CableDetails>,
     cable_name: String,
     bundle_count: String,
     fiber_count: String,
@@ -204,20 +205,11 @@ pub struct EditCable {
     table_state: Rc<RefCell<HashMap<usize, ExpansionState<CablePathColumn>>>>,
     unsaved: Unsaved,
 }
-#[derive(Debug, Default)]
-pub enum DataState {
-    Data(CableDetails),
-    Error(FrontendError),
-    #[default]
-    Pending,
-    NotFound,
-}
 pub enum Msg {
     Data(CableDetails),
     Saved(CableDetails),
     Created(CableDetails),
     Error(FrontendError),
-    NotFound,
     SetName(String),
     SetBundleCount(String),
     SetFiberCount(String),
@@ -256,7 +248,7 @@ impl Component for EditCable {
                 self.bundle_count = data.bundle_count.to_string();
                 self.fiber_count = data.fiber_count.to_string();
                 self.path = data.path.clone();
-                self.state = DataState::Data(data);
+                self.state = Load::Loaded(data);
                 self.saving = false;
                 true
             }
@@ -279,11 +271,7 @@ impl Component for EditCable {
                 true
             }
             Msg::Error(error) => {
-                self.state = DataState::Error(error);
-                true
-            }
-            Msg::NotFound => {
-                self.state = DataState::NotFound;
+                self.state = Load::Failed(error);
                 true
             }
             Msg::SetName(name) => {
@@ -300,7 +288,7 @@ impl Component for EditCable {
             }
             Msg::Save => {
                 self.saving = true;
-                if let DataState::Data(data) = &self.state {
+                if let Load::Loaded(data) = &self.state {
                     let scope = ctx.link().clone();
                     let cable_name = self.cable_name.clone();
                     let bundle_count = self.bundle_count.clone();
@@ -391,7 +379,7 @@ impl Component for EditCable {
                 true
             }
             Msg::RemoveEntry => {
-                if let DataState::Data(data) = &self.state {
+                if let Load::Loaded(data) = &self.state {
                     let id = data.id;
                     let scope = ctx.link().clone();
                     let credentials = get_credentials(&scope);
@@ -432,7 +420,7 @@ impl Component for EditCable {
             object_title(
                 view,
                 match &self.state {
-                    DataState::Data(data) => Some(&data.name),
+                    Load::Loaded(data) => Some(&data.name),
                     _ => None,
                 },
             )
@@ -455,11 +443,10 @@ impl EditCable {
     }
 
     fn view_content(&self, ctx: &Context<Self>) -> Html {
-        if !matches!(self.state, DataState::Data(_)) {
+        if !matches!(self.state, Load::Loaded(_)) {
             self.unsaved.set(false);
         }
-        match &self.state {
-            DataState::Data(data) => {
+        self.state.view(|data| {
                 // Readers see the cable without the means to change it
                 let role = get_role(ctx.link());
                 let readonly = role < Role::Planner;
@@ -782,18 +769,7 @@ impl EditCable {
                         <CableMap cable={ctx.props().cable} path={self.path.clone()} editable={!readonly} {onedit}/>
                     </div>
                 }
-            }
-            DataState::Error(error) => error.into_prop_value(),
-            DataState::Pending => {
-                html!(<Spinner/>)
-            }
-            DataState::NotFound => match ctx.props().cable {
-                IdOrNew::Id(cable_id) => {
-                    (&FrontendError::not_found(ObjectKind::Cable, cable_id)).into_prop_value()
-                }
-                IdOrNew::Temporary(_) => Html::default(),
-            },
-        }
+        })
     }
 }
 
@@ -885,7 +861,10 @@ fn update_cable(
                 Ok(Some(updated)) => Msg::Saved(updated),
                 // A toast: an error page would drop the unsaved changes
                 Err(error) => Msg::SaveFailed(error),
-                Ok(None) => Msg::NotFound,
+                Ok(None) => Msg::Error(FrontendError::not_found(
+                    ObjectKind::Cable,
+                    current_details.id,
+                )),
             },
         );
     });
@@ -912,7 +891,7 @@ impl EditCable {
                 match CableDetails::fetch(credentials.as_ref(), cable_id).await {
                     Ok(Some(data)) => Msg::Data(data),
                     Err(error) => Msg::Error(error),
-                    Ok(None) => Msg::NotFound,
+                    Ok(None) => Msg::Error(FrontendError::not_found(ObjectKind::Cable, cable_id)),
                 },
             );
         });

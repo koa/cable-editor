@@ -1,5 +1,6 @@
 //! The types of Schächte (see docs/stammdaten.md), each linked to its page.
 
+use crate::components::load::Load;
 use crate::{
     components::{page_layout::PageLayout, plan_link::PlanLink, table::ListModel},
     error::FrontendError,
@@ -11,8 +12,8 @@ use crate::{
     util::{get_credentials, get_role},
 };
 use patternfly_yew::prelude::{
-    Cell, CellContext, ExpansionState, MemoizedTableModel, Spinner, Table, TableColumn,
-    TableEntryRenderer, TableGridMode, TableHeader, TableMode,
+    Cell, CellContext, ExpansionState, MemoizedTableModel, Table, TableColumn, TableEntryRenderer,
+    TableGridMode, TableHeader, TableMode,
 };
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use uuid::Uuid;
@@ -51,7 +52,7 @@ impl TableEntryRenderer<Columns> for SchachtTypEntry {
 /// All types of Schächte; admins create new ones.
 pub struct ListOfCabinetTypes {
     /// `None` while loading
-    types: Option<Result<Rc<Vec<SchachtTypEntry>>, FrontendError>>,
+    types: Load<Rc<Vec<SchachtTypEntry>>>,
     /// Required by `ListModel`; the rows don't expand
     table_state: Rc<RefCell<HashMap<usize, ExpansionState<Columns>>>>,
 }
@@ -73,23 +74,20 @@ impl Component for ListOfCabinetTypes {
             ));
         });
         Self {
-            types: None,
+            types: Load::Pending,
             table_state: Rc::default(),
         }
     }
 
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
-            Msg::Loaded(types) => self.types = Some(types.map(Rc::new)),
+            Msg::Loaded(types) => self.types = Load::from(types.map(Rc::new)),
         }
         true
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        let content = match &self.types {
-            None => html!(<Spinner/>),
-            Some(Err(error)) => error.into_prop_value(),
-            Some(Ok(types)) => {
+        let content = self.types.view(|types| {
                 let header = html_nested! {
                     <TableHeader<Columns>>
                         <TableColumn<Columns> index={Columns::Icon}/>
@@ -120,8 +118,7 @@ impl Component for ListOfCabinetTypes {
                         }
                     </>
                 }
-            }
-        };
+        });
         html!(<PageLayout title="Schachttypen">{content}</PageLayout>)
     }
 }

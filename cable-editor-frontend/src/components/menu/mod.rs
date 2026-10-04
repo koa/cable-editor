@@ -1,8 +1,9 @@
+use crate::components::load::Load;
 use crate::{
     components::recovery::Recovery, graphql::authenticated::current_user::Role,
     pages::router::AppRoute,
 };
-use patternfly_yew::prelude::{Icon, MenuToggleVariant};
+use patternfly_yew::prelude::{Icon, MenuToggleVariant, Spinner};
 use popup::{MenuActionItem, MenuGroup, MenuLinkItem, PopupMenu};
 use std::borrow::Cow;
 use yew::{AttrValue, Html, Properties, function_component, html, use_context};
@@ -132,6 +133,16 @@ pub fn MenuError(props: &MenuErrorProps) -> Html {
                 </MenuGroup>
             }
         </PopupMenu>
+    }
+}
+
+/// A menu once its entries are loaded: a spinner before, the error as `MenuError` if they
+/// couldn't be
+pub fn view_load<T>(load: &Load<T>, menu: impl FnOnce(&T) -> Html) -> Html {
+    match load {
+        Load::Pending => html!(<Spinner/>),
+        Load::Failed(error) => html!(<MenuError ..MenuErrorProps::from_error(error)/>),
+        Load::Loaded(entries) => menu(entries),
     }
 }
 

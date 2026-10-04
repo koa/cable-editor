@@ -1,4 +1,5 @@
 use crate::components::icon_button::IconButton;
+use crate::components::load::Load;
 use crate::components::page_layout::{PageLayout, object_title};
 use crate::components::unsaved::Unsaved;
 use crate::graphql::authenticated::{CableId, CableSize};
@@ -177,16 +178,15 @@ pub struct LoopPortEditorProps {
 }
 
 pub struct LoopPortEditor {
-    current_situation: Option<PlannedPanel>,
+    current_situation: Load<PlannedPanel>,
     cable_a: Option<CableEnd>,
     cable_b: Option<CableEnd>,
 
-    // Status der Fasern (Key: (Bundle, Fiber))
+    // The fibers' states, by (bundle, fiber)
     fiber_states: BTreeMap<(i32, i32), FiberData>,
 
     table_state: Rc<RefCell<HashMap<usize, ExpansionState<LoopColumn>>>>,
-    loading: bool,
-    error: Option<FrontendError>,
+    saving: bool,
     missing_port_count: usize,
     unsaved: Unsaved,
 }
@@ -212,13 +212,12 @@ impl Component for LoopPortEditor {
 
     fn create(ctx: &Context<Self>) -> Self {
         Self {
-            current_situation: None,
+            current_situation: Load::Pending,
             cable_a: None,
             cable_b: None,
             fiber_states: BTreeMap::new(),
             table_state: Rc::default(),
-            loading: true,
-            error: None,
+            saving: false,
             missing_port_count: 0,
             unsaved: Unsaved::new(ctx.link()),
         }
@@ -227,7 +226,7 @@ impl Component for LoopPortEditor {
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Msg::FetchData => {
-                self.loading = true;
+                self.current_situation = Load::Pending;
                 let plan_id = ctx.props().plan_id;
                 let panel_id = ctx.props().panel_id;
                 let scope = ctx.link().clone();
@@ -243,7 +242,7 @@ impl Component for LoopPortEditor {
                 true
             }
             Msg::SelectCableA(cable_id) => {
-                if let Some(data) = self.current_situation.as_ref() {
+                if let Some(data) = self.current_situation.loaded() {
                     let found_cable = data
                         .panel
                         .schacht
@@ -275,7 +274,7 @@ impl Component for LoopPortEditor {
                 true
             }
             Msg::SelectCableB(cable_id) => {
-                if let Some(data) = self.current_situation.as_ref() {
+                if let Some(data) = self.current_situation.loaded() {
                     self.cable_b = data
                         .panel
                         .schacht
@@ -290,7 +289,7 @@ impl Component for LoopPortEditor {
             Msg::ResetFiber(bundle, fiber) => {
                 if let (Some(data), Some(global_data)) = (
                     self.fiber_states.get_mut(&(bundle, fiber)),
-                    &self.current_situation,
+                    self.current_situation.loaded(),
                 ) {
                     let mut state = FiberStatus::Free;
                     for port in &global_data.ports {
@@ -323,7 +322,7 @@ impl Component for LoopPortEditor {
                 true
             }
             Msg::Save => {
-                self.loading = true;
+                self.saving = true;
                 let scope = ctx.link().clone();
                 let _plan_id = ctx.props().plan_id;
 
@@ -337,8 +336,11 @@ impl Component for LoopPortEditor {
                         cable: CableSize { id: cable_b_id, .. },
                         ..
                     }),
-                ) = (&self.current_situation, &self.cable_a, &self.cable_b)
-                {
+                ) = (
+                    self.current_situation.loaded(),
+                    &self.cable_a,
+                    &self.cable_b,
+                ) {
                     let mut to_loop: Box<[(i32, i32)]> = self
                         .fiber_states
                         .iter()
@@ -432,12 +434,13 @@ impl Component for LoopPortEditor {
                 true
             }
             Msg::Saved => {
+                self.saving = false;
                 toast_success(ctx.link(), "Verbindungen gespeichert");
                 ctx.link().send_message(Msg::FetchData);
                 true
             }
             Msg::SaveFailed(error) => {
-                self.loading = false;
+                self.saving = false;
                 toast_error(
                     ctx.link(),
                     "Verbindungen konnten nicht gespeichert werden",
@@ -446,8 +449,7 @@ impl Component for LoopPortEditor {
                 true
             }
             Msg::Error(error) => {
-                self.error = Some(error);
-                self.loading = false;
+                self.current_situation = Load::Failed(error);
                 true
             }
 
@@ -456,7 +458,6 @@ impl Component for LoopPortEditor {
                 true
             }
             Msg::DataFetched(Some(data)) => {
-                self.loading = false;
                 let used_cables = data
                     .ports
                     .iter()
@@ -481,12 +482,11 @@ impl Component for LoopPortEditor {
                     ctx.link().send_message(Msg::PrepareLoopStates);
                 }
 
-                self.current_situation = Some(data);
+                self.current_situation = Load::Loaded(data);
                 true
             }
             Msg::DataFetched(None) => {
-                self.loading = false;
-                self.error = Some(FrontendError::not_found(
+                self.current_situation = Load::Failed(FrontendError::not_found(
                     ObjectKind::Panel,
                     ctx.props().panel_id,
                 ));
@@ -497,7 +497,7 @@ impl Component for LoopPortEditor {
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         html! {
-            <PageLayout title={object_title("Loops verbinden", self.current_situation.as_ref().and_then(|situation| situation.panel.name.as_deref()))}>{self.view_content(ctx)}</PageLayout>
+            <PageLayout title={object_title("Loops verbinden", self.current_situation.loaded().and_then(|situation| situation.panel.name.as_deref()))}>{self.view_content(ctx)}</PageLayout>
         }
     }
 
@@ -510,11 +510,17 @@ impl Component for LoopPortEditor {
 
 impl LoopPortEditor {
     fn view_content(&self, ctx: &Context<Self>) -> Html {
-        if self.loading {
+        if self.saving {
             self.unsaved.set(false);
             return html!(<Spinner />);
         }
+        if self.current_situation.loaded().is_none() {
+            self.unsaved.set(false);
+        }
+        self.current_situation.view(|_| self.view_form(ctx))
+    }
 
+    fn view_form(&self, ctx: &Context<Self>) -> Html {
         let unmodified = self.calculate_current_states(ctx.props().panel_id) == self.fiber_states;
         self.unsaved.set(!unmodified);
 
@@ -522,9 +528,6 @@ impl LoopPortEditor {
             <div class="pf-v6-c-panel">
                 <div class="pf-v6-c-panel__main">
                     <div class="pf-v6-c-panel__main-body">
-                        if let Some(err) = &self.error {
-                            { IntoPropValue::<Html>::into_prop_value(err) }
-                        }
 
                         // 1. KABELPAAR AUSWAHL / ANZEIGE
                         if let (Some(cable_a), Some(cable_b)) = (&self.cable_a, &self.cable_b) {
@@ -551,7 +554,7 @@ impl LoopPortEditor {
         let select_cable_a = {
             let entries = self
                 .current_situation
-                .as_ref()
+                .loaded()
                 .map(|s| s.panel.schacht.cables.clone())
                 .unwrap_or_default();
             let onchange = ctx
@@ -572,7 +575,7 @@ impl LoopPortEditor {
         let select_cable_b = if let Some(cable_a) = &self.cable_a {
             let entries: Vec<_> = self
                 .current_situation
-                .as_ref()
+                .loaded()
                 .map(|s| {
                     s.panel
                         .schacht
@@ -659,9 +662,11 @@ impl LoopPortEditor {
 
     fn calculate_current_states(&self, panel_id: i32) -> BTreeMap<(i32, i32), FiberData> {
         let mut states = BTreeMap::new();
-        if let (Some(cable_a), Some(cable_b), Some(_)) =
-            (&self.cable_a, &self.cable_b, &self.current_situation)
-        {
+        if let (Some(cable_a), Some(cable_b), Some(_)) = (
+            &self.cable_a,
+            &self.cable_b,
+            self.current_situation.loaded(),
+        ) {
             let fibers_a = cable_a
                 .fibers
                 .iter()

@@ -1,6 +1,7 @@
 //! The owners of Schächte and ducts (see docs/stammdaten.md): readable by everyone, changed by
 //! admins, as the owner is the Datenherr of the delivery to the Leitungskataster.
 
+use crate::components::load::Load;
 use crate::{
     components::{
         dialog::ask_delete,
@@ -21,7 +22,7 @@ use crate::{
 use patternfly_yew::prelude::{
     ActionGroup, Backdrop, Bullseye, Button, ButtonType, ButtonVariant, Cell, CellContext,
     Checkbox, CheckboxState, Color, ExpansionState, Form, FormGroup, Icon, Label,
-    MemoizedTableModel, MenuToggleVariant, Modal, ModalVariant, Spinner, Table, TableColumn,
+    MemoizedTableModel, MenuToggleVariant, Modal, ModalVariant, Table, TableColumn,
     TableEntryRenderer, TableGridMode, TableHeader, TableMode, TextInput,
 };
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
@@ -124,7 +125,7 @@ impl OwnerRow {
 /// All owners with their Schächte and ducts; admins create, change and delete them.
 pub struct ListOfOwners {
     /// `None` while loading
-    owners: Option<Result<Rc<Vec<OwnerRow>>, FrontendError>>,
+    owners: Load<Rc<Vec<OwnerRow>>>,
     /// Required by `ListModel`; the rows don't expand
     table_state: Rc<RefCell<HashMap<usize, ExpansionState<Columns>>>>,
 }
@@ -147,7 +148,7 @@ impl Component for ListOfOwners {
     fn create(ctx: &Context<Self>) -> Self {
         ctx.link().send_message(Msg::Load);
         Self {
-            owners: None,
+            owners: Load::Pending,
             table_state: Rc::default(),
         }
     }
@@ -167,7 +168,7 @@ impl Component for ListOfOwners {
                     ctx.link()
                         .callback(|(action, owner)| Msg::Action(action, owner))
                 });
-                self.owners = Some(owners.map(|owners| {
+                self.owners = Load::from(owners.map(|owners| {
                     Rc::new(
                         owners
                             .into_vec()
@@ -252,11 +253,7 @@ impl Component for ListOfOwners {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        let content = match &self.owners {
-            None => html!(<Spinner/>),
-            Some(Err(error)) => error.into_prop_value(),
-            Some(Ok(owners)) => self.view_owners(ctx, owners),
-        };
+        let content = self.owners.view(|owners| self.view_owners(ctx, owners));
         html!(<PageLayout title="Eigentümer">{content}</PageLayout>)
     }
 }

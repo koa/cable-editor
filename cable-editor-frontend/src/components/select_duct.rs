@@ -1,3 +1,4 @@
+use crate::components::load::Load;
 use crate::{
     components::table::ListModel,
     error::FrontendError,
@@ -5,8 +6,8 @@ use crate::{
     util::get_credentials,
 };
 use patternfly_yew::prelude::{
-    Cell, CellContext, ExpansionState, MemoizedTableModel, Spinner, Table, TableColumn,
-    TableEntryRenderer, TableGridMode, TableHeader, TableMode,
+    Cell, CellContext, ExpansionState, MemoizedTableModel, Table, TableColumn, TableEntryRenderer,
+    TableGridMode, TableHeader, TableMode,
 };
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use yew::{
@@ -16,9 +17,8 @@ use yew::{
 
 #[derive(Debug, Default)]
 pub struct SelectDuct {
-    found_ducts: Option<Rc<Vec<DuctListEntry>>>,
+    found_ducts: Load<Rc<Vec<DuctListEntry>>>,
     table_state: Rc<RefCell<HashMap<usize, ExpansionState<Columns>>>>,
-    error: Option<FrontendError>,
 }
 pub enum Msg {
     Data(Box<[DuctListEntry]>),
@@ -60,18 +60,18 @@ impl Component for SelectDuct {
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Msg::Data(data) => {
-                self.found_ducts = Some(Rc::new(data.into_vec()));
+                self.found_ducts = Load::Loaded(Rc::new(data.into_vec()));
                 true
             }
             Msg::Error(error) => {
-                self.error = Some(error);
+                self.found_ducts = Load::Failed(error);
                 true
             }
         }
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        if let Some(table) = &self.found_ducts {
+        self.found_ducts.view(|table| {
             let entries = ListModel::new(
                 MemoizedTableModel::new(table.clone()),
                 self.table_state.clone(),
@@ -94,9 +94,7 @@ impl Component for SelectDuct {
                     {entries}
                 />
             }
-        } else {
-            html!(<Spinner/>)
-        }
+        })
     }
 
     fn rendered(&mut self, ctx: &Context<Self>, first_render: bool) {

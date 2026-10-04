@@ -1,6 +1,7 @@
 //! The automatic sync to Netbox (admins, docs/netbox-sync.md): the plan Netbox shows, the last
 //! run with its issues or error, and a sync right away.
 
+use crate::components::load::Load;
 use crate::{
     components::{netbox::view_issues, page_layout::PageLayout, plan_link::PlanNameLink},
     error::{FrontendError, ServerError},
@@ -11,10 +12,10 @@ use cable_editor_common::{ErrorOrigin, UserError};
 use gloo_timers::callback::Interval;
 use patternfly_yew::prelude::{
     Alert, AlertType, Button, ButtonVariant, Color, DescriptionGroup, DescriptionList, Label,
-    Level, Spinner, Title,
+    Level, Title,
 };
 use serde::Deserialize;
-use yew::{Component, Context, Html, Properties, html, html::IntoPropValue, platform::spawn_local};
+use yew::{Component, Context, Html, Properties, html, platform::spawn_local};
 
 /// How often the page asks again while a run is due, in milliseconds
 const REFRESH_MS: u32 = 5_000;
@@ -25,7 +26,7 @@ pub struct NetboxPageProps {
 }
 
 pub struct NetboxPage {
-    sync: Option<Result<NetboxSync, FrontendError>>,
+    sync: Load<NetboxSync>,
     starting: bool,
     _refresh: Interval,
 }
@@ -47,7 +48,7 @@ impl Component for NetboxPage {
         ctx.link().send_message(Msg::Fetch);
         let link = ctx.link().clone();
         Self {
-            sync: None,
+            sync: Load::Pending,
             starting: false,
             _refresh: Interval::new(REFRESH_MS, move || link.send_message(Msg::Refresh)),
         }
@@ -64,11 +65,11 @@ impl Component for NetboxPage {
                 false
             }
             Msg::Loaded(sync) => {
-                self.sync = Some(sync);
+                self.sync = Load::from(sync);
                 true
             }
             Msg::Refresh => {
-                if let Some(Ok(sync)) = &self.sync
+                if let Load::Loaded(sync) = &self.sync
                     && (sync.pending || sync.state == NetboxSyncState::Ausstehend)
                 {
                     ctx.link().send_message(Msg::Fetch);
@@ -103,11 +104,7 @@ impl Component for NetboxPage {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        let content = match &self.sync {
-            None => html!(<Spinner/>),
-            Some(Err(error)) => error.into_prop_value(),
-            Some(Ok(sync)) => self.view_sync(ctx, sync),
-        };
+        let content = self.sync.view(|sync| self.view_sync(ctx, sync));
         html!(<PageLayout title="Netbox">{content}</PageLayout>)
     }
 }

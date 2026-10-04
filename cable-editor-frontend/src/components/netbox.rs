@@ -1,6 +1,7 @@
 //! The automatic sync to Netbox (docs/netbox-sync.md): the hint in the breadcrumb bar when
 //! Netbox isn't in sync, and the issues a run found.
 
+use crate::components::load::Load;
 use crate::{
     components::menu::popup::{MenuGroup, MenuLinkItem, PopupMenu},
     error::{FrontendError, messages},
@@ -29,7 +30,7 @@ pub struct NetboxHintProps {
 /// couldn't be loaded: a menu explaining it, for admins with the way to the page "Netbox".
 /// A pending run shows nothing, that is the normal case after every change.
 pub struct NetboxHint {
-    status: Option<Result<NetboxStatus, FrontendError>>,
+    status: Load<NetboxStatus>,
     _refresh: Interval,
 }
 
@@ -46,7 +47,7 @@ impl Component for NetboxHint {
         ctx.link().send_message(Msg::Fetch);
         let link = ctx.link().clone();
         Self {
-            status: None,
+            status: Load::Pending,
             _refresh: Interval::new(REFRESH_MS, move || link.send_message(Msg::Fetch)),
         }
     }
@@ -63,7 +64,7 @@ impl Component for NetboxHint {
                 false
             }
             Msg::Loaded(status) => {
-                self.status = Some(status);
+                self.status = Load::from(status);
                 true
             }
         }
@@ -79,8 +80,8 @@ impl Component for NetboxHint {
     fn view(&self, ctx: &Context<Self>) -> Html {
         // danger: a failure, else a warning
         let (text, danger, message, details) = match &self.status {
-            None => return Html::default(),
-            Some(Ok(status)) => match status.state {
+            Load::Pending => return Html::default(),
+            Load::Loaded(status) => match status.state {
                 NetboxSyncState::Synchron | NetboxSyncState::Ausstehend => return Html::default(),
                 NetboxSyncState::NichtSynchron => (
                     "Netbox nicht synchron",
@@ -95,7 +96,7 @@ impl Component for NetboxHint {
                     Box::default(),
                 ),
             },
-            Some(Err(error)) => (
+            Load::Failed(error) => (
                 "Netbox-Status unbekannt",
                 true,
                 "Der Stand des Netbox-Syncs konnte nicht geladen werden:",

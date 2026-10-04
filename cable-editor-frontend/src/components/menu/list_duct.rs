@@ -1,11 +1,9 @@
-use crate::components::menu::{
-    BreadcrumbDivider, MenuDropdown, MenuEntry, MenuError, MenuErrorProps,
-};
+use crate::components::load::Load;
+use crate::components::menu::{BreadcrumbDivider, MenuDropdown, MenuEntry, view_load};
 use crate::error::FrontendError;
 use crate::graphql::authenticated::list_ducts::{DuctListEntry, fetch_duct_list};
 use crate::pages::router::{AppRoute, DuctView, PlanView};
 use crate::util::get_credentials;
-use patternfly_yew::prelude::Spinner;
 use std::borrow::Cow;
 use yew::platform::spawn_local;
 use yew::{Component, Context, Html, Properties, html};
@@ -13,8 +11,7 @@ use yew::{Component, Context, Html, Properties, html};
 /// The duct of the page (its views, the other ducts) and, on its own pages, the view shown
 /// (like `ListCabinet`).
 pub struct ListDuct {
-    loaded_ducts: Option<Box<[DuctListEntry]>>,
-    error: Option<FrontendError>,
+    loaded_ducts: Load<Box<[DuctListEntry]>>,
 }
 
 #[derive(Debug)]
@@ -39,16 +36,14 @@ impl Component for ListDuct {
 
     fn create(_ctx: &Context<Self>) -> Self {
         ListDuct {
-            loaded_ducts: None,
-            error: None,
+            loaded_ducts: Load::Pending,
         }
     }
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Msg::FetchDucts => {
-                self.error = None;
-                self.loaded_ducts = None;
+                self.loaded_ducts = Load::Pending;
                 let scope = ctx.link().clone();
                 let credentials = get_credentials(&scope);
                 spawn_local(async move {
@@ -61,28 +56,18 @@ impl Component for ListDuct {
                 true
             }
             Msg::Error(error) => {
-                self.error = Some(error);
+                self.loaded_ducts = Load::Failed(error);
                 true
             }
             Msg::UpdateDuctList(list) => {
-                self.error = None;
-                self.loaded_ducts = Some(list);
+                self.loaded_ducts = Load::Loaded(list);
                 true
             }
         }
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        if let Some(error) = &self.error {
-            html!(<MenuError ..MenuErrorProps::from_error(error)/>)
-        } else {
-            match &self.loaded_ducts {
-                None => {
-                    html!(<Spinner/>)
-                }
-                Some(ducts) => self.view_menus(ctx, ducts),
-            }
-        }
+        view_load(&self.loaded_ducts, |ducts| self.view_menus(ctx, ducts))
     }
     fn rendered(&mut self, ctx: &Context<Self>, first_render: bool) {
         if first_render {

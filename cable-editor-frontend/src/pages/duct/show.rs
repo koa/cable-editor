@@ -1,3 +1,4 @@
+use crate::components::load::Load;
 use crate::{
     components::{
         links::{CableLink, OwnerLink, SchachtLink},
@@ -15,15 +16,14 @@ use crate::{
     util::{get_credentials, get_role, navigate},
 };
 use cable_editor_common::ObjectKind;
-use patternfly_yew::prelude::{DescriptionGroup, DescriptionList, Spinner};
+use patternfly_yew::prelude::{DescriptionGroup, DescriptionList};
 use wasm_bindgen::JsCast;
-use yew::{Component, Context, Html, Properties, html, html::IntoPropValue, platform::spawn_local};
+use yew::{Component, Context, Html, Properties, html, platform::spawn_local};
 
 /// A duct: its Schächte, length and cables, and a map with its line.
 pub struct ShowDuct {
     /// Missing while loading; `None` inside: the duct doesn't exist
-    duct: Option<Option<DuctDetails>>,
-    error: Option<FrontendError>,
+    duct: Load<DuctDetails>,
     /// Its layers: what's drawn for the duct, replaced when another duct is shown
     map: MapHolder,
 }
@@ -33,7 +33,7 @@ pub struct ShowDuct {
     reason = "a message is queued and handled by a task of its own, its size doesn't matter"
 )]
 pub enum Msg {
-    Data(Option<DuctDetails>),
+    Data(DuctDetails),
     Error(FrontendError),
     OpenSchacht(i32),
 }
@@ -51,8 +51,7 @@ impl Component for ShowDuct {
     fn create(ctx: &Context<Self>) -> Self {
         Self::fetch(ctx);
         Self {
-            duct: None,
-            error: None,
+            duct: Load::Pending,
             map: MapHolder::default(),
         }
     }
@@ -60,13 +59,12 @@ impl Component for ShowDuct {
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Msg::Data(duct) => {
-                self.error = None;
-                self.duct = Some(duct);
+                self.duct = Load::Loaded(duct);
                 self.show_duct(ctx);
                 true
             }
             Msg::Error(error) => {
-                self.error = Some(error);
+                self.duct = Load::Failed(error);
                 true
             }
             Msg::OpenSchacht(id) => {
@@ -85,7 +83,7 @@ impl Component for ShowDuct {
 
     fn changed(&mut self, ctx: &Context<Self>, old_props: &Self::Properties) -> bool {
         if ctx.props().duct_id != old_props.duct_id {
-            self.duct = None;
+            self.duct = Load::Pending;
             Self::fetch(ctx);
             true
         } else {
@@ -94,36 +92,27 @@ impl Component for ShowDuct {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        let loaded = self.duct.as_ref().and_then(Option::as_ref);
+        let loaded = self.duct.loaded();
         let title = object_title("Trasse", loaded.map(DuctDetails::title));
-        let content = if let Some(error) = &self.error {
-            error.into_prop_value()
-        } else {
-            match &self.duct {
-                None => html!(<Spinner/>),
-                Some(None) => (&FrontendError::not_found(ObjectKind::Duct, ctx.props().duct_id))
-                    .into_prop_value(),
-                Some(Some(duct)) => {
-                    let edit = PlanView::Duct {
-                        id: duct.id,
-                        view: DuctView::Properties,
-                    };
-                    html! {
-                        <>
-                            {view_details(duct)}
-                            // Readers may open the page too, but only to look at what is shown here
-                            if get_role(ctx.link()) >= Role::Planner {
-                                <div class="pf-v6-u-mt-md">
-                                    <PlanLink to={edit} class="pf-v6-c-button pf-m-secondary">
-                                        {"Bearbeiten"}
-                                    </PlanLink>
-                                </div>
-                            }
-                        </>
+        let content = self.duct.view(|duct| {
+            let edit = PlanView::Duct {
+                id: duct.id,
+                view: DuctView::Properties,
+            };
+            html! {
+                <>
+                    {view_details(duct)}
+                    // Readers may open the page too, but only to look at what is shown here
+                    if get_role(ctx.link()) >= Role::Planner {
+                        <div class="pf-v6-u-mt-md">
+                            <PlanLink to={edit} class="pf-v6-c-button pf-m-secondary">
+                                {"Bearbeiten"}
+                            </PlanLink>
+                        </div>
                     }
-                }
+                </>
             }
-        };
+        });
         // The map's div is always there, so Leaflet keeps its element (see pages/map.rs)
         html! {
             <PageLayout {title}>
@@ -154,7 +143,8 @@ impl ShowDuct {
         spawn_local(async move {
             scope.send_message(
                 match fetch_duct_details(credentials.as_ref(), duct_id).await {
-                    Ok(duct) => Msg::Data(duct),
+                    Ok(Some(duct)) => Msg::Data(duct),
+                    Ok(None) => Msg::Error(FrontendError::not_found(ObjectKind::Duct, duct_id)),
                     Err(error) => Msg::Error(error),
                 },
             );
@@ -163,7 +153,7 @@ impl ShowDuct {
 
     /// Draws the duct and its Schächte, once both the map and the duct are there.
     fn show_duct(&mut self, ctx: &Context<Self>) {
-        let (Some(map), Some(Some(duct))) = (self.map.map().cloned(), &self.duct) else {
+        let (Some(map), Load::Loaded(duct)) = (self.map.map().cloned(), &self.duct) else {
             return;
         };
         let mut layers: Vec<leaflet::Layer> = Vec::new();

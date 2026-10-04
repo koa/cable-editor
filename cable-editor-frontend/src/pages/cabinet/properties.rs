@@ -1,3 +1,4 @@
+use crate::components::load::Load;
 use crate::components::select::Select;
 use crate::{
     components::{dialog::confirm_delete, unsaved::Unsaved},
@@ -51,10 +52,9 @@ const POSITION_ZOOM: f64 = 18.0;
 /// wraps it in one itself.
 pub struct CabinetProperties {
     /// The Schacht as stored (missing for a new one) and the types and owners to choose from
-    loaded: Option<(Option<SchachtProperties>, SchachtChoices)>,
+    loaded: Load<(Option<SchachtProperties>, SchachtChoices)>,
     /// All ducts and Schächte, drawn for context (`draw_base`)
     map_data: Option<MapData>,
-    error: Option<FrontendError>,
     name: String,
     type_id: Option<i32>,
     owner: Option<i32>,
@@ -142,9 +142,8 @@ impl Component for CabinetProperties {
     fn create(ctx: &Context<Self>) -> Self {
         Self::fetch(ctx);
         Self {
-            loaded: None,
+            loaded: Load::Pending,
             map_data: None,
-            error: None,
             name: String::new(),
             type_id: None,
             owner: None,
@@ -180,7 +179,6 @@ impl Component for CabinetProperties {
         }
         match msg {
             Msg::Loaded(schacht, choices, map_data) => {
-                self.error = None;
                 self.take_stored(ctx, schacht.as_ref());
                 if schacht.is_none() {
                     // A new Schacht: the default owner
@@ -198,10 +196,10 @@ impl Component for CabinetProperties {
                     }
                 }
                 self.draw_base(ctx, &map_data);
-                self.loaded = Some((schacht, choices));
+                self.loaded = Load::Loaded((schacht, choices));
                 self.map_data = Some(map_data);
             }
-            Msg::LoadError(error) => self.error = Some(error),
+            Msg::LoadError(error) => self.loaded = Load::Failed(error),
             Msg::SetName(name) => self.name = name,
             Msg::SetType(type_id) => self.type_id = type_id,
             Msg::SetOwner(owner) => self.owner = owner,
@@ -307,7 +305,7 @@ impl Component for CabinetProperties {
                     Ok(schacht) => {
                         toast_success(ctx.link(), "Schacht gespeichert");
                         self.take_stored(ctx, Some(&schacht));
-                        if let Some(loaded) = &mut self.loaded {
+                        if let Load::Loaded(loaded) = &mut self.loaded {
                             loaded.0 = Some(schacht);
                         }
                         ctx.props().onsaved.emit(());
@@ -364,7 +362,7 @@ impl Component for CabinetProperties {
     fn changed(&mut self, ctx: &Context<Self>, old_props: &Self::Properties) -> bool {
         // A new Schacht's temporary id comes from the route, so it's stable
         if ctx.props().cabinet != old_props.cabinet {
-            self.loaded = None;
+            self.loaded = Load::Pending;
             Self::fetch(ctx);
             true
         } else {
@@ -373,9 +371,7 @@ impl Component for CabinetProperties {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        let content = if let Some(error) = &self.error {
-            error.into_prop_value()
-        } else if let Some((stored, choices)) = &self.loaded {
+        let content = self.loaded.view(|(stored, choices)| {
             if stored.is_none()
                 && let IdOrNew::Id(id) = ctx.props().cabinet
             {
@@ -383,9 +379,7 @@ impl Component for CabinetProperties {
             } else {
                 self.view_form(ctx, choices)
             }
-        } else {
-            html!(<Spinner/>)
-        };
+        });
         // The map's div is always there, so Leaflet keeps its element (see pages/map.rs)
         html! {
             <div class="map-layout">
@@ -401,7 +395,7 @@ impl Component for CabinetProperties {
             return;
         }
         if let Err(error) = self.map.create() {
-            self.error = Some(error);
+            self.loaded = Load::Failed(error);
             return;
         }
         if let Some(map) = self.map.map()
@@ -648,14 +642,14 @@ impl CabinetProperties {
 
     fn has_unsaved(&self) -> bool {
         match &self.loaded {
-            Some((None, _)) => self.touched,
+            Load::Loaded((None, _)) => self.touched,
             _ => self.has_changes(),
         }
     }
 
     /// Whether the fields differ from the stored Schacht (always for a new one).
     fn has_changes(&self) -> bool {
-        let Some((stored, _)) = &self.loaded else {
+        let Load::Loaded((stored, _)) = &self.loaded else {
             return false;
         };
         let Some(stored) = stored else {

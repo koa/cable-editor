@@ -2,6 +2,7 @@
 //! delivery of the whole network stands, the download of its files, what can't be delivered and
 //! the deliveries so far; below a map of the perimeter and what is delivered.
 
+use crate::components::load::Load;
 use crate::{
     components::{
         links::{DuctLink, SchachtLink},
@@ -23,11 +24,11 @@ use crate::{
 use js_sys::{Array, Date};
 use leaflet::{Polygon, PolylineOptions};
 use patternfly_yew::prelude::{
-    Alert, AlertType, Button, ButtonVariant, Color, Icon, Label, Level, Spinner, Title,
+    Alert, AlertType, Button, ButtonVariant, Color, Icon, Label, Level, Title,
 };
 use wasm_bindgen::{JsCast, JsValue};
 use yew::platform::spawn_local;
-use yew::{Callback, Component, Context, Html, Properties, html, html::IntoPropValue};
+use yew::{Callback, Component, Context, Html, Properties, html};
 
 /// The Checkservice takes the transfer files as ZIPs.
 const ZIP: &str = "application/zip";
@@ -209,7 +210,7 @@ fn state_label(state: &DeliveryState) -> Html {
 /// The delivery of the whole network to the Leitungskataster.
 pub struct Leitungskataster {
     /// `None` while loading
-    export: Option<Result<Loaded, FrontendError>>,
+    export: Load<Loaded>,
     map: MapHolder,
 }
 
@@ -235,7 +236,7 @@ impl Component for Leitungskataster {
     fn create(ctx: &Context<Self>) -> Self {
         ctx.link().send_message(Msg::Load);
         Self {
-            export: None,
+            export: Load::Pending,
             map: MapHolder::default(),
         }
     }
@@ -252,7 +253,7 @@ impl Component for Leitungskataster {
             }
             Msg::Loaded(export) => {
                 let now = Date::new_0();
-                self.export = Some(export.map(|export| Loaded {
+                self.export = Load::from(export.map(|export| Loaded {
                     state: export.state(&now),
                     export,
                 }));
@@ -311,18 +312,14 @@ impl Component for Leitungskataster {
                 false
             }
             Msg::MapError(error) => {
-                self.export = Some(Err(error));
+                self.export = Load::Failed(error);
                 true
             }
         }
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        let content = match &self.export {
-            None => html!(<Spinner/>),
-            Some(Err(error)) => error.into_prop_value(),
-            Some(Ok(loaded)) => loaded.view(ctx),
-        };
+        let content = self.export.view(|loaded| loaded.view(ctx));
         // The map's div is always there, so Leaflet keeps its element (see pages/map.rs)
         html! {
             <PageLayout title="Leitungskataster">
@@ -354,7 +351,7 @@ impl Component for Leitungskataster {
 impl Leitungskataster {
     /// Draws the perimeter and what is delivered, once both the map and the data are there.
     fn show_on_map(&mut self, ctx: &Context<Self>) {
-        let (Some(map), Some(Ok(loaded))) = (self.map.map().cloned(), &self.export) else {
+        let (Some(map), Load::Loaded(loaded)) = (self.map.map().cloned(), &self.export) else {
             return;
         };
         let export = &loaded.export;

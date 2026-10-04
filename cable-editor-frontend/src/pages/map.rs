@@ -29,6 +29,8 @@ pub struct Map {
     /// Its layers: the selected duct drawn above the others
     map: MapHolder,
     data: Option<MapData>,
+    /// Why the data couldn't be loaded or the map not created: not a `Load`, as the data
+    /// arriving after the map failed mustn't hide that
     error: Option<FrontendError>,
     /// Id of the duct whose details are shown
     selected_duct: Option<i32>,

@@ -1,3 +1,4 @@
+use crate::components::load::Load;
 use crate::{
     components::{
         links::{CableLink, SchachtLink},
@@ -14,7 +15,7 @@ use crate::{
     util::{get_credentials, get_role},
 };
 use patternfly_yew::prelude::{
-    Cell, CellContext, ExpansionState, MemoizedTableModel, Order, Spinner, Table, TableColumn,
+    Cell, CellContext, ExpansionState, MemoizedTableModel, Order, Table, TableColumn,
     TableEntryRenderer, TableGridMode, TableHeader, TableHeaderSortBy, TableMode,
 };
 use std::{cell::RefCell, cmp::Ordering, collections::HashMap, rc::Rc};
@@ -69,7 +70,7 @@ impl TableEntryRenderer<Columns> for CableListEntry {
 
 pub struct ListOfCables {
     /// `None` while loading
-    cables: Option<Result<Rc<Vec<CableListEntry>>, FrontendError>>,
+    cables: Load<Rc<Vec<CableListEntry>>>,
     sort: Option<TableHeaderSortBy<Columns>>,
     /// Required by `ListModel`; the rows don't expand
     table_state: Rc<RefCell<HashMap<usize, ExpansionState<Columns>>>>,
@@ -88,7 +89,7 @@ impl Component for ListOfCables {
     fn create(ctx: &Context<Self>) -> Self {
         ctx.link().send_message(Msg::Fetch);
         Self {
-            cables: None,
+            cables: Load::Pending,
             sort: None,
             table_state: Rc::default(),
         }
@@ -106,7 +107,7 @@ impl Component for ListOfCables {
                 false
             }
             Msg::Loaded(cables) => {
-                self.cables = Some(cables.map(|cables| Rc::new(cables.into_vec())));
+                self.cables = Load::from(cables.map(|cables| Rc::new(cables.into_vec())));
                 self.sort_cables();
                 true
             }
@@ -119,21 +120,14 @@ impl Component for ListOfCables {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        let content = match &self.cables {
-            None => html!(<Spinner/>),
-            Some(Err(error)) => {
-                let error: Html = error.into_prop_value();
-                html!(<div class="error">{"Fehler beim Laden: "}{error}</div>)
-            }
-            Some(Ok(cables)) => self.view_cables(ctx, cables),
-        };
+        let content = self.cables.view(|cables| self.view_cables(ctx, cables));
         html!(<PageLayout title="Kabel">{content}</PageLayout>)
     }
 }
 
 impl ListOfCables {
     fn sort_cables(&mut self) {
-        let (Some(sort), Some(Ok(cables))) = (&self.sort, &mut self.cables) else {
+        let (Some(sort), Load::Loaded(cables)) = (&self.sort, &mut self.cables) else {
             return;
         };
         Rc::make_mut(cables).sort_by(|a, b| {

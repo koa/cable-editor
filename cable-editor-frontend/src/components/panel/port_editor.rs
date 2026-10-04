@@ -1,4 +1,5 @@
 use crate::components::icon_button::IconButton;
+use crate::components::load::Load;
 use crate::components::page_layout::{PageLayout, object_title};
 use crate::components::select::Select;
 use crate::components::unsaved::Unsaved;
@@ -39,6 +40,7 @@ pub enum Msg {
     Save,
     Saved,
     Error(FrontendError),
+    NetboxError(FrontendError),
     /// Saving failed: the input stays, the error is a toast
     SaveFailed(FrontendError),
     MoveUp(usize),
@@ -57,14 +59,19 @@ pub struct PortEditorProps {
 
 pub struct PortEditor {
     ports: Vec<EditablePort>,
-    stored: Vec<EditablePort>,
-    loading: bool,
-    error: Option<FrontendError>,
-    panel_name: Option<Box<str>>,
-    netbox_device_id: Option<i32>,
+    stored: Load<StoredPorts>,
+    saving: bool,
     netbox_ports: Box<[NetboxDevicePort]>,
+    /// Why the ports of the panel's Netbox device couldn't be loaded, shown above the ports
+    netbox_error: Option<FrontendError>,
     unsaved: Unsaved,
 }
+/// The ports as stored and the panel's name
+pub struct StoredPorts {
+    ports: Vec<EditablePort>,
+    panel_name: Option<Box<str>>,
+}
+
 impl PortEditor {
     fn recalculate_orders(&mut self) {
         let mut current_order = 1;
@@ -85,11 +92,9 @@ impl Component for PortEditor {
         Self {
             unsaved: Unsaved::new(ctx.link()),
             ports: Vec::new(),
-            stored: Vec::new(),
-            loading: true,
-            error: None,
-            panel_name: None,
-            netbox_device_id: None,
+            stored: Load::Pending,
+            saving: false,
+            netbox_error: None,
             netbox_ports: Box::default(),
         }
     }
@@ -97,7 +102,7 @@ impl Component for PortEditor {
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Msg::FetchPorts => {
-                self.loading = true;
+                self.stored = Load::Pending;
                 let panel_id = ctx.props().panel_id;
                 let scope = ctx.link().clone();
 
@@ -141,12 +146,9 @@ impl Component for PortEditor {
                 panel_name,
                 netbox_device_id,
             } => {
-                self.stored.clone_from(&ports);
-                self.ports = ports;
-                self.panel_name = panel_name;
-                self.netbox_device_id = netbox_device_id;
-                self.loading = false;
-                self.error = None;
+                self.ports.clone_from(&ports);
+                self.stored = Load::Loaded(StoredPorts { ports, panel_name });
+                self.netbox_error = None;
                 self.netbox_ports = Box::default();
                 if let Some(device_id) = netbox_device_id {
                     let scope = ctx.link().clone();
@@ -155,7 +157,7 @@ impl Component for PortEditor {
                         scope.send_message(
                             NetboxDevicePort::fetch_ports(credentials.as_ref(), device_id)
                                 .await
-                                .map_or_else(Msg::Error, Msg::NetboxPortsFetched),
+                                .map_or_else(Msg::NetboxError, Msg::NetboxPortsFetched),
                         );
                     });
                 }
@@ -163,7 +165,7 @@ impl Component for PortEditor {
             }
             Msg::NetboxPortsFetched(netbox_ports) => {
                 self.netbox_ports = netbox_ports;
-                self.error = None;
+                self.netbox_error = None;
                 true
             }
             Msg::AddPort => {
@@ -265,7 +267,7 @@ impl Component for PortEditor {
                 true
             }
             Msg::Save => {
-                self.loading = true;
+                self.saving = true;
                 let scope = ctx.link().clone();
                 let panel_id = ctx.props().panel_id;
 
@@ -301,19 +303,22 @@ impl Component for PortEditor {
                 true
             }
             Msg::Saved => {
+                self.saving = false;
                 toast_success(ctx.link(), "Ports gespeichert");
                 ctx.link().send_message(Msg::FetchPorts);
                 true
             }
             Msg::SaveFailed(error) => {
-                self.loading = false;
+                self.saving = false;
                 toast_error(ctx.link(), "Ports konnten nicht gespeichert werden", error);
                 true
             }
             Msg::Error(error) => {
-                // Also after a failed save, which set loading
-                self.loading = false;
-                self.error = Some(error);
+                self.stored = Load::Failed(error);
+                true
+            }
+            Msg::NetboxError(error) => {
+                self.netbox_error = Some(error);
                 true
             }
         }
@@ -321,12 +326,18 @@ impl Component for PortEditor {
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         html! {
-            <PageLayout title={object_title("Ports bearbeiten", self.panel_name.as_deref())}>{self.view_content(ctx)}</PageLayout>
+            <PageLayout title={object_title("Ports bearbeiten", self.stored.loaded().and_then(|stored| stored.panel_name.as_deref()))}>{self.view_content(ctx)}</PageLayout>
         }
     }
 
     fn rendered(&mut self, ctx: &Context<Self>, first_render: bool) {
-        self.unsaved.set(!self.loading && self.ports != self.stored);
+        self.unsaved.set(
+            !self.saving
+                && self
+                    .stored
+                    .loaded()
+                    .is_some_and(|stored| self.ports != stored.ports),
+        );
         if first_render {
             ctx.link().send_message(Msg::FetchPorts);
         }
@@ -335,10 +346,13 @@ impl Component for PortEditor {
 
 impl PortEditor {
     fn view_content(&self, ctx: &Context<Self>) -> Html {
-        if self.loading {
+        if self.saving {
             return html!(<Spinner />);
         }
+        self.stored.view(|stored| self.view_ports(ctx, stored))
+    }
 
+    fn view_ports(&self, ctx: &Context<Self>, stored: &StoredPorts) -> Html {
         let visible_indices: Vec<usize> = self
             .ports
             .iter()
@@ -413,7 +427,10 @@ impl PortEditor {
             }
         });
 
-        let error: Option<Html> = self.error.as_ref().map(<&FrontendError>::into_prop_value);
+        let error: Option<Html> = self
+            .netbox_error
+            .as_ref()
+            .map(<&FrontendError>::into_prop_value);
 
         html! {
             <div class="pf-v6-c-panel">
@@ -422,7 +439,7 @@ impl PortEditor {
                         {error}
                         <ActionGroup>
                             <Button label="Port hinzufügen" variant={ButtonVariant::Secondary} onclick={ctx.link().callback(|_| Msg::AddPort)} />
-                            <Button label="Speichern" variant={ButtonVariant::Primary} onclick={ctx.link().callback(|_| Msg::Save)} disabled={self.ports == self.stored} />
+                            <Button label="Speichern" variant={ButtonVariant::Primary} onclick={ctx.link().callback(|_| Msg::Save)} disabled={self.ports == stored.ports} />
                         </ActionGroup>
                         <table class="pf-v6-c-table pf-m-grid-md pf-m-compact" role="grid">
                             <thead>

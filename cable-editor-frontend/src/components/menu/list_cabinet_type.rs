@@ -1,9 +1,9 @@
-use crate::components::menu::{MenuDropdown, MenuEntry, MenuError, MenuErrorProps};
+use crate::components::load::Load;
+use crate::components::menu::{MenuDropdown, MenuEntry, view_load};
 use crate::error::FrontendError;
 use crate::graphql::authenticated::schacht_types::{SchachtTypEntry, fetch_schacht_typ_list};
 use crate::pages::router::{AppRoute, PlanView};
 use crate::util::get_credentials;
-use patternfly_yew::prelude::Spinner;
 use std::borrow::Cow;
 use yew::platform::spawn_local;
 use yew::{Component, Context, Html, Properties, html};
@@ -11,7 +11,7 @@ use yew::{Component, Context, Html, Properties, html};
 /// The type of Schacht of the page and the other types (like `ListDuct`, without views).
 pub struct ListCabinetType {
     /// `None` while loading
-    types: Option<Result<Vec<SchachtTypEntry>, FrontendError>>,
+    types: Load<Vec<SchachtTypEntry>>,
 }
 
 pub enum Msg {
@@ -36,22 +36,25 @@ impl Component for ListCabinetType {
                 fetch_schacht_typ_list(credentials.as_ref()).await,
             ));
         });
-        Self { types: None }
+        Self {
+            types: Load::Pending,
+        }
     }
 
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
-            Msg::Loaded(types) => self.types = Some(types),
+            Msg::Loaded(types) => self.types = Load::from(types),
         }
         true
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        let types = match &self.types {
-            None => return html!(<Spinner/>),
-            Some(Err(error)) => return html!(<MenuError ..MenuErrorProps::from_error(error)/>),
-            Some(Ok(types)) => types,
-        };
+        view_load(&self.types, |types| self.view_types(ctx, types))
+    }
+}
+
+impl ListCabinetType {
+    fn view_types(&self, ctx: &Context<Self>, types: &[SchachtTypEntry]) -> Html {
         let ListCabinetTypeProps { plan_id, typ_id } = *ctx.props();
         let title: Cow<'static, str> = types
             .iter()

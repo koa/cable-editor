@@ -1,3 +1,4 @@
+use crate::components::load::Load;
 use crate::{
     components::menu::popup::{MenuGroup, PopupMenu},
     components::page_layout::PageLayout,
@@ -31,7 +32,7 @@ pub struct UserProviderProps {
 /// (`UserMenu`) and its role as `Role` context (`util::get_role`, `RequireRole`), so pages can
 /// hide what the user may not do.
 pub struct UserProvider {
-    user: Option<Result<CurrentUser, FrontendError>>,
+    user: Load<CurrentUser>,
 }
 
 pub enum UserProviderMsg {
@@ -49,13 +50,15 @@ impl Component for UserProvider {
             let user = CurrentUser::fetch(credentials.as_ref()).await;
             scope.send_message(UserProviderMsg::User(user));
         });
-        Self { user: None }
+        Self {
+            user: Load::Pending,
+        }
     }
 
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             UserProviderMsg::User(user) => {
-                self.user = Some(user);
+                self.user = Load::from(user);
                 true
             }
         }
@@ -63,8 +66,8 @@ impl Component for UserProvider {
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         match &self.user {
-            None => html!(<Bullseye><Spinner/></Bullseye>),
-            Some(Err(error)) => {
+            Load::Pending => html!(<Bullseye><Spinner/></Bullseye>),
+            Load::Failed(error) => {
                 // Before the router, so there is no page to build anew
                 let error: Html = error.into_prop_value();
                 html! {
@@ -73,7 +76,7 @@ impl Component for UserProvider {
                     </ContextProvider<Recovery>>
                 }
             }
-            Some(Ok(user)) => html! {
+            Load::Loaded(user) => html! {
                 <ContextProvider<CurrentUser> context={user.clone()}>
                     <ContextProvider<Role> context={user.role}>
                         {ctx.props().children.clone()}

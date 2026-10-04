@@ -1,20 +1,19 @@
+use crate::components::load::Load;
 use crate::components::menu::list_cabinet::{ListCabinet, view_entries};
 use crate::components::menu::{
-    BreadcrumbDivider, MenuDropdown, MenuEntry, MenuEntryGroup, MenuError, MenuErrorProps,
+    BreadcrumbDivider, MenuDropdown, MenuEntry, MenuEntryGroup, view_load,
 };
 use crate::error::FrontendError;
 use crate::graphql::authenticated::list_plans::BASELINE_PLAN_ID;
 use crate::graphql::authenticated::panel_navigation::{ChildPanelNav, PanelHierarchy};
 use crate::pages::router::{AppRoute, PanelView, PlanView};
 use crate::util::get_credentials;
-use patternfly_yew::prelude::Spinner;
 use std::borrow::Cow;
 use yew::platform::spawn_local;
 use yew::{Component, Context, Html, Properties, html};
 
 pub struct ListPanel {
-    loaded_panel: Option<PanelHierarchy>,
-    error: Option<FrontendError>,
+    loaded_panel: Load<PanelHierarchy>,
 }
 
 #[derive(Debug)]
@@ -37,16 +36,17 @@ impl Component for ListPanel {
 
     fn create(_ctx: &Context<Self>) -> Self {
         ListPanel {
-            loaded_panel: None,
-            error: None,
+            loaded_panel: Load::Pending,
         }
     }
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Msg::FetchPanel => {
-                self.error = None;
-                // Absichtlich kein self.loaded_panel = None, um Flackern beim Wechseln zu vermeiden
+                // Keeps the panel shown while loading another, so the menu doesn't flicker
+                if let Load::Failed(_) = self.loaded_panel {
+                    self.loaded_panel = Load::Pending;
+                }
                 let scope = ctx.link().clone();
                 let credentials = get_credentials(&scope);
                 let panel_id = ctx.props().panel_id;
@@ -61,12 +61,11 @@ impl Component for ListPanel {
                 false
             }
             Msg::Error(error) => {
-                self.error = Some(error);
+                self.loaded_panel = Load::Failed(error);
                 true
             }
             Msg::UpdatePanel(panel) => {
-                self.error = None;
-                self.loaded_panel = Some(panel);
+                self.loaded_panel = Load::Loaded(panel);
                 true
             }
         }
@@ -84,62 +83,55 @@ impl Component for ListPanel {
     fn view(&self, ctx: &Context<Self>) -> Html {
         let divider = html!(<BreadcrumbDivider/>);
 
-        if let Some(error) = &self.error {
-            html!(<span>{divider} <MenuError ..MenuErrorProps::from_error(error)/></span>)
-        } else {
-            match &self.loaded_panel {
-                None => html!(<span>{divider} <Spinner/></span>),
-                Some(panel) => {
-                    let plan_id = ctx.props().plan_id;
-                    let current_view = &ctx.props().view;
-                    let mut elements = Vec::new();
+        view_load(&self.loaded_panel, |panel| {
+            let plan_id = ctx.props().plan_id;
+            let current_view = &ctx.props().view;
+            let mut elements = Vec::new();
 
-                    // The Schächte
-                    elements.push(html!(<ListCabinet {plan_id} cabinet_id={panel.schacht.id}/>));
+            // The Schächte
+            elements.push(html!(<ListCabinet {plan_id} cabinet_id={panel.schacht.id}/>));
 
-                    // One menu per level, offering what lies below the level above (the
-                    // Schacht's views and root panels, then a panel's views and children) with
-                    // the way to the current page selected
-                    let levels = panel
-                        .parent_chain
-                        .iter()
-                        .map(|p| (p.id, &p.name, p.parent_order, &p.siblings))
-                        .chain([(panel.id, &panel.name, panel.parent_order, &panel.siblings)]);
-                    let mut views = view_entries(plan_id, panel.schacht.id, None);
-                    let mut group_title = "Panels";
-                    for (id, name, parent_order, siblings) in levels {
-                        elements.push(divider.clone());
-                        elements.push(panel_menu(
-                            plan_id,
-                            panel_name(id, name),
-                            views,
-                            group_title,
-                            &with_self(siblings, id, name, parent_order),
-                            Some(id),
-                        ));
-                        views = panel_view_entries(plan_id, id, None);
-                        group_title = "Unterpanels";
-                    }
-
-                    // The current panel's views and children
-                    elements.push(divider.clone());
-                    elements.push(panel_menu(
-                        plan_id,
-                        current_view.title().into(),
-                        panel_view_entries(plan_id, panel.id, Some(current_view)),
-                        group_title,
-                        &panel.children,
-                        None,
-                    ));
-
-                    html! {
-                        <span class="breadcrumb-path">
-                            { for elements }
-                        </span>
-                    }
-                }
+            // One menu per level, offering what lies below the level above (the
+            // Schacht's views and root panels, then a panel's views and children) with
+            // the way to the current page selected
+            let levels = panel
+                .parent_chain
+                .iter()
+                .map(|p| (p.id, &p.name, p.parent_order, &p.siblings))
+                .chain([(panel.id, &panel.name, panel.parent_order, &panel.siblings)]);
+            let mut views = view_entries(plan_id, panel.schacht.id, None);
+            let mut group_title = "Panels";
+            for (id, name, parent_order, siblings) in levels {
+                elements.push(divider.clone());
+                elements.push(panel_menu(
+                    plan_id,
+                    panel_name(id, name),
+                    views,
+                    group_title,
+                    &with_self(siblings, id, name, parent_order),
+                    Some(id),
+                ));
+                views = panel_view_entries(plan_id, id, None);
+                group_title = "Unterpanels";
             }
-        }
+
+            // The current panel's views and children
+            elements.push(divider.clone());
+            elements.push(panel_menu(
+                plan_id,
+                current_view.title().into(),
+                panel_view_entries(plan_id, panel.id, Some(current_view)),
+                group_title,
+                &panel.children,
+                None,
+            ));
+
+            html! {
+                <span class="breadcrumb-path">
+                    { for elements }
+                </span>
+            }
+        })
     }
 
     fn rendered(&mut self, ctx: &Context<Self>, first_render: bool) {

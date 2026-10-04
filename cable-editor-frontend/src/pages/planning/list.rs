@@ -1,3 +1,4 @@
+use crate::components::load::Load;
 use crate::components::page_layout::PageLayout;
 use crate::{
     components::{plan_link::PlanNameLink, table::ListModel},
@@ -8,19 +9,16 @@ use crate::{
 use patternfly_yew::prelude::{
     ActionGroup, Backdrop, Bullseye, Button, ButtonType, ButtonVariant, Cell, CellContext, Color,
     ExpansionState, Form, FormGroup, Label, LabelIcon, MemoizedTableModel, Modal, PopoverBody,
-    Spinner, Table, TableColumn, TableEntryRenderer, TableGridMode, TableHeader, TableMode,
-    TextInput,
+    Table, TableColumn, TableEntryRenderer, TableGridMode, TableHeader, TableMode, TextInput,
 };
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use web_sys::SubmitEvent;
 use yew::{
-    Callback, Component, Context, Html, Properties, html, html::IntoPropValue, html_nested,
-    platform::spawn_local,
+    Callback, Component, Context, Html, Properties, html, html_nested, platform::spawn_local,
 };
 
 pub struct ListOfPlannings {
-    error: Option<FrontendError>,
-    data: Option<Rc<Vec<PlanListEntry>>>,
+    data: Load<Rc<Vec<PlanListEntry>>>,
     table_state: Rc<RefCell<HashMap<usize, ExpansionState<Columns>>>>,
 }
 
@@ -46,8 +44,7 @@ impl Component for ListOfPlannings {
 
     fn create(_ctx: &Context<Self>) -> Self {
         ListOfPlannings {
-            error: None,
-            data: None,
+            data: Load::Pending,
             table_state: Rc::default(),
         }
     }
@@ -55,12 +52,11 @@ impl Component for ListOfPlannings {
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Msg::Data(data) => {
-                self.error = None;
-                self.data = Some(Rc::new(data.into_vec()));
+                self.data = Load::Loaded(Rc::new(data.into_vec()));
                 true
             }
             Msg::Error(e) => {
-                self.error = Some(e);
+                self.data = Load::Failed(e);
                 true
             }
             Msg::Refresh => {
@@ -92,9 +88,7 @@ impl Component for ListOfPlannings {
 
 impl ListOfPlannings {
     fn view_content(&self, ctx: &Context<Self>) -> Html {
-        if let Some(error) = &self.error {
-            error.into_prop_value()
-        } else if let Some(data) = &self.data {
+        self.data.view(|data| {
             let entries = ListModel::new(
                 MemoizedTableModel::new(data.clone()),
                 self.table_state.clone(),
@@ -148,9 +142,7 @@ impl ListOfPlannings {
                 {create_button}
                 </>
             }
-        } else {
-            html!(<Spinner/>)
-        }
+        })
     }
 }
 

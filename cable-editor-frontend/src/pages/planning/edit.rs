@@ -1,4 +1,5 @@
 use crate::components::fiber::FiberNumber;
+use crate::components::load::Load;
 use crate::components::page_layout::{PageLayout, object_title};
 use crate::components::unsaved::Unsaved;
 use crate::graphql::authenticated::port_label;
@@ -20,9 +21,8 @@ use crate::{
 use cable_editor_common::ObjectKind;
 use patternfly_yew::prelude::{
     ActionGroup, Backdrop, Bullseye, Button, ButtonVariant, Cell, CellContext, Color,
-    ExpansionState, Form, FormGroup, Label, Level, MemoizedTableModel, Modal, ModalVariant,
-    Spinner, Table, TableColumn, TableEntryRenderer, TableGridMode, TableHeader, TableMode,
-    TextInput, Title,
+    ExpansionState, Form, FormGroup, Label, Level, MemoizedTableModel, Modal, ModalVariant, Table,
+    TableColumn, TableEntryRenderer, TableGridMode, TableHeader, TableMode, TextInput, Title,
 };
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use yew::{
@@ -113,11 +113,9 @@ fn render_action(usage: &Option<PortUsage>) -> Html {
 }
 
 pub struct EditPlan {
-    details: Option<PlanDetails>,
+    details: Load<PlanDetails>,
     edit_name: String,
-    loading: bool,
     saving: bool,
-    error: Option<FrontendError>,
     table_state: Rc<RefCell<HashMap<usize, ExpansionState<UsageColumn>>>>,
     unsaved: Unsaved,
 }
@@ -165,11 +163,9 @@ impl Component for EditPlan {
     fn create(ctx: &Context<Self>) -> Self {
         Self {
             unsaved: Unsaved::new(ctx.link()),
-            details: None,
+            details: Load::Pending,
             edit_name: String::new(),
-            loading: true,
             saving: false,
-            error: None,
             table_state: Rc::default(),
         }
     }
@@ -177,7 +173,7 @@ impl Component for EditPlan {
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Msg::FetchData => {
-                self.loading = true;
+                self.details = Load::Pending;
                 let plan_id = ctx.props().plan_id;
                 let scope = ctx.link().clone();
                 spawn_local(async move {
@@ -192,14 +188,11 @@ impl Component for EditPlan {
             }
             Msg::DataFetched(Some(data)) => {
                 self.edit_name = data.name.clone();
-                self.details = Some(data);
-                self.loading = false;
-                self.error = None;
+                self.details = Load::Loaded(data);
                 true
             }
             Msg::DataFetched(None) => {
-                self.loading = false;
-                self.error = Some(FrontendError::not_found(
+                self.details = Load::Failed(FrontendError::not_found(
                     ObjectKind::Plan,
                     ctx.props().plan_id,
                 ));
@@ -280,10 +273,9 @@ impl Component for EditPlan {
             }
             Msg::Saved(data) => {
                 self.saving = false;
-                self.error = None;
                 toast_success(ctx.link(), "Planung umbenannt");
                 self.edit_name = data.name.clone();
-                self.details = Some(data);
+                self.details = Load::Loaded(data);
                 true
             }
             Msg::Implemented => {
@@ -299,9 +291,7 @@ impl Component for EditPlan {
                 false
             }
             Msg::Error(error) => {
-                self.error = Some(error);
-                self.loading = false;
-                self.saving = false;
+                self.details = Load::Failed(error);
                 true
             }
             Msg::ActionFailed(action, error) => {
@@ -360,7 +350,7 @@ impl Component for EditPlan {
             }
             Msg::NetboxActivated(data) => {
                 self.saving = false;
-                self.details = Some(data);
+                self.details = Load::Loaded(data);
                 toast_success(ctx.link(), "In Netbox aktiviert");
                 true
             }
@@ -369,14 +359,14 @@ impl Component for EditPlan {
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         html! {
-            <PageLayout title={object_title("Planung bearbeiten", self.details.as_ref().map(|details| &details.name))}>{self.view_content(ctx)}</PageLayout>
+            <PageLayout title={object_title("Planung bearbeiten", self.details.loaded().map(|details| &details.name))}>{self.view_content(ctx)}</PageLayout>
         }
     }
 
     fn rendered(&mut self, ctx: &Context<Self>, first_render: bool) {
         self.unsaved.set(
             self.details
-                .as_ref()
+                .loaded()
                 .is_some_and(|details| self.edit_name != details.name),
         );
         if first_render {
@@ -387,18 +377,10 @@ impl Component for EditPlan {
 
 impl EditPlan {
     fn view_content(&self, ctx: &Context<Self>) -> Html {
-        if self.loading {
-            return html!(<Spinner />);
-        }
+        self.details.view(|details| self.view_plan(ctx, details))
+    }
 
-        let Some(details) = &self.details else {
-            return match &self.error {
-                Some(error) => error.into_prop_value(),
-                None => (&FrontendError::not_found(ObjectKind::Plan, ctx.props().plan_id))
-                    .into_prop_value(),
-            };
-        };
-
+    fn view_plan(&self, ctx: &Context<Self>, details: &PlanDetails) -> Html {
         let is_open = !details.is_baseline;
         let role = get_role(ctx.link());
         let can_rename = is_open && role >= Role::Planner;
@@ -470,10 +452,6 @@ impl EditPlan {
             <div class="pf-v6-c-panel">
                 <div class="pf-v6-c-panel__main">
                     <div class="pf-v6-c-panel__main-body">
-                        if let Some(err) = &self.error {
-                            { IntoPropValue::<Html>::into_prop_value(err) }
-                        }
-
                         <Form>
                             <FormGroup label="Art">
                                 <div><strong>{kind}</strong></div>

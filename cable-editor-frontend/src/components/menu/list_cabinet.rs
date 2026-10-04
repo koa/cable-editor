@@ -1,18 +1,17 @@
+use crate::components::load::Load;
 use crate::components::menu::{
-    BreadcrumbDivider, MenuDropdown, MenuEntry, MenuEntryGroup, MenuError, MenuErrorProps,
+    BreadcrumbDivider, MenuDropdown, MenuEntry, MenuEntryGroup, view_load,
 };
 use crate::error::FrontendError;
 use crate::graphql::authenticated::list_schacht::{SchachtListEntry, fetch_schacht_list};
 use crate::pages::router::{AppRoute, CabinetView, PanelView, PlanView};
 use crate::util::get_credentials;
-use patternfly_yew::prelude::Spinner;
 use std::borrow::Cow;
 use yew::platform::spawn_local;
 use yew::{Component, Context, Html, Properties, html};
 
 pub struct ListCabinet {
-    loaded_cabinets: Option<Box<[SchachtListEntry]>>,
-    error: Option<FrontendError>,
+    loaded_cabinets: Load<Box<[SchachtListEntry]>>,
 }
 
 #[derive(Debug)]
@@ -37,15 +36,17 @@ impl Component for ListCabinet {
 
     fn create(_ctx: &Context<Self>) -> Self {
         ListCabinet {
-            loaded_cabinets: None,
-            error: None,
+            loaded_cabinets: Load::Pending,
         }
     }
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Msg::FetchCabinets => {
-                self.error = None;
+                // Keeps the Schächte shown while loading again, so the menu doesn't flicker
+                if let Load::Failed(_) = self.loaded_cabinets {
+                    self.loaded_cabinets = Load::Pending;
+                }
                 let scope = ctx.link().clone();
                 let credentials = get_credentials(&scope);
                 spawn_local(async move {
@@ -58,12 +59,11 @@ impl Component for ListCabinet {
                 false
             }
             Msg::Error(error) => {
-                self.error = Some(error);
+                self.loaded_cabinets = Load::Failed(error);
                 true
             }
             Msg::UpdateCabinetList(list) => {
-                self.error = None;
-                self.loaded_cabinets = Some(list);
+                self.loaded_cabinets = Load::Loaded(list);
                 true
             }
         }
@@ -81,14 +81,9 @@ impl Component for ListCabinet {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        if let Some(error) = &self.error {
-            html!(<MenuError ..MenuErrorProps::from_error(error)/>)
-        } else {
-            match &self.loaded_cabinets {
-                None => html!(<Spinner/>),
-                Some(cabinets) => self.view_menus(ctx, cabinets),
-            }
-        }
+        view_load(&self.loaded_cabinets, |cabinets| {
+            self.view_menus(ctx, cabinets)
+        })
     }
 
     fn rendered(&mut self, ctx: &Context<Self>, first_render: bool) {

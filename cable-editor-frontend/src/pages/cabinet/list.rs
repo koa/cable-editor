@@ -1,3 +1,4 @@
+use crate::components::load::Load;
 use crate::components::page_layout::PageLayout;
 use crate::{
     components::{links::SchachtLink, plan_link::PlanLink, table::ListModel},
@@ -10,8 +11,8 @@ use crate::{
     util::{get_credentials, get_role},
 };
 use patternfly_yew::prelude::{
-    Cell, CellContext, ExpansionState, MemoizedTableModel, Spinner, Table, TableColumn,
-    TableEntryRenderer, TableGridMode, TableHeader, TableHeaderSortBy, TableMode,
+    Cell, CellContext, ExpansionState, MemoizedTableModel, Table, TableColumn, TableEntryRenderer,
+    TableGridMode, TableHeader, TableHeaderSortBy, TableMode,
 };
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use uuid::Uuid;
@@ -23,8 +24,7 @@ use yew::{
 };
 
 pub struct ListOfCabinets {
-    data: Option<Rc<Vec<SchachtListEntry>>>,
-    error: Option<FrontendError>,
+    data: Load<Rc<Vec<SchachtListEntry>>>,
     sort: Option<TableHeaderSortBy<Columns>>,
     /// Required by `ListModel`; the rows don't expand
     table_state: Rc<RefCell<HashMap<usize, ExpansionState<Columns>>>>,
@@ -48,8 +48,7 @@ impl Component for ListOfCabinets {
 
     fn create(_ctx: &Context<Self>) -> Self {
         ListOfCabinets {
-            data: None,
-            error: None,
+            data: Load::Pending,
             sort: None,
             table_state: Rc::default(),
         }
@@ -58,12 +57,11 @@ impl Component for ListOfCabinets {
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Msg::Data(data) => {
-                self.error = None;
-                self.data = Some(Rc::new(data.into_vec()));
+                self.data = Load::Loaded(Rc::new(data.into_vec()));
                 true
             }
             Msg::Error(error) => {
-                self.error = Some(error);
+                self.data = Load::Failed(error);
                 true
             }
             Msg::OnSort(sort) => {
@@ -88,9 +86,7 @@ impl Component for ListOfCabinets {
 
 impl ListOfCabinets {
     fn view_content(&self, ctx: &Context<Self>) -> Html {
-        if let Some(error) = &self.error {
-            error.into_prop_value()
-        } else if let Some(data) = &self.data {
+        self.data.view(|data| {
             let onsort = ctx.link().callback(Msg::OnSort);
             let entries = ListModel::new(
                 MemoizedTableModel::new(data.clone()),
@@ -121,9 +117,7 @@ impl ListOfCabinets {
                 {new_schacht}
                 </>
             }
-        } else {
-            html!(<Spinner/>)
-        }
+        })
     }
 }
 

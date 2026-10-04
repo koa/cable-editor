@@ -2,6 +2,7 @@
 //! (`IdOrNew::Temporary`); changed by admins, as the type gives the Objektart of its Schächte in
 //! the delivery to the Leitungskataster. Everyone else sees the page read-only.
 
+use crate::components::load::Load;
 use crate::components::select::Select;
 use crate::{
     components::{
@@ -34,8 +35,7 @@ use yew::{
 
 pub struct CabinetTypeProperties {
     /// `None` while loading; the type as stored, missing for a new one
-    loaded: Option<Option<SchachtTypEntry>>,
-    error: Option<FrontendError>,
+    loaded: Load<Option<SchachtTypEntry>>,
     name: String,
     objektart: LkmapPunktObjektart,
     /// As typed, empty: none
@@ -79,8 +79,7 @@ impl Component for CabinetTypeProperties {
     fn create(ctx: &Context<Self>) -> Self {
         Self::fetch(ctx);
         Self {
-            loaded: None,
-            error: None,
+            loaded: Load::Pending,
             name: String::new(),
             objektart: LkmapPunktObjektart::SchachtRund,
             dimension1: String::new(),
@@ -106,7 +105,6 @@ impl Component for CabinetTypeProperties {
         }
         match msg {
             Msg::Loaded(Ok(typ)) => {
-                self.error = None;
                 if let Some(typ) = &typ {
                     self.name = typ.name.clone().unwrap_or_default();
                     self.objektart = typ.lkmap_objektart;
@@ -114,9 +112,9 @@ impl Component for CabinetTypeProperties {
                     self.dimension2 = typ.dimension2_mm.map(|d| d.to_string()).unwrap_or_default();
                 }
                 self.icon = None;
-                self.loaded = Some(typ);
+                self.loaded = Load::Loaded(typ);
             }
-            Msg::Loaded(Err(error)) => self.error = Some(error),
+            Msg::Loaded(Err(error)) => self.loaded = Load::Failed(error),
             Msg::SetName(name) => self.name = name,
             Msg::SetObjektart(objektart) => {
                 if let Some(objektart) = objektart {
@@ -200,7 +198,7 @@ impl Component for CabinetTypeProperties {
         // A new type's temporary id comes from the route, so it's stable
         let other = ctx.props().typ != old_props.typ;
         if other {
-            self.loaded = None;
+            self.loaded = Load::Pending;
             self.icon = None;
             Self::fetch(ctx);
         }
@@ -215,9 +213,7 @@ impl Component for CabinetTypeProperties {
             let stored = self.stored().map(|typ| typ.title().to_string());
             object_title("Schachttyp", stored)
         };
-        let content = if let Some(error) = &self.error {
-            error.into_prop_value()
-        } else if let Some(stored) = &self.loaded {
+        let content = self.loaded.view(|stored| {
             if stored.is_none()
                 && let IdOrNew::Id(id) = ctx.props().typ
             {
@@ -225,9 +221,7 @@ impl Component for CabinetTypeProperties {
             } else {
                 self.view_form(ctx)
             }
-        } else {
-            html!(<Spinner/>)
-        };
+        });
         html! {
             <PageLayout {title}>
                 <div class="cabinet-type__form">{content}</div>
@@ -260,7 +254,7 @@ impl CabinetTypeProperties {
     }
 
     fn stored(&self) -> Option<&SchachtTypEntry> {
-        self.loaded.as_ref()?.as_ref()
+        self.loaded.loaded()?.as_ref()
     }
 
     /// The values to store; missing while a dimension isn't a number or the name is empty
