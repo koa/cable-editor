@@ -24,7 +24,7 @@ use async_graphql::{Context, Object};
 use cable::Cable;
 use chrono::{DateTime, Utc};
 use diesel::{
-    AsExpression, FromSqlRow, HasQuery, Identifiable, Insertable, QueryableByName, deserialize,
+    AsExpression, FromSqlRow, HasQuery, Identifiable, Insertable, deserialize,
     deserialize::FromSql,
     pg::{Pg, PgValue},
     serialize,
@@ -147,21 +147,6 @@ impl UnalignedDuct<i32> for (Duct, i32) {
     }
 }
 
-#[derive(QueryableByName, Debug, Clone)]
-pub struct FiberPathNode {
-    #[diesel(sql_type = Integer)]
-    pub step: i32,
-    #[diesel(sql_type = Integer)]
-    pub from_port_id: i32,
-    #[diesel(sql_type = Integer)]
-    pub to_port_id: i32,
-    #[diesel(sql_type = Integer)]
-    pub kabel: i32,
-    #[diesel(sql_type = Integer)]
-    pub buendel: i32,
-    #[diesel(sql_type = Integer)]
-    pub faser: i32,
-}
 #[derive(Debug, Clone, FromSqlRow, AsExpression, PartialOrd, PartialEq, Hash)]
 #[diesel(sql_type = schema::sql_types::Xml)]
 pub struct XmlDocument(pub Box<str>);

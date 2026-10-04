@@ -1,11 +1,10 @@
 use crate::{
     config::NETBOX_CONFIG,
     db::{
-        entity::panel::{Panel, PanelPort, PanelPortType},
+        entity::panel::{FirstHop, Panel, PanelPort, PanelPortType, PortSide, PortUsage},
         schema,
     },
     graphql::{
-        authenticated::trace_fiber_path,
         error::{ApiError, ApiResult},
         loader::{PanelId, PanelPortId, load_one},
     },
@@ -304,26 +303,31 @@ pub async fn sync_plan_to_netbox(
             .and_then(|k| remaining_connector_ports.remove(&k))
         {
             let mut error = false;
-            let trace = trace_fiber_path(conn, port.id, plan_id).await?;
-            let Some(last_node) = trace.last() else {
+            // From the cable spliced to the back of the connector along its fibers
+            let Some(start) = PortUsage::effective(conn, plan_id, port.id, PortSide::Back).await?
+            else {
                 continue;
             };
-            let target_port_id = last_node.to_port_id;
-
-            let mut trace_length = 0.0;
-            let mut seen_cables = std::collections::HashSet::new();
-            for node in &trace {
-                if seen_cables.insert(node.kabel) {
-                    trace_length += cable_lengths.get(&node.kabel).copied().unwrap_or(0.0);
-                }
-            }
-
-            if target_port_id == port.id {
+            let trace = start.trace(conn, plan_id, FirstHop::Fiber).await?;
+            if trace.looped {
                 issues.push(SyncIssue::RoutingLoop(RoutingLoopError {
                     port_id: port.id,
                 }));
-                error = true;
+                continue;
             }
+            let [_, .., last] = &*trace.usages else {
+                continue;
+            };
+            let target_port_id = last.port_id;
+
+            let mut trace_length = 0.0;
+            let mut seen_cables = std::collections::HashSet::new();
+            for cable in trace.usages.iter().filter_map(|usage| usage.cable) {
+                if seen_cables.insert(cable) {
+                    trace_length += cable_lengths.get(&cable).copied().unwrap_or(0.0);
+                }
+            }
+
             if let Some(remote_port) = remaining_connector_ports.remove(&target_port_id) {
                 if port.netbox_port_id.is_none() {
                     issues.push(SyncIssue::MissingNetboxReference(

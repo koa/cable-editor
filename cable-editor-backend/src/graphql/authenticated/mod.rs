@@ -7,7 +7,7 @@ use crate::graphql::error::ApiResult;
 use crate::{
     db::{
         entity::{
-            Duct, FiberPathNode,
+            Duct,
             cable::Cable,
             eigentuemer::Eigentuemer,
             panel::Panel,
@@ -26,10 +26,7 @@ use crate::{
     netbox::{fetch::DeviceWithRearPorts, fetch_device_with_ports, fetch_devices_and_ports},
 };
 use async_graphql::{Context, EmptySubscription, Object, Schema};
-use diesel::{
-    ExpressionMethods, HasQuery, OptionalExtension, QueryDsl, QueryResult, sql_query,
-    sql_types::Integer,
-};
+use diesel::{ExpressionMethods, HasQuery, OptionalExtension, QueryDsl};
 use diesel_async::{
     AsyncPgConnection, RunQueryDsl, pooled_connection::deadpool::Object as DpObject,
 };
@@ -178,55 +175,4 @@ pub async fn get_connection<'a>(
 ) -> ApiResult<MutexGuard<'a, DpObject<AsyncPgConnection>>> {
     let shared_conn = ctx.data::<SharedConnection>()?;
     Ok(shared_conn.lock().await)
-}
-
-pub async fn trace_fiber_path(
-    conn: &mut AsyncPgConnection,
-    start_port_id: i32,
-    plan_id: i32,
-) -> QueryResult<Vec<FiberPathNode>> {
-    let raw_sql = r#"
-    WITH RECURSIVE
-    endpoints AS (
-        SELECT port_id, cable AS k_id, bundle AS b, fiber AS f
-        FROM effective_port_usage($2)
-    ),
-    signal_path AS (
-        -- From the start port along its fiber to the port at the fiber's other end
-        SELECT
-            1 AS step,
-            e1.port_id AS from_port_id,
-            e2.port_id AS to_port_id,
-            e1.k_id AS kabel, e1.b AS buendel, e1.f AS faser,
-            ARRAY[e1.port_id] AS visited
-        FROM endpoints e1
-        JOIN endpoints e2
-          ON e1.k_id = e2.k_id AND e1.b = e2.b AND e1.f = e2.f
-         AND e1.port_id != e2.port_id
-        WHERE e1.port_id = $1
-        UNION ALL
-        -- From the port reached through it to the other end of the fiber on its other side
-        SELECT
-            sp.step + 1,
-            e1.port_id,
-            e2.port_id,
-            e1.k_id, e1.b, e1.f,
-            sp.visited || e1.port_id
-        FROM signal_path sp
-        JOIN endpoints e1 ON e1.port_id = sp.to_port_id
-        JOIN endpoints e2 ON e1.k_id = e2.k_id AND e1.b = e2.b AND e1.f = e2.f
-         AND e1.port_id != e2.port_id
-        -- Not round in circles
-        WHERE NOT (e2.port_id = ANY(sp.visited))
-    )
-    SELECT step, from_port_id, to_port_id, kabel, buendel, faser
-    FROM signal_path
-    ORDER BY step;
-    "#;
-
-    sql_query(raw_sql)
-        .bind::<Integer, _>(start_port_id)
-        .bind::<Integer, _>(plan_id)
-        .load::<FiberPathNode>(conn)
-        .await
 }

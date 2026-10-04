@@ -168,16 +168,21 @@ check('the baseline changes no ports', (await gql('{ plan(planId:0) { changedPor
 const frontOfBerg1 = async (pl) => (await gql(`query($pl:Int!,$p:Int!){ plan(planId:$pl) { panel(panelId:$p) {
   ports { label usage(side:FRONT) { fiber { cable { name } }
     cableSideEndPort(planId:$pl) { side port { label panel { schacht { name } } } }
+    panelSideEndPort(planId:$pl) { side port { label panel { schacht { name } } } }
     otherSide(planId:$pl) { fiber { cable { name } fiber } } } } } } }`, { pl, p: panelIds[4] }))
   .plan.panel.ports.find((port) => port.label === '1').usage;
-const endText = (usage) => `${usage.cableSideEndPort.port.panel.schacht.name}:${usage.cableSideEndPort.port.label}:${usage.cableSideEndPort.side}`;
+const endText = (usage, end = usage.cableSideEndPort) => `${end.port.panel.schacht.name}:${end.port.label}:${end.side}`;
 const cut = await planId('K2 in Grosswies ab');
 await gql('mutation($pl:Int!,$c:[PortUsageInput!]!){ setPortUsage(planId:$pl, changes:$c) }', {
   pl: cut,
   c: [{ portId: ports[6][0], side: 'BACK', fiber: { remove: true } }],
 });
-const throughNow = endText(await frontOfBerg1(0));
+const berg1Now = await frontOfBerg1(0);
+const throughNow = endText(berg1Now);
 const throughCut = endText(await frontOfBerg1(cut));
+// Through the port first: K1-1 on its back ends in Berg, its other end has no port
+const throughPort = endText(berg1Now, berg1Now.panelSideEndPort);
+check('through the port to the end of the fiber behind it', throughPort === 'Berg:1:BACK', throughPort);
 check('the fiber leads on in the current state', throughNow === 'Grosswies:1:FRONT', throughNow);
 check('a fiber removed in the plan leads nowhere', throughCut === 'Berg:1:FRONT', throughCut);
 await gql('mutation($pl:Int!,$c:[PortUsageInput!]!){ setPortUsage(planId:$pl, changes:$c) }', {
@@ -392,6 +397,28 @@ queries = await netboxQueries();
 await gql('mutation{ syncNetbox }');
 sync = await nextRun(sync.lastRun);
 check('syncNetbox syncs right away', sync.state === 'SYNCHRON' && (await netboxQueries()) > queries, JSON.stringify(sync));
+// A circuit: a connector in Berg and one in Grosswies, K2-7 spliced to both. The sync traces it
+// from one to the other and finds neither in Netbox.
+const connectors = {};
+for (const schachtId of [4, 6]) {
+  const { schacht } = await gql('query($s:Int!){ schacht(schachtId:$s){ rootPanels { children { id name } } } }', { s: schachtId });
+  const panelId = schacht.rootPanels[0].children.find((panel) => panel.name === 'Kassette 2').id;
+  await gql('mutation($p:Int!,$c:[FlatPortInput!]!){ updatePanelPorts(panelId:$p, changes:$c, deletes:[]) }', {
+    p: panelId, c: [{ id: { temporary: 'c1' }, order: 1, label: `LC ${schachtId}`, portType: 'CONNECTOR' }],
+  });
+  connectors[schachtId] = (await gql('query($p:Int!){ panel(panelId:$p){ ports { id } } }', { p: panelId })).panel.ports[0].id;
+}
+const circuitPlan = await planId('Netbox-Stecker');
+await gql('mutation($pl:Int!,$c:[PortUsageInput!]!){ setPortUsage(planId:$pl, changes:$c) }', {
+  pl: circuitPlan, c: [attach(connectors[4], 'BACK', cables.K2, 7), attach(connectors[6], 'BACK', cables.K2, 7)],
+});
+await gql('mutation($pl:Int!){ setNetboxActivePlan(planId:$pl) { id } }', { pl: circuitPlan });
+sync = await nextRun(sync.lastRun);
+const circuitIssues = (await gql('{ netboxSync { issues { __typename ... on MissingNetboxReferenceError { port { label } } } } }')).netboxSync.issues;
+const missing = circuitIssues.filter((issue) => issue.__typename === 'MissingNetboxReferenceError').map((issue) => issue.port.label).sort().join();
+check('the sync traces a circuit from connector to connector', missing === 'LC 4,LC 6' && circuitIssues.length === 2, JSON.stringify(circuitIssues));
+await gql('mutation{ setNetboxActivePlan(planId:0) { id } }');
+sync = await nextRun(sync.lastRun);
 await refused('setNetboxActivePlan of a missing plan', 'mutation{ setNetboxActivePlan(planId:999999) { id } }', {}, { code: 'NotFound', kind: 'Plan', id: 999999 });
 
 // ---------------------------------------------------------------- Leitungskataster

@@ -19,14 +19,14 @@ use async_graphql::{Context, Enum, Object};
 use async_recursion::async_recursion;
 use diesel::{
     Associations, BoolExpressionMethods, ExpressionMethods, HasQuery, Identifiable, Insertable,
-    OptionalExtension, QueryDsl, QueryResult, QueryableByName, pg::Pg, sql_query,
-    sql_types::Integer,
+    OptionalExtension, QueryDsl, QueryResult, QueryableByName,
+    pg::Pg,
+    sql_query,
+    sql_types::{Bool, Integer, Nullable},
 };
 use diesel_async::{AsyncPgConnection, RunQueryDsl, pooled_connection::deadpool};
 use diesel_derive_enum::DbEnum;
-use log::{error, info};
 use std::borrow::Cow;
-use std::collections::HashSet;
 
 #[derive(QueryableByName, Identifiable, Insertable, HasQuery, Debug, Clone, PartialEq)]
 #[diesel(table_name = schema::panel)]
@@ -153,30 +153,98 @@ impl PortUsage {
     ) -> QueryResult<Option<PortUsage>> {
         PortUsage::effective(connection, plan_id, self.port_id, self.side.other()).await
     }
-    /// The other port the fiber is on in the plan, its own rows first
-    pub async fn other_side_of_fiber(
+    /// The usages a signal reaches from this one in the plan, in order: along the fiber to the
+    /// next port and through a port to its other side, alternately, `first` first. It stops
+    /// before a usage it reached already (`Trace::looped`).
+    pub async fn trace(
         &self,
-        plan_id: i32,
         connection: &mut AsyncPgConnection,
-    ) -> QueryResult<Option<PortUsage>> {
-        let Some(fiber) = self.used_fiber() else {
-            return Ok(None);
-        };
-        sql_query(
-            "select * from effective_port_usage($1)
-             where port_id <> $2 and cable = $3 and bundle = $4 and fiber = $5
-             order by plan_id desc, port_id
-             limit 1",
+        plan_id: i32,
+        first: FirstHop,
+    ) -> QueryResult<Trace> {
+        // A port's side is `port_id * 2 + 1` for the back, `port_id * 2` for the front
+        let steps = sql_query(
+            r#"
+            WITH RECURSIVE walk AS (
+                SELECT 0 AS step, $2::int4 AS port_id, $3 AS side, $4::int4 AS cable,
+                       $5::int4 AS bundle, $6::int4 AS fiber, $7::int4 AS plan_id,
+                       false AS closed, ARRAY[$2 * 2 + ($3 = 'Back')::int4] AS visited
+                UNION ALL
+                SELECT w.step + 1, e.port_id, e.side, e.cable, e.bundle, e.fiber, e.plan_id,
+                       e.port_id * 2 + (e.side = 'Back')::int4 = ANY (w.visited),
+                       w.visited || e.port_id * 2 + (e.side = 'Back')::int4
+                FROM walk w
+                JOIN effective_port_usage($1) e
+                  ON CASE WHEN (w.step + $8) % 2 = 0
+                          -- along the fiber to another port
+                          THEN e.cable = w.cable AND e.bundle = w.bundle AND e.fiber = w.fiber
+                               AND e.port_id <> w.port_id
+                          -- through the port to its other side
+                          ELSE e.port_id = w.port_id AND e.side <> w.side
+                     END
+                WHERE NOT w.closed
+            )
+            SELECT port_id, side, cable, bundle, fiber, plan_id, closed
+            FROM walk
+            ORDER BY step, port_id, side
+            "#,
         )
         .bind::<Integer, _>(plan_id)
         .bind::<Integer, _>(self.port_id)
-        .bind::<Integer, _>(fiber.cable)
-        .bind::<Integer, _>(fiber.bundle)
-        .bind::<Integer, _>(fiber.fiber)
-        .get_result(connection)
-        .await
-        .optional()
+        .bind::<schema::sql_types::PortSideEnum, _>(self.side)
+        .bind::<Nullable<Integer>, _>(self.cable)
+        .bind::<Nullable<Integer>, _>(self.bundle)
+        .bind::<Nullable<Integer>, _>(self.fiber)
+        .bind::<Integer, _>(self.plan_id)
+        .bind::<Integer, _>(match first {
+            FirstHop::Fiber => 0,
+            FirstHop::Port => 1,
+        })
+        .load::<TraceStep>(connection)
+        .await?;
+        let looped = steps.last().is_some_and(|step| step.closed);
+        Ok(Trace {
+            usages: steps
+                .into_iter()
+                .filter(|step| !step.closed)
+                .map(|step| step.usage)
+                .collect(),
+            looped,
+        })
     }
+}
+
+/// Where `PortUsage::trace` goes first: along the fiber or through the port
+pub enum FirstHop {
+    Fiber,
+    Port,
+}
+
+/// The usages a signal reaches, from the one it started at
+pub struct Trace {
+    pub usages: Box<[PortUsage]>,
+    /// It came back to a usage it reached already
+    pub looped: bool,
+}
+
+impl Trace {
+    /// The last usage reached, none if it runs in a circle
+    pub fn end(&self) -> Option<PortUsage> {
+        if self.looped {
+            None
+        } else {
+            self.usages.last().copied()
+        }
+    }
+}
+
+#[derive(QueryableByName)]
+struct TraceStep {
+    #[diesel(embed)]
+    usage: PortUsage,
+    /// The usage was reached already
+    #[diesel(sql_type = Bool)]
+    closed: bool,
 }
 
 #[Object]
@@ -202,88 +270,29 @@ impl PortUsage {
     async fn modified_in_plan(&self) -> bool {
         self.plan_id != BASELINE_PLAN_ID
     }
+    /// Where the signal ends following the fiber into the cable, none if it runs in a circle
     async fn cable_side_end_port(
         &self,
         ctx: &Context<'_>,
         plan_id: i32,
     ) -> ApiResult<Option<PortUsage>> {
         let mut connection = get_connection(ctx).await?;
-
-        // Helper function to trace fiber through port usages recursively
-        #[async_recursion]
-        async fn trace_fiber_to_end<'a>(
-            connection: &mut deadpool::Object<AsyncPgConnection>,
-            usage: &PortUsage,
-            plan_id: i32,
-            visited: &mut HashSet<(i32, PortSide)>,
-        ) -> ApiResult<Option<PortUsage>> {
-            // Avoid infinite loops
-            if !visited.insert((usage.port_id, usage.side)) {
-                error!("Loop detected");
-                return Ok(None);
-            }
-            let option = usage.other_side_of_fiber(plan_id, connection).await?;
-            info!("Other side of fiber: {option:?}");
-            let other_side_of_fiber_port = match option {
-                None => return Ok(Some(*usage)),
-                Some(p) => p,
-            };
-            let next_fiber_start_port = match other_side_of_fiber_port
-                .other_side_of_port(plan_id, connection)
-                .await?
-            {
-                None => {
-                    return Ok(Some(other_side_of_fiber_port));
-                }
-                Some(p) => p,
-            };
-
-            trace_fiber_to_end(connection, &next_fiber_start_port, plan_id, visited).await
-        }
-
-        let mut visited = HashSet::new();
-        trace_fiber_to_end(&mut connection, self, plan_id, &mut visited).await
+        Ok(self
+            .trace(&mut connection, plan_id, FirstHop::Fiber)
+            .await?
+            .end())
     }
+    /// Where the signal ends going through the port first, none if it runs in a circle
     async fn panel_side_end_port(
         &self,
         ctx: &Context<'_>,
         plan_id: i32,
     ) -> ApiResult<Option<PortUsage>> {
         let mut connection = get_connection(ctx).await?;
-
-        // Helper function to trace fiber through port usages recursively
-        #[async_recursion]
-        async fn trace_fiber_to_end<'a>(
-            connection: &mut deadpool::Object<AsyncPgConnection>,
-            usage: &PortUsage,
-            plan_id: i32,
-            visited: &mut HashSet<(i32, PortSide)>,
-        ) -> ApiResult<Option<PortUsage>> {
-            // Avoid infinite loops
-            if !visited.insert((usage.port_id, usage.side)) {
-                error!("Loop detected");
-                return Ok(None);
-            }
-            let other_side_of_panel_port =
-                match usage.other_side_of_port(plan_id, connection).await? {
-                    None => return Ok(Some(*usage)),
-                    Some(p) => p,
-                };
-            let next_fiber_start_port = match other_side_of_panel_port
-                .other_side_of_fiber(plan_id, connection)
-                .await?
-            {
-                None => {
-                    return Ok(Some(other_side_of_panel_port));
-                }
-                Some(p) => p,
-            };
-
-            trace_fiber_to_end(connection, &next_fiber_start_port, plan_id, visited).await
-        }
-
-        let mut visited = HashSet::new();
-        trace_fiber_to_end(&mut connection, self, plan_id, &mut visited).await
+        Ok(self
+            .trace(&mut connection, plan_id, FirstHop::Port)
+            .await?
+            .end())
     }
 }
 
