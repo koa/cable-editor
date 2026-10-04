@@ -275,14 +275,13 @@ impl Component for PortEditor {
 
                 for port in &self.ports {
                     if port.deleted {
-                        // Gelöschte Ports landen nur dann in deletes, wenn sie eine DB-ID haben
+                        // Only stored ports need deleting
                         if let IdOrNew::Id(id) = port.id {
                             deletes.push(id);
                         }
                     } else {
-                        // Alle aktiven Ports (egal ob Id oder Temporary) kommen in changes
                         changes.push(FlatPortInput {
-                            id: port.id.into(), // Verwendet den bestehenden From<IdOrNew> Trait
+                            id: port.id.into(),
                             order: port.order_number,
                             label: port.label.to_string(),
                             port_type: port.port_type,

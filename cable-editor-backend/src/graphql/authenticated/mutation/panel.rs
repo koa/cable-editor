@@ -128,7 +128,7 @@ impl PanelMutation {
                     name: change.name,
                     schacht_id: cabinet_id,
                     parent_panel: resolved_parent_id,
-                    parent_order: Some(change.order), // Das Schema erwartet Option<i32>
+                    parent_order: Some(change.order),
                 };
 
                 let inserted_id: i32 = diesel::insert_into(schema::panel::table)

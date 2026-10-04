@@ -174,7 +174,6 @@ pub struct IdOrNewInput {
     pub temporary: Option<String>,
 }
 
-// Praktischer Helfer für die Konvertierung
 impl From<IdOrNew> for IdOrNewInput {
     fn from(val: IdOrNew) -> Self {
         match val {
@@ -251,7 +250,6 @@ pub fn local_day(date: &js_sys::Date) -> String {
         .into()
 }
 
-// Das Enum für den Typ
 #[derive(Clone, Copy, PartialEq, Eq, Debug, strum::Display, cynic::Enum, Hash, Ord, PartialOrd)]
 #[cynic(graphql_type = "PanelPortType")]
 pub enum PortType {

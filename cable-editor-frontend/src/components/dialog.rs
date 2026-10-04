@@ -106,43 +106,38 @@ macro_rules! create_simple_dialog {
         $struct_name:ident,
         $( ($field_ident:ident, $field_label:expr) ),* $(,)?
     ) => {
-        // 1. Generiere die Resultat-Struct
+        // The input
         #[derive(Default, Clone, PartialEq, Debug)]
         pub struct $struct_name {
             $( pub $field_ident: String, )*
         }
 
-        // 2. Generiere die Properties für den Dialog
         #[derive(Properties, PartialEq)]
         pub struct $props_name {
             pub on_confirm: Callback<$struct_name>,
             pub on_cancel: Callback<()>,
         }
 
-        // 3. Generiere die Yew Function Component
         #[function_component]
         pub fn $component_name(props: &$props_name) -> Html {
-            // Lokaler State für das Formular
             let state = use_state(|| $struct_name::default());
 
-            // Submit Handler
             let on_submit = {
                 let state = state.clone();
                 let on_confirm = props.on_confirm.clone();
                 Callback::from(move |e: SubmitEvent| {
-                    e.prevent_default(); // Verhindert den Page-Reload
+                    e.prevent_default();
                     on_confirm.emit((*state).clone());
-                    state.set($struct_name::default()); // State nach Bestätigung zurücksetzen
+                    state.set($struct_name::default());
                 })
             };
 
-            // Cancel Handler
             let on_cancel = {
                 let on_cancel = props.on_cancel.clone();
                 let state = state.clone();
                 Callback::from(move |_| {
                     on_cancel.emit(());
-                    state.set($struct_name::default()); // State beim Abbrechen zurücksetzen
+                    state.set($struct_name::default());
                 })
             };
             let onclose = {
@@ -150,7 +145,7 @@ macro_rules! create_simple_dialog {
                 let state = state.clone();
                 Callback::from(move |_| {
                     on_cancel.emit(());
-                    state.set($struct_name::default()); // State beim Abbrechen zurücksetzen
+                    state.set($struct_name::default());
                 })
             };
 
@@ -160,7 +155,6 @@ macro_rules! create_simple_dialog {
                     {onclose}
                 >
                     <Form onsubmit={on_submit}>
-                        // Iteriere über alle Felder im Makro
                         $(
                             <FormGroup label={$field_label}>
                                 <TextInput

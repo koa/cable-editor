@@ -73,7 +73,7 @@ struct FiberData {
     end_port_b: Option<UsedEndPort>,
 }
 
-// Repräsentiert eine Zeile (eine Faser) in der Matrix
+/// A row of the matrix: one fiber
 #[derive(Clone, PartialEq)]
 struct FiberLoopEntry {
     pub bundle: i32,
@@ -152,7 +152,7 @@ impl TableEntryRenderer<LoopColumn> for FiberLoopEntry {
                         ))
                     }
                     FiberStatus::UsedElsewhere => {
-                        // Wenn blockiert, kann nicht geloopt werden
+                        // A fiber used elsewhere can't be looped
                         Cell::new(
                             html!(<IconButton icon={Icon::Ban} name="Faser anderweitig belegt" disabled=true onclick={Callback::noop()} />),
                         )
@@ -529,11 +529,10 @@ impl LoopPortEditor {
                 <div class="pf-v6-c-panel__main">
                     <div class="pf-v6-c-panel__main-body">
 
-                        // 1. KABELPAAR AUSWAHL / ANZEIGE
                         if let (Some(cable_a), Some(cable_b)) = (&self.cable_a, &self.cable_b) {
                             { render_active_pair(cable_a, cable_b) }
 
-                            // 2. FASER-MATRIX (Nur wenn Paar definiert ist)
+                            // The fibers, once both cables are chosen
                             <div class="pf-v6-u-mt-lg">
                                 { self.render_fiber_table(ctx) }
                             </div>

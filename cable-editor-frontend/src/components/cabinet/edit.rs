@@ -102,7 +102,6 @@ impl TreeTableColumn<IdOrNew, PanelEntry, PanelEditAction> for PanelColumn {
                 let id = *context.key;
                 let callback = context.callback.clone();
 
-                // OnChange für das TextInput
                 let onchange = Callback::from(move |val: String| {
                     callback.emit(PanelEditAction::SetName {
                         id,
@@ -375,13 +374,12 @@ impl Component for EditCabinet {
             Msg::Save => {
                 self.saving = true;
 
-                // 1. Original-Zustand flachklopfen
+                // The panels as loaded and as edited, flattened
                 let mut original_nodes = HashMap::new();
                 if let Load::Loaded(loaded) = &self.loaded_panels {
                     flatten_loaded(loaded, None, &mut original_nodes);
                 }
 
-                // 2. Aktuellen Zustand flachklopfen
                 let mut current_nodes = Vec::new();
                 flatten_current(&self.model, self.model.roots(), None, &mut current_nodes);
 
@@ -390,7 +388,7 @@ impl Component for EditCabinet {
                 let mut to_delete = Vec::new();
                 let mut current_ids = HashSet::new();
 
-                // 3. Neue und geänderte Panels ermitteln
+                // New and changed panels
                 for node in current_nodes {
                     current_ids.insert(node.id);
 
@@ -408,7 +406,7 @@ impl Component for EditCabinet {
                     }
                 }
 
-                // 4. Gelöschte Panels ermitteln
+                // Deleted panels
                 for orig_id in original_nodes.keys() {
                     if !current_ids.contains(orig_id)
                         && let IdOrNew::Id(deleted_id) = orig_id
@@ -562,12 +560,12 @@ impl EditCabinet {
         let mut current_nodes = Vec::new();
         flatten_current(&self.model, self.model.roots(), None, &mut current_nodes);
 
-        // 1. Schneller Check: Wurden Elemente hinzugefügt oder gelöscht?
+        // Panels added or removed
         if original_nodes.len() != current_nodes.len() {
             return true;
         }
 
-        // 2. Detail-Check: Wurde etwas verschoben oder umbenannt?
+        // Panels moved or renamed
         for node in current_nodes {
             match node.id {
                 IdOrNew::Temporary(_) => return true,
@@ -597,7 +595,7 @@ struct FlatPanelNode {
     netbox_id: Option<i32>,
 }
 
-// Rekursives Flachklopfen der vom Server geladenen Daten
+/// The loaded panels as a flat map
 fn flatten_loaded(
     panels: &[PanelTreeEntry],
     parent_id: Option<IdOrNew>,

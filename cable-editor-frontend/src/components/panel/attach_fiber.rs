@@ -52,7 +52,7 @@ enum SlotState {
 struct SlotEdit {
     port_id: i32,
     side: PortSide,
-    cable_bundle: Option<CableBundleSelectEntry>, // Geändert: Kabel und Bündel kombiniert
+    cable_bundle: Option<CableBundleSelectEntry>,
 }
 
 #[derive(Clone, PartialEq)]
@@ -156,7 +156,7 @@ impl Component for AttachFiber {
                 self.edit_slot = Some(SlotEdit {
                     port_id,
                     side,
-                    cable_bundle: None, // Geändert
+                    cable_bundle: None,
                 });
                 true
             }
@@ -171,8 +171,8 @@ impl Component for AttachFiber {
                     && let Some(cable_bundle) = edit.cable_bundle
                 {
                     let key = FiberKeyInput {
-                        cable_id: cable_bundle.cable.cable.id, // Geändert
-                        bundle: cable_bundle.bundle,           // Geändert
+                        cable_id: cable_bundle.cable.cable.id,
+                        bundle: cable_bundle.bundle,
                         fiber,
                     };
                     self.slot_states
@@ -193,7 +193,7 @@ impl Component for AttachFiber {
             Msg::ResetPort(port_id) => {
                 self.reset_ports.insert(port_id);
 
-                // Setze UI-State auf initialen Zustand zur
+                // Back to what the port holds
                 if let Load::Loaded(situation) = &self.current_situation
                     && let Some(port) = situation.ports.iter().find(|p| p.id == port_id)
                 {
@@ -640,7 +640,7 @@ impl AttachFiber {
             return Html::default();
         };
 
-        // 1. Sammle alle verf gbaren Kombinationen aus Kabel + B ndel, die noch freie Fasern haben
+        // The bundles of the cables that still have free fibers
         let mut available_bundles = Vec::new();
         for cable in &situation.panel.schacht.cables {
             let free_fibers = self.get_free_fibers(cable);
@@ -784,7 +784,7 @@ fn calculate_current_states(data: &PlannedPanel) -> BTreeMap<(i32, PortSide), Sl
     states
 }
 
-// Geändert: Neuer Typ f r die kombinierte Auswahl
+/// A cable's bundle, chosen together
 #[derive(Clone, Eq, PartialEq)]
 pub struct CableBundleSelectEntry {
     cable: CableEnd,
