@@ -28,6 +28,10 @@ pub struct ShowDuct {
     map: MapHolder,
 }
 
+#[allow(
+    clippy::large_enum_variant,
+    reason = "a message is queued and handled by a task of its own, its size doesn't matter"
+)]
 pub enum Msg {
     Data(Option<DuctDetails>),
     Error(FrontendError),
