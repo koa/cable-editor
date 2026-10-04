@@ -445,10 +445,15 @@ const portUsage = (planId, portId, side) => {
     // A row of a plan without cable removes the fiber
     fiber: cableId === null ? null : { bundle, fiber, cable: () => cable(cableId) },
     port: () => panelPort(portId), plan: () => plan(planId),
-    otherSide: () => portUsage(planId, portId, side === 'FRONT' ? 'BACK' : 'FRONT'),
+    otherSide: ({ planId: plan }) => effectiveUsage(plan, portId, side === 'FRONT' ? 'BACK' : 'FRONT'),
     // Simplified trace: the fiber ends at this port
     cableSideEndPort: () => null, panelSideEndPort: () => portUsage(planId, portId, side),
   };
+};
+// Like the backend's effective_port_usage: a removed fiber is no usage
+const effectiveUsage = (planId, portId, side) => {
+  const u = portUsage(planId, portId, side);
+  return u?.fiber ? u : null;
 };
 const panelPort = (id) => {
   const p = ports.find((x) => x.id === id);
@@ -491,12 +496,8 @@ const plannedPanel = (panelId, planId) => {
     children: () => p.children().map((c) => plannedPanel(c.id, planId)),
     ports: () => portsOf(panelId).map((x) => ({
       ...x,
-      // Like the backend: a removed fiber is no usage
-      usage: ({ side }) => {
-        const u = portUsage(planId, x.id, side);
-        return u?.fiber ? u : null;
-      },
-      currentUsage: ({ side }) => portUsage(0, x.id, side),
+      usage: ({ side }) => effectiveUsage(planId, x.id, side),
+      currentUsage: ({ side }) => effectiveUsage(0, x.id, side),
     })),
     allChildrenRecursive: () => p.allChildrenRecursive().map((c) => plannedPanel(c.id, planId)),
   };

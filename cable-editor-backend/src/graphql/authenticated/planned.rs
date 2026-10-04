@@ -7,12 +7,12 @@ use crate::{
             panel::{Panel, PanelPort, PanelPortType, PortSide, PortUsage},
             plan::Plan,
         },
-        schema::{panel, panel_port, port_usage},
+        schema::{panel, panel_port},
     },
     graphql::authenticated::get_connection,
 };
 use async_graphql::{Context, Object};
-use diesel::{ExpressionMethods, HasQuery, OptionalExtension, QueryDsl};
+use diesel::{ExpressionMethods, HasQuery, QueryDsl};
 use diesel_async::RunQueryDsl;
 
 pub struct PlannedPanel {
@@ -139,14 +139,12 @@ impl PlannedPanel {
     async fn ports(&self, ctx: &Context<'_>) -> ApiResult<Vec<PlannedPort>> {
         let mut connection = get_connection(ctx).await?;
 
-        // Lade einfach alle existierenden Hardware-Ports für dieses Panel
         let ports = PanelPort::query()
             .filter(panel_port::panel_id.eq(self.panel.id))
             .order_by(panel_port::port_order.asc())
             .load::<PanelPort>(&mut connection)
             .await?;
 
-        // Gib sie im Kontext des aktuellen Plans zurück
         Ok(ports
             .into_iter()
             .map(|port| PlannedPort {
@@ -184,40 +182,19 @@ impl PlannedPort {
         self.port.label.as_deref()
     }
 
-    /// Lädt die effektive Belegung für eine bestimmte Seite des Ports
+    /// What the side holds in the plan
     async fn usage(&self, ctx: &Context<'_>, side: PortSide) -> ApiResult<Option<PortUsage>> {
         let mut connection = get_connection(ctx).await?;
-
-        let usage = port_usage::table
-            .filter(port_usage::port_id.eq(self.port.id))
-            .filter(port_usage::side.eq(side))
-            // Wir betrachten nur die Baseline (0) und den aktuellen Plan
-            .filter(port_usage::plan_id.eq_any([0, self.plan.id]))
-            // Der höchste plan_id gewinnt (Plan überschreibt Baseline)
-            .order_by(port_usage::plan_id.desc())
-            .first::<PortUsage>(&mut connection)
-            .await
-            .optional()?;
-
-        // Wenn ein Eintrag existiert, prüfen wir, ob es ein "Tombstone" (Löschung) ist.
-        // Falls cable == None ist, wurde die Faser in diesem Plan absichtlich entfernt.
-        Ok(usage.filter(|u| u.fiber.is_some()))
+        Ok(PortUsage::effective(&mut connection, self.plan.id, self.port.id, side).await?)
     }
+    /// What the side holds in the current state
     async fn current_usage(
         &self,
         ctx: &Context<'_>,
         side: PortSide,
     ) -> ApiResult<Option<PortUsage>> {
         let mut connection = get_connection(ctx).await?;
-
-        let usage = port_usage::table
-            .filter(port_usage::port_id.eq(self.port.id))
-            .filter(port_usage::side.eq(side))
-            .filter(port_usage::plan_id.eq(BASELINE_PLAN_ID))
-            .first::<PortUsage>(&mut connection)
-            .await
-            .optional()?;
-        Ok(usage.filter(|u| u.fiber.is_some()))
+        Ok(PortUsage::effective(&mut connection, BASELINE_PLAN_ID, self.port.id, side).await?)
     }
 }
 

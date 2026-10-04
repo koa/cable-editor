@@ -187,52 +187,36 @@ pub async fn trace_fiber_path(
 ) -> QueryResult<Vec<FiberPathNode>> {
     let raw_sql = r#"
     WITH RECURSIVE
-    -- 1. Effektiven Zustand berechnen: Ist-Zustand (0) und EINE Planung ($2) mischen
-    effective_usage AS (
-        SELECT DISTINCT ON (port_id, side)
-            port_id, side, cable, bundle, fiber
-        FROM port_usage
-        WHERE plan_id IN (0, $2)
-        -- plan_id DESC überschreibt den Ist-Zustand (0) mit der Planung (>0)
-        ORDER BY port_id, side, plan_id DESC
-    ),
-    -- 2. Tombstones (cable IS NULL) herausfiltern (JOIN mit panel_port fällt komplett weg!)
     endpoints AS (
-        SELECT
-            port_id, cable AS k_id, bundle AS b, fiber AS f
-        FROM effective_usage
-        WHERE cable IS NOT NULL
+        SELECT port_id, cable AS k_id, bundle AS b, fiber AS f
+        FROM effective_port_usage($2)
     ),
-    -- 3. Die eigentliche Wegfindung
     signal_path AS (
-        -- Basisfall: Direkter Startpunkt (gefiltert auf $1)
+        -- From the start port along its fiber to the port at the fiber's other end
         SELECT
             1 AS step,
             e1.port_id AS from_port_id,
             e2.port_id AS to_port_id,
             e1.k_id AS kabel, e1.b AS buendel, e1.f AS faser,
-            -- Array merkt sich besuchte ports anstatt panel/port kombinationen
             ARRAY[e1.port_id] AS visited
         FROM endpoints e1
         JOIN endpoints e2
           ON e1.k_id = e2.k_id AND e1.b = e2.b AND e1.f = e2.f
-         AND e1.port_id != e2.port_id -- Faser muss auf einen ANDEREN Port springen
+         AND e1.port_id != e2.port_id
         WHERE e1.port_id = $1
         UNION ALL
-        -- Rekursion: Springt iterativ die Folge-Ports ab
+        -- From the port reached through it to the other end of the fiber on its other side
         SELECT
             sp.step + 1,
-            e1.port_id, 
+            e1.port_id,
             e2.port_id,
             e1.k_id, e1.b, e1.f,
             sp.visited || e1.port_id
         FROM signal_path sp
-        -- Vom Ziel des letzten Schritts auf den Eingang des neuen Ports...
         JOIN endpoints e1 ON e1.port_id = sp.to_port_id
-        -- ...auf das andere Ende der verbundenen Faser springen
         JOIN endpoints e2 ON e1.k_id = e2.k_id AND e1.b = e2.b AND e1.f = e2.f
          AND e1.port_id != e2.port_id
-        -- Verhindern, dass wir im Kreis laufen
+        -- Not round in circles
         WHERE NOT (e2.port_id = ANY(sp.visited))
     )
     SELECT step, from_port_id, to_port_id, kabel, buendel, faser

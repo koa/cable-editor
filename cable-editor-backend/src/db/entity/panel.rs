@@ -19,7 +19,8 @@ use async_graphql::{Context, Enum, Object};
 use async_recursion::async_recursion;
 use diesel::{
     Associations, BoolExpressionMethods, ExpressionMethods, HasQuery, Identifiable, Insertable,
-    OptionalExtension, QueryDsl, QueryableByName, pg::Pg, sql_query, sql_types::Integer,
+    OptionalExtension, QueryDsl, QueryResult, QueryableByName, pg::Pg, sql_query,
+    sql_types::Integer,
 };
 use diesel_async::{AsyncPgConnection, RunQueryDsl, pooled_connection::deadpool};
 use diesel_derive_enum::DbEnum;
@@ -130,39 +131,51 @@ impl PortUsage {
             None
         }
     }
-    pub async fn other_side_of_port(
-        &self,
+    /// What the port's side holds in the plan (`effective_port_usage`)
+    pub async fn effective(
+        connection: &mut AsyncPgConnection,
         plan_id: i32,
-        connection: &mut deadpool::Object<AsyncPgConnection>,
-    ) -> Result<Option<PortUsage>, diesel::result::Error> {
-        PortUsage::query()
-            .filter(schema::port_usage::port_id.eq(self.port_id))
-            .filter(schema::port_usage::side.eq(self.side.other()))
-            .filter(schema::port_usage::plan_id.eq_any([0, plan_id]))
-            .order(schema::port_usage::plan_id.desc())
-            .first(connection)
+        port_id: i32,
+        side: PortSide,
+    ) -> QueryResult<Option<PortUsage>> {
+        sql_query("select * from effective_port_usage($1) where port_id = $2 and side = $3")
+            .bind::<Integer, _>(plan_id)
+            .bind::<Integer, _>(port_id)
+            .bind::<schema::sql_types::PortSideEnum, _>(side)
+            .get_result(connection)
             .await
             .optional()
     }
+    pub async fn other_side_of_port(
+        &self,
+        plan_id: i32,
+        connection: &mut AsyncPgConnection,
+    ) -> QueryResult<Option<PortUsage>> {
+        PortUsage::effective(connection, plan_id, self.port_id, self.side.other()).await
+    }
+    /// The other port the fiber is on in the plan, its own rows first
     pub async fn other_side_of_fiber(
         &self,
         plan_id: i32,
-        connection: &mut deadpool::Object<AsyncPgConnection>,
-    ) -> Result<Option<PortUsage>, diesel::result::Error> {
-        if let (Some(cable), Some(fiber), Some(bundle)) = (self.cable, self.fiber, self.bundle) {
-            PortUsage::query()
-                .filter(schema::port_usage::port_id.ne(self.port_id))
-                .filter(schema::port_usage::cable.eq(cable))
-                .filter(schema::port_usage::bundle.eq(bundle))
-                .filter(schema::port_usage::fiber.eq(fiber))
-                .filter(schema::port_usage::plan_id.eq_any([0, plan_id]))
-                .order(schema::port_usage::plan_id.desc())
-                .first(connection)
-                .await
-                .optional()
-        } else {
-            Ok(None)
-        }
+        connection: &mut AsyncPgConnection,
+    ) -> QueryResult<Option<PortUsage>> {
+        let Some(fiber) = self.used_fiber() else {
+            return Ok(None);
+        };
+        sql_query(
+            "select * from effective_port_usage($1)
+             where port_id <> $2 and cable = $3 and bundle = $4 and fiber = $5
+             order by plan_id desc, port_id
+             limit 1",
+        )
+        .bind::<Integer, _>(plan_id)
+        .bind::<Integer, _>(self.port_id)
+        .bind::<Integer, _>(fiber.cable)
+        .bind::<Integer, _>(fiber.bundle)
+        .bind::<Integer, _>(fiber.fiber)
+        .get_result(connection)
+        .await
+        .optional()
     }
 }
 
@@ -181,20 +194,10 @@ impl PortUsage {
     async fn plan(&self, ctx: &Context<'_>) -> ApiResult<Plan> {
         load_one(ctx, PlanId(self.plan_id)).await
     }
-    async fn other_side(&self, ctx: &Context<'_>) -> ApiResult<Option<PortUsage>> {
+    /// What the other side of the port holds in the plan
+    async fn other_side(&self, ctx: &Context<'_>, plan_id: i32) -> ApiResult<Option<PortUsage>> {
         let mut connection = get_connection(ctx).await?;
-        Ok(PortUsage::query()
-            .filter(
-                schema::port_usage::port_id
-                    .eq(self.port_id)
-                    .and(schema::port_usage::side.eq(self.side.other()))
-                    .and(schema::port_usage::plan_id.eq_any([0, self.plan_id])),
-            )
-            .order(schema::port_usage::plan_id.desc())
-            .first(&mut connection)
-            .await
-            .optional()?
-            .filter(|pu| pu.cable.is_some() && pu.bundle.is_some() && pu.fiber.is_some()))
+        Ok(self.other_side_of_port(plan_id, &mut connection).await?)
     }
     async fn modified_in_plan(&self) -> bool {
         self.plan_id != BASELINE_PLAN_ID

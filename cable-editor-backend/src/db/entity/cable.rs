@@ -169,8 +169,7 @@ pub struct CableEnd {
     pub cable: Cable,
     pub schacht: Schacht,
 }
-/// The cable's port usages at the Schacht as they are in the plan: the plan's own and the
-/// current state's (plan 0) not overridden by the plan at the same port.
+/// The cable's port usages at the Schacht in force in the plan (`effective_port_usage`).
 pub async fn cable_usages_at(
     connection: &mut AsyncPgConnection,
     plan_id: i32,
@@ -178,34 +177,12 @@ pub async fn cable_usages_at(
     schacht_id: i32,
 ) -> Result<Box<[PortUsage]>, diesel::result::Error> {
     let raw_sql = r#"
-        -- 1. Echte Belegungen für dieses Kabel im aktuellen Plan, direkt auf den Schacht gefiltert
         SELECT u.*
-        FROM port_usage u
+        FROM effective_port_usage($1) u
         JOIN panel_port pp ON u.port_id = pp.id
         JOIN panel p ON pp.panel_id = p.id
-        WHERE u.plan_id = $1
-          AND u.cable = $2
+        WHERE u.cable = $2
           AND p.schacht_id = $3
-
-        UNION ALL
-
-        -- 2. Belegungen für dieses Kabel aus der Baseline, direkt auf den Schacht gefiltert...
-        SELECT p0.*
-        FROM port_usage p0
-        JOIN panel_port pp ON p0.port_id = pp.id
-        JOIN panel p ON pp.panel_id = p.id
-        WHERE p0.plan_id = 0
-          AND $1 != 0
-          AND p0.cable = $2
-          AND p.schacht_id = $3
-          -- ...die im aktuellen Plan an exakt diesem Port nicht überschrieben wurden
-          AND NOT EXISTS (
-              SELECT 1
-              FROM port_usage px
-              WHERE px.plan_id = $1
-                AND px.port_id = p0.port_id
-                AND px.side = p0.side
-          )
     "#;
 
     diesel::sql_query(raw_sql)
