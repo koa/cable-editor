@@ -8,14 +8,9 @@ use crate::db::{
 use crate::graphql::error::ApiResult;
 use cable_editor_common::UserError;
 use diesel::{ExpressionMethods, HasQuery, QueryDsl, associations::HasTable};
-use diesel_async::{AsyncPgConnection, RunQueryDsl, pooled_connection::deadpool::Object};
-use tokio::sync::MutexGuard;
+use diesel_async::{AsyncPgConnection, RunQueryDsl};
 
-pub async fn implement_plan(
-    plan_id: i32,
-    mut connection: MutexGuard<'_, Object<AsyncPgConnection>>,
-) -> ApiResult<Plan> {
-    let conn: &mut AsyncPgConnection = &mut connection;
+pub async fn implement_plan(plan_id: i32, conn: &mut AsyncPgConnection) -> ApiResult<Plan> {
     let plan = Plan::query()
         .for_update()
         .filter(schema::plan::id.eq(plan_id))

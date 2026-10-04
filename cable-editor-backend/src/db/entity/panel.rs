@@ -27,7 +27,7 @@ use diesel::{
     sql_query,
     sql_types::{Array, Bool, Integer, Nullable},
 };
-use diesel_async::{AsyncPgConnection, RunQueryDsl, pooled_connection::deadpool};
+use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use diesel_derive_enum::DbEnum;
 use std::borrow::Cow;
 
@@ -313,8 +313,8 @@ impl Panel {
     /// All panels below `panel_id`, level by level, each level in `parent_order`.
     pub async fn load_all_children_recursive(
         panel_id: i32,
-        connection: &mut deadpool::Object<AsyncPgConnection>,
-    ) -> Result<Vec<Panel>, diesel::result::Error> {
+        connection: &mut AsyncPgConnection,
+    ) -> QueryResult<Vec<Panel>> {
         let raw_sql = r#"
         WITH RECURSIVE panel_tree AS (
             SELECT
@@ -373,13 +373,13 @@ impl Panel {
             Ok(None)
         }
     }
-    async fn parent_chain(&self, ctx: &Context<'_>) -> ApiResult<Vec<Panel>> {
+    async fn parent_chain(&self, ctx: &Context<'_>) -> ApiResult<Box<[Panel]>> {
         #[async_recursion]
         async fn fetch_parent_chain(
-            transaction: &mut deadpool::Object<AsyncPgConnection>,
+            transaction: &mut AsyncPgConnection,
             entry: &Panel,
             parents: &mut Vec<Panel>,
-        ) -> Result<(), diesel::result::Error> {
+        ) -> QueryResult<()> {
             if let Some(parent_panel_id) = entry.parent_panel {
                 let parent_panel = Panel::query()
                     .filter(schema::panel::id.eq(parent_panel_id))
@@ -394,9 +394,9 @@ impl Panel {
             let mut connection = get_connection(ctx).await?;
             let mut result = Vec::new();
             fetch_parent_chain(&mut connection, self, &mut result).await?;
-            Ok(result)
+            Ok(result.into_boxed_slice())
         } else {
-            Ok(Vec::default())
+            Ok(Box::default())
         }
     }
     async fn children(&self, ctx: &Context<'_>) -> ApiResult<Vec<Panel>> {
@@ -510,39 +510,6 @@ impl PanelPort {
     async fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
-    /*async fn connected_fibers(
-        &self,
-        ctx: &Context<'_>,
-    ) -> ApiResult<Vec<FiberPathSegment>> {
-        let mut connection = get_connection(ctx).await?;
-        connection
-            .transaction(async move |conn| {
-                let mut path = Vec::with_capacity(2);
-                for fiber in self.fibers() {
-                    PanelPort::query()
-                        .filter(
-                            ((panel_port::f1_faser
-                                .eq(fiber.fiber)
-                                .and(panel_port::f1_buendel.eq(fiber.bundle))
-                                .and(panel_port::f1_kabel_id.eq(fiber.cable)))
-                            .or(panel_port::f2_faser
-                                .eq(fiber.fiber)
-                                .and(panel_port::f2_buendel.eq(fiber.bundle))
-                                .and(panel_port::f2_kabel_id.eq(fiber.cable))))
-                            .and(not(panel_port::panel_id
-                                .eq(self.panel_id)
-                                .and(panel_port::port_number.eq(self.port_number)))),
-                        )
-                        .load::<PanelPort>(conn)
-                        .await?
-                        .into_iter()
-                        .map(|next_port| FiberPathSegment { fiber, next_port })
-                        .for_each(|segment| path.push(segment));
-                }
-                Ok(path)
-            })
-            .await
-    }*/
     async fn port_type(&self) -> PanelPortType {
         self.port_type
     }

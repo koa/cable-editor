@@ -439,17 +439,16 @@ pub async fn sync_plan_to_netbox(
 
     for planned in planned_circuits {
         let cid = planned.cid();
-        let expected_ports = vec![planned.start_netbox_id, planned.end_netbox_id];
+        let mut expected = [planned.start_netbox_id, planned.end_netbox_id];
+        expected.sort();
 
         if let Some(idx) = existing_circuits.iter().position(|c| *c.cid == *cid) {
             let existing = existing_circuits.remove(idx);
 
             let mut actual_ports = existing.connected_rear_port_ids();
             actual_ports.sort();
-            let mut expected = expected_ports.clone();
-            expected.sort();
 
-            if actual_ports == expected {
+            if *actual_ports == expected {
                 let existing_id: u32 = existing.id.into();
                 to_update.push((planned, existing_id));
             } else {

@@ -22,7 +22,8 @@ mod schema {}
 
 pub mod id;
 
-pub async fn fetch_devices_and_ports() -> Result<Vec<DeviceWithRearPorts>, BackendError> {
+/// The devices with LC rear ports, by id
+pub async fn fetch_devices_and_ports() -> Result<Box<[DeviceWithRearPorts]>, BackendError> {
     let netbox_data = query::<QueryDevicesAndPorts, _>(DeviceFilterVariables {
         types: Some(vec![PortTypeEnum::TypeLc, PortTypeEnum::TypeLcUpc]),
     })

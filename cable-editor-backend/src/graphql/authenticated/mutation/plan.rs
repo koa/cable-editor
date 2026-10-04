@@ -49,7 +49,8 @@ impl PlanMutation {
     }
     #[graphql(guard = "RoleGuard(Role::Admin)")]
     async fn implement_plan(&self, ctx: &Context<'_>, plan_id: i32) -> ApiResult<Plan> {
-        super::implement::implement_plan(plan_id, authenticated::get_connection(ctx).await?).await
+        let mut connection = authenticated::get_connection(ctx).await?;
+        super::implement::implement_plan(plan_id, &mut connection).await
     }
     /// Syncs Netbox right away (the worker runs it after the request), e.g. after a change made
     /// in Netbox by hand, also without waiting after a failed run.

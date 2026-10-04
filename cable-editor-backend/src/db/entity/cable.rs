@@ -22,10 +22,10 @@ use async_graphql::{Context, Object};
 use cable_editor_common::UserError;
 use diesel::{
     AsChangeset, ExpressionMethods, HasQuery, Identifiable, Insertable, OptionalExtension,
-    QueryDsl, QueryableByName, sql_query,
+    QueryDsl, QueryResult, QueryableByName, sql_query,
     sql_types::{Integer, Nullable},
 };
-use diesel_async::{AsyncPgConnection, RunQueryDsl, pooled_connection::deadpool::Object};
+use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use postgis_diesel::{
     sql_types::Geometry,
     types::{LineString, Point},
@@ -100,11 +100,11 @@ impl Cable {
     async fn cable_end(
         &self,
         schacht_id: i32,
-        mut connection: &mut Object<AsyncPgConnection>,
-    ) -> Result<CableEnd, diesel::result::Error> {
+        connection: &mut AsyncPgConnection,
+    ) -> QueryResult<CableEnd> {
         let schacht = Schacht::query()
             .filter(schema::schacht::id.eq(schacht_id))
-            .first(&mut connection)
+            .first(connection)
             .await?;
         Ok(CableEnd {
             cable: self.clone(),

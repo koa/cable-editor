@@ -89,7 +89,7 @@ impl Schacht {
     async fn location(&self, ctx: &Context<'_>) -> ApiResult<Option<GeoPoint>> {
         get_loader(ctx)?.load_one(SchachtLocation(self.id)).await
     }
-    async fn connecting_duct(&self, ctx: &Context<'_>) -> ApiResult<Vec<PotentialPathSegment>> {
+    async fn connecting_duct(&self, ctx: &Context<'_>) -> ApiResult<Box<[PotentialPathSegment]>> {
         let ducts: Vec<Duct> = {
             let mut connection = get_connection(ctx).await?;
             Duct::query()
@@ -141,22 +141,21 @@ impl Schacht {
                 schacht: self.clone(),
             }))
     }
-    async fn cables(&self, ctx: &Context<'_>) -> ApiResult<Vec<CableEnd>> {
+    async fn cables(&self, ctx: &Context<'_>) -> ApiResult<Box<[CableEnd]>> {
         let mut connection = get_connection(ctx).await?;
         Ok(schema::kabel::table
-            // 1. Die Relationen joinen (Kabel -> KabelTrasse -> Trasse)
+            // The cables with their ducts
             .inner_join(schema::kabel_trasse::table.inner_join(schema::trasse::table))
-            // 2. Nur Trassen betrachten, die an unseren Ziel-Schacht grenzen
+            // Only the ducts at this Schacht
             .filter(
                 schema::trasse::schacht_a
                     .eq(self.id)
                     .or(schema::trasse::schacht_z.eq(self.id)),
             )
-            // 3. Nach den Kabel-Spalten gruppieren, um zählen zu können
+            // A cable ends here if only one of its ducts touches the Schacht; one passing
+            // through has two
             .group_by(schema::kabel::id)
-            // 4. Die Magie: Nur Kabel behalten, die exakt 1 Berührungspunkt mit dem Schacht haben
             .having(diesel::dsl::count(schema::trasse::id).eq(1))
-            // 5. Die Daten auslesen
             .select(schema::kabel::all_columns)
             .load::<Cable>(&mut connection)
             .await

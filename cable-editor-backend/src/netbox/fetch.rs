@@ -162,8 +162,8 @@ pub struct CircuitType {
 }
 
 impl CircuitType {
-    /// Sucht in allen Terminations nach den Netbox IDs der angeschlossenen RearPorts
-    pub fn connected_rear_port_ids(&self) -> Vec<i32> {
+    /// The Netbox ids of the rear ports the circuit's terminations connect to
+    pub fn connected_rear_port_ids(&self) -> Box<[i32]> {
         self.terminations
             .iter()
             .flat_map(|t| &t.link_peers)

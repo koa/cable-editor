@@ -122,7 +122,7 @@ impl PlannedPanel {
             Ok(None)
         }
     }
-    async fn children(&self, ctx: &Context<'_>) -> ApiResult<Vec<PlannedPanel>> {
+    async fn children(&self, ctx: &Context<'_>) -> ApiResult<Box<[PlannedPanel]>> {
         let mut connection = get_connection(ctx).await?;
         Ok(Panel::query()
             .filter(panel::parent_panel.eq(self.panel.id))
@@ -152,7 +152,7 @@ impl PlannedPanel {
             })
             .collect())
     }
-    async fn all_children_recursive(&self, ctx: &Context<'_>) -> ApiResult<Vec<PlannedPanel>> {
+    async fn all_children_recursive(&self, ctx: &Context<'_>) -> ApiResult<Box<[PlannedPanel]>> {
         let mut connection = get_connection(ctx).await?;
         Ok(
             Panel::load_all_children_recursive(self.panel.id, &mut connection)

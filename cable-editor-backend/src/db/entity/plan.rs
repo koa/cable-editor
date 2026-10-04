@@ -63,12 +63,11 @@ impl Plan {
         self.netbox_active
     }
 
-    async fn root_panels(&self, ctx: &Context<'_>) -> ApiResult<Vec<PlannedPanel>> {
+    async fn root_panels(&self, ctx: &Context<'_>) -> ApiResult<Box<[PlannedPanel]>> {
         let mut connection = get_connection(ctx).await?;
         let raw_sql = r#"
 WITH RECURSIVE affected_panels AS (
-    -- 1. Basisfall (Anchor):
-    -- Finde alle Panels, die in dieser plan_id Belegungen (port_usage) haben
+    -- The panels with ports the plan changes
     SELECT p.id, p.parent_panel
     FROM panel p
     WHERE EXISTS (
@@ -78,12 +77,12 @@ WITH RECURSIVE affected_panels AS (
         WHERE pp.panel_id = p.id AND pu.plan_id = $1
     )
     UNION
-    -- 2. Rekursiver Schritt: Klettere nach oben
+    -- and the panels above them
     SELECT parent.id, parent.parent_panel
     FROM panel parent
     INNER JOIN affected_panels child ON child.parent_panel = parent.id
 )
--- 3. Finale Ausgabe: Root-Panels filtern
+-- of which the root panels
 SELECT p.id, p.name, p.schacht_id, p.parent_panel, p.parent_order, p.netbox_device_id
 FROM affected_panels a
 JOIN panel p ON a.id = p.id

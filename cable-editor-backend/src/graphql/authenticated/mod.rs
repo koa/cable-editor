@@ -158,7 +158,7 @@ impl Query {
     async fn lkmap_export(&self, ctx: &Context<'_>) -> ApiResult<lkmap::LkmapExport> {
         lkmap::export(ctx).await
     }
-    async fn netbox_devices(&self) -> ApiResult<Vec<DeviceWithRearPorts>> {
+    async fn netbox_devices(&self) -> ApiResult<Box<[DeviceWithRearPorts]>> {
         Ok(fetch_devices_and_ports().await?)
     }
     async fn netbox_device(&self, netbox_device_id: u32) -> ApiResult<Option<DeviceWithRearPorts>> {
