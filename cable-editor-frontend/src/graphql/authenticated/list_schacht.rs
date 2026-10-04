@@ -1,3 +1,4 @@
+use crate::graphql::authenticated::PanelRef;
 use crate::{
     error::FrontendError,
     graphql::{authenticated::schema, query},
@@ -15,14 +16,7 @@ struct ListSchachtQuery {
 pub struct SchachtListEntry {
     pub id: i32,
     pub name: String,
-    pub root_panels: Vec<SchachtListPanelEntry>,
-}
-
-#[derive(cynic::QueryFragment, Debug, Clone)]
-#[cynic(graphql_type = "Panel")]
-pub struct SchachtListPanelEntry {
-    pub id: i32,
-    pub name: Option<String>,
+    pub root_panels: Vec<PanelRef>,
 }
 
 pub async fn fetch_schacht_list(

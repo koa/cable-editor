@@ -1,5 +1,6 @@
 //! Owners of Schächte and ducts (see docs/stammdaten.md).
 
+use crate::graphql::authenticated::OwnerId;
 use crate::{
     error::FrontendError,
     graphql::{authenticated::schema, mutate, query},
@@ -53,13 +54,6 @@ pub async fn fetch_owner_list(
 pub struct OwnerInput {
     pub name: String,
     pub lk_name: Option<String>,
-}
-
-#[derive(cynic::QueryFragment, Debug, Clone, Copy)]
-#[cynic(graphql_type = "Owner")]
-struct OwnerId {
-    #[allow(unused)]
-    id: i32,
 }
 
 #[derive(cynic::QueryVariables)]

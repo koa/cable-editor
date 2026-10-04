@@ -1,3 +1,4 @@
+use crate::graphql::authenticated::{CableRef, SchachtRef};
 use crate::{
     error::FrontendError,
     graphql::{
@@ -37,23 +38,9 @@ pub struct MapDuct {
     pub line: Option<Vec<GeoPoint>>,
     /// Metres, missing without geometry
     pub length: Option<f64>,
-    pub schacht_a: MapDuctEnd,
-    pub schacht_z: MapDuctEnd,
-    pub cables: Vec<MapCable>,
-}
-
-#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
-#[cynic(graphql_type = "Schacht")]
-pub struct MapDuctEnd {
-    pub id: i32,
-    pub name: String,
-}
-
-#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
-#[cynic(graphql_type = "Cable")]
-pub struct MapCable {
-    pub id: i32,
-    pub name: String,
+    pub schacht_a: SchachtRef,
+    pub schacht_z: SchachtRef,
+    pub cables: Vec<CableRef>,
 }
 
 pub async fn fetch_map_data(credentials: Option<&OAuth2Context>) -> Result<MapData, FrontendError> {

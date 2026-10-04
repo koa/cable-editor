@@ -5,14 +5,15 @@ use crate::components::{
     select_duct::SelectDuct,
     unsaved::Unsaved,
 };
+use crate::graphql::authenticated::SchachtRef;
+use crate::graphql::authenticated::cable_details::fetch_connected_ducts;
 use crate::{
     components::table::ListModel,
     error::FrontendError,
     graphql::authenticated::{
         IdOrNew,
         cable_details::{
-            CableDetails, CableDuct, CablePath, CablePathSegment, CableSegmentEndSchacht,
-            CableStructure, PotentialDuct,
+            CableDetails, CableDuct, CablePath, CablePathSegment, CableStructure, PotentialDuct,
         },
         current_user::Role,
         list_cables::delete_cable,
@@ -38,9 +39,9 @@ use yew_oauth2::prelude::OAuth2Context;
 #[derive(Debug, Clone, PartialEq)]
 enum DuctPathEntry {
     Schacht {
-        schacht: CableSegmentEndSchacht,
+        schacht: SchachtRef,
         pos: f64,
-        on_extend: Option<Callback<CableSegmentEndSchacht>>,
+        on_extend: Option<Callback<SchachtRef>>,
     },
     Duct {
         duct: CableDuct,
@@ -225,15 +226,15 @@ pub enum Msg {
     AppendSegment {
         end: PathEnd,
         duct: CableDuct,
-        other_schacht: CableSegmentEndSchacht,
+        other_schacht: SchachtRef,
     },
     RemoveSegment {
         end: PathEnd,
     },
     InitFirstSegment {
-        schacht_a: CableSegmentEndSchacht,
+        schacht_a: SchachtRef,
         duct: CableDuct,
-        schacht_z: CableSegmentEndSchacht,
+        schacht_z: SchachtRef,
     },
     RemoveEntry,
 }
@@ -620,7 +621,7 @@ impl EditCable {
                                     let scope = scope.clone();
                                     let credentials = credentials.clone();
                                     spawn_local(async move {
-                                        match schacht.fetch_connected_ducts(credentials.as_ref()).await {
+                                        match fetch_connected_ducts(credentials.as_ref(), schacht.id).await {
                                             Ok(available_ducts) => {
                                                 let on_select = {
                                                     let backdrop = backdrop.clone();
@@ -696,7 +697,7 @@ impl EditCable {
                                 let backdrop=backdrop.clone();
                                 Callback::from(move |details: DuctListEntry|{
                                     scope.send_message(Msg::InitFirstSegment{
-                                        schacht_a: CableSegmentEndSchacht {
+                                        schacht_a: SchachtRef {
                                             id: details.schacht_a.id,
                                             name: details.schacht_a.name,
                                         },
@@ -705,7 +706,7 @@ impl EditCable {
                                             description: details.description,
                                             length: details.length,
                                         },
-                                        schacht_z: CableSegmentEndSchacht {
+                                        schacht_z: SchachtRef {
                                             id: details.schacht_z.id,
                                             name: details.schacht_z.name,
                                         },

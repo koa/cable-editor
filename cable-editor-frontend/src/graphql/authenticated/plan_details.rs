@@ -1,7 +1,8 @@
+use crate::graphql::authenticated::{CableRef, SchachtRef};
 use crate::{
     error::FrontendError,
     graphql::{
-        authenticated::{ParentChainPanel, PortSide, schema},
+        authenticated::{PanelRef, PortSide, schema},
         mutate, query,
     },
 };
@@ -43,14 +44,7 @@ pub struct PortUsage {
 pub struct FiberDetails {
     pub bundle: i32,
     pub fiber: i32,
-    pub cable: CableDetails,
-}
-
-#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
-#[cynic(graphql_type = "Cable")]
-pub struct CableDetails {
-    pub id: i32,
-    pub name: String,
+    pub cable: CableRef,
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
@@ -66,16 +60,9 @@ pub struct Port {
 #[cynic(graphql_type = "Panel")]
 pub struct PortPanel {
     pub id: i32,
-    pub schacht: Schacht,
+    pub schacht: SchachtRef,
     pub name: Option<String>,
-    pub parent_chain: Vec<ParentChainPanel>,
-}
-
-#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
-#[cynic(graphql_type = "Schacht")]
-pub struct Schacht {
-    pub id: i32,
-    pub name: String,
+    pub parent_chain: Vec<PanelRef>,
 }
 
 // --- Mutations of EditPlan ---

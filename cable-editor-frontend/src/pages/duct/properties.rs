@@ -1,4 +1,5 @@
 use crate::components::select::Select;
+use crate::graphql::authenticated::map::MapSchacht;
 use crate::{
     components::{
         dialog::confirm_delete,
@@ -15,8 +16,8 @@ use crate::{
         current_user::Role,
         duct_properties::{
             CoordinateSystem, DuctChoices, DuctInput, DuctLineCheck, DuctProperties, LineInput,
-            SchachtChoice, check_duct_line, create_duct, delete_duct, fetch_duct_properties,
-            set_duct_line, update_duct,
+            check_duct_line, create_duct, delete_duct, fetch_duct_properties, set_duct_line,
+            update_duct,
         },
         list_ducts::duct_title,
         schacht_types::type_icon,
@@ -411,14 +412,14 @@ impl EditDuctProperties {
         self.loaded.as_ref()?.0.as_ref()
     }
 
-    fn schaechte(&self) -> &[SchachtChoice] {
+    fn schaechte(&self) -> &[MapSchacht] {
         self.loaded
             .as_ref()
             .map(|(_, choices)| &*choices.schaechte)
             .unwrap_or_default()
     }
 
-    fn schacht(&self, id: Option<i32>) -> Option<&SchachtChoice> {
+    fn schacht(&self, id: Option<i32>) -> Option<&MapSchacht> {
         let id = id?;
         self.schaechte().iter().find(|s| s.id == id)
     }

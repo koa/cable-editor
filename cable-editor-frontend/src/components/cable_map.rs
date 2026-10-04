@@ -3,13 +3,14 @@
 //! a duct connecting to an end of the path adds it there, a click on the first or last segment
 //! removes it; a cable without path starts with any duct.
 
+use crate::graphql::authenticated::SchachtRef;
 use crate::{
     error::FrontendError,
     geo::map::{MapHolder, duct_hit_line, duct_line, fit_points, hover_text, schacht_marker},
     graphql::authenticated::{
         GeoPoint, IdOrNew,
-        cable_details::{CableDuct, CablePath, CableSegmentEndSchacht},
-        map::{MapData, MapDuct, MapDuctEnd, fetch_map_data},
+        cable_details::{CableDuct, CablePath},
+        map::{MapData, MapDuct, fetch_map_data},
         schacht_types::type_icon,
     },
     util::get_credentials,
@@ -37,14 +38,14 @@ pub enum PathEdit {
         end: PathEnd,
         duct: CableDuct,
         /// The duct's other end, the path's new end
-        other_schacht: CableSegmentEndSchacht,
+        other_schacht: SchachtRef,
     },
     Remove(PathEnd),
     /// The first duct of a cable without path
     Start {
-        schacht_a: CableSegmentEndSchacht,
+        schacht_a: SchachtRef,
         duct: CableDuct,
-        schacht_z: CableSegmentEndSchacht,
+        schacht_z: SchachtRef,
     },
 }
 
@@ -290,8 +291,8 @@ fn cable_duct(duct: &MapDuct) -> CableDuct {
     }
 }
 
-fn end_schacht(end: &MapDuctEnd) -> CableSegmentEndSchacht {
-    CableSegmentEndSchacht {
+fn end_schacht(end: &SchachtRef) -> SchachtRef {
+    SchachtRef {
         id: end.id,
         name: end.name.clone(),
     }

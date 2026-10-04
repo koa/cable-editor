@@ -1,29 +1,31 @@
+use crate::graphql::authenticated::{CableId, CableSize, PanelId, SchachtRef};
 use crate::graphql::authenticated::{port_label, write_panel_path, write_port_label};
 use crate::{
     error::FrontendError,
     graphql::{
-        authenticated::{ParentChainPanel, PortSide, PortType, schema},
+        authenticated::{PanelRef, PortSide, PortType, schema},
         mutate, query,
     },
 };
 use std::fmt::{Display, Formatter};
 use yew_oauth2::context::OAuth2Context;
 
+/// A panel in a plan, the variables of the panel pages' queries
 #[derive(cynic::QueryVariables, Debug)]
-pub struct FetchPanelUsageVariables {
+pub struct PanelVariables {
     pub plan_id: i32,
     pub panel_id: i32,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
-#[cynic(graphql_type = "Query", variables = "FetchPanelUsageVariables")]
+#[cynic(graphql_type = "Query", variables = "PanelVariables")]
 pub struct FetchPanelUsage {
     #[arguments(planId: $plan_id)]
     pub plan: Option<Plan>,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
-#[cynic(variables = "FetchPanelUsageVariables")]
+#[cynic(variables = "PanelVariables")]
 pub struct Plan {
     pub id: i32,
     #[arguments(panelId: $panel_id)]
@@ -31,7 +33,7 @@ pub struct Plan {
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone)]
-#[cynic(variables = "FetchPanelUsageVariables")]
+#[cynic(variables = "PanelVariables")]
 pub struct PlannedPanel {
     pub panel: Panel,
     pub ports: Vec<PlannedPort>,
@@ -43,13 +45,10 @@ impl PlannedPanel {
         panel_id: i32,
     ) -> Result<Option<PlannedPanel>, FrontendError> {
         Ok(
-            query::<FetchPanelUsage, _>(
-                FetchPanelUsageVariables { plan_id, panel_id },
-                credentials,
-            )
-            .await?
-            .plan
-            .and_then(|p| p.panel),
+            query::<FetchPanelUsage, _>(PanelVariables { plan_id, panel_id }, credentials)
+                .await?
+                .plan
+                .and_then(|p| p.panel),
         )
     }
 }
@@ -75,11 +74,12 @@ pub struct PlannedPort {
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone)]
-#[cynic(variables = "FetchPanelUsageVariables")]
+#[cynic(variables = "PanelVariables")]
 pub struct Panel {
+    pub id: i32,
     pub schacht: Schacht,
     pub name: Option<String>,
-    pub parent_chain: Vec<ParentChainPanel>,
+    pub parent_chain: Vec<PanelRef>,
 }
 impl Display for Panel {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -95,21 +95,22 @@ impl Display for Panel {
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone)]
-#[cynic(variables = "FetchPanelUsageVariables")]
+#[cynic(variables = "PanelVariables")]
 pub struct Schacht {
-    pub cables: Vec<CableEnd>,
+    pub id: i32,
     pub name: String,
+    pub cables: Vec<CableEnd>,
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
-#[cynic(variables = "FetchPanelUsageVariables")]
+#[cynic(variables = "PanelVariables")]
 pub struct CableEnd {
-    pub cable: Cable,
+    pub cable: CableSize,
     pub path: CablePath,
     pub fibers: Vec<FiberOwnEnd>,
 }
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
-#[cynic(graphql_type = "FiberEnd", variables = "FetchPanelUsageVariables")]
+#[cynic(graphql_type = "FiberEnd", variables = "PanelVariables")]
 pub struct FiberOwnEnd {
     pub bundle: i32,
     pub fiber: i32,
@@ -118,21 +119,21 @@ pub struct FiberOwnEnd {
     pub used_port: Option<CableUsedOwnPort>,
 }
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
-#[cynic(graphql_type = "PortUsage", variables = "FetchPanelUsageVariables")]
+#[cynic(graphql_type = "PortUsage", variables = "PanelVariables")]
 pub struct CableUsedOwnPort {
     pub port: PortPanelId,
     pub modified_in_plan: bool,
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
-#[cynic(graphql_type = "FiberEnd", variables = "FetchPanelUsageVariables")]
+#[cynic(graphql_type = "FiberEnd", variables = "PanelVariables")]
 pub struct FiberOtherEnd {
     #[arguments(planId: $plan_id)]
     pub used_port: Option<CableUsedEndPort>,
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
-#[cynic(graphql_type = "PortUsage", variables = "FetchPanelUsageVariables")]
+#[cynic(graphql_type = "PortUsage", variables = "PanelVariables")]
 pub struct CableUsedEndPort {
     #[arguments(planId: $plan_id)]
     pub panel_side_end_port: Option<UsedEndPort>,
@@ -162,9 +163,10 @@ pub struct EndPort {
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
 #[cynic(graphql_type = "Panel")]
 pub struct EndPortPanel {
-    pub schacht: EndPortSchacht,
+    pub id: i32,
+    pub schacht: SchachtRef,
     pub name: Option<String>,
-    pub parent_chain: Vec<ParentChainPanel>,
+    pub parent_chain: Vec<PanelRef>,
 }
 impl Display for EndPortPanel {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -178,39 +180,14 @@ impl Display for EndPortPanel {
         )
     }
 }
-#[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
-#[cynic(graphql_type = "Schacht")]
-pub struct EndPortSchacht {
-    pub name: String,
-}
-
 #[derive(cynic::QueryFragment, Debug, Copy, Clone, PartialEq, Eq, Hash)]
 #[cynic(graphql_type = "PanelPort")]
 pub struct PortPanelId {
     pub panel: PanelId,
 }
-#[derive(cynic::QueryFragment, Debug, Copy, Clone, PartialEq, Eq, Hash)]
-#[cynic(graphql_type = "Panel")]
-pub struct PanelId {
-    pub id: i32,
-}
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CablePath {
-    pub far_schacht: RemoteSchacht,
-}
-
-#[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
-#[cynic(graphql_type = "Schacht")]
-pub struct RemoteSchacht {
-    pub name: String,
-}
-
-#[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Cable {
-    pub id: i32,
-    pub name: String,
-    pub bundle_count: i32,
-    pub fiber_count: i32,
+    pub far_schacht: SchachtRef,
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone)]
@@ -225,12 +202,6 @@ pub struct Fiber {
     pub bundle: i32,
     pub fiber: i32,
     pub cable: CableId,
-}
-
-#[derive(cynic::QueryFragment, Debug, Copy, Clone, PartialEq, Eq, Hash)]
-#[cynic(graphql_type = "Cable")]
-pub struct CableId {
-    pub id: i32,
 }
 
 #[derive(cynic::QueryVariables, Debug)]

@@ -1,14 +1,14 @@
 use crate::components::icon_button::IconButton;
 use crate::components::page_layout::{PageLayout, object_title};
 use crate::components::unsaved::Unsaved;
+use crate::graphql::authenticated::{CableId, CableSize};
 use crate::{
     components::{fiber::FiberNumber, table::ListModel},
     error::FrontendError,
     graphql::authenticated::{
         PortSide, PortType,
         connections::{
-            Cable, CableEnd, CableId, Fiber, FiberKeyInput, PlannedPanel, PortUsageInput,
-            UpdatePortUsage,
+            CableEnd, Fiber, FiberKeyInput, PlannedPanel, PortUsageInput, UpdatePortUsage,
         },
     },
     icons::{IconFiberConnected, IconFiberCut, IconLink, IconUnlink},
@@ -330,11 +330,11 @@ impl Component for LoopPortEditor {
                 if let (
                     Some(PlannedPanel { ports, .. }),
                     Some(CableEnd {
-                        cable: Cable { id: cable_a_id, .. },
+                        cable: CableSize { id: cable_a_id, .. },
                         ..
                     }),
                     Some(CableEnd {
-                        cable: Cable { id: cable_b_id, .. },
+                        cable: CableSize { id: cable_b_id, .. },
                         ..
                     }),
                 ) = (&self.current_situation, &self.cable_a, &self.cable_b)

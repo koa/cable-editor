@@ -1,7 +1,8 @@
+use crate::graphql::authenticated::{CableRef, SchachtRef};
 use crate::{
     error::FrontendError,
     graphql::{
-        authenticated::{ParentChainPanel, PortType, schema},
+        authenticated::{PanelRef, PortType, schema},
         query,
     },
 };
@@ -64,28 +65,14 @@ pub struct ChangedPortPanel {
     pub id: i32,
     pub name: Option<String>,
     /// From the root panel down to the parent
-    pub parent_chain: Vec<ParentChainPanel>,
-    pub schacht: WorkOrderSchacht,
-}
-
-#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
-#[cynic(graphql_type = "Schacht")]
-pub struct WorkOrderSchacht {
-    pub id: i32,
-    pub name: String,
+    pub parent_chain: Vec<PanelRef>,
+    pub schacht: SchachtRef,
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
 #[cynic(graphql_type = "Fiber")]
 pub struct WorkOrderFiber {
-    pub cable: WorkOrderCable,
+    pub cable: CableRef,
     pub bundle: i32,
     pub fiber: i32,
-}
-
-#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
-#[cynic(graphql_type = "Cable")]
-pub struct WorkOrderCable {
-    pub id: i32,
-    pub name: String,
 }

@@ -1,4 +1,5 @@
 use crate::error::FrontendError;
+use crate::graphql::authenticated::SchachtRef;
 use crate::graphql::authenticated::schema;
 use crate::graphql::{mutate, query};
 use yew_oauth2::context::OAuth2Context;
@@ -66,22 +67,16 @@ pub struct CableDuct {
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
 #[cynic(graphql_type = "CablePath")]
 pub struct CablePath {
-    pub near_schacht: CableSegmentEndSchacht,
+    pub near_schacht: SchachtRef,
     pub segments: Vec<CablePathSegment>,
 }
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
 #[cynic(graphql_type = "CablePathSegment")]
 pub struct CablePathSegment {
     pub duct: CableDuct,
-    pub far_schacht: CableSegmentEndSchacht,
+    pub far_schacht: SchachtRef,
 }
 
-#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
-#[cynic(graphql_type = "Schacht")]
-pub struct CableSegmentEndSchacht {
-    pub id: i32,
-    pub name: String,
-}
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
 #[cynic(graphql_type = "Schacht")]
 pub struct AvailableDuctsOnSchacht {
@@ -92,7 +87,7 @@ pub struct AvailableDuctsOnSchacht {
 #[cynic(graphql_type = "PotentialPathSegment")]
 pub struct PotentialDuct {
     pub duct: CableDuct,
-    pub schacht: CableSegmentEndSchacht,
+    pub schacht: SchachtRef,
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
@@ -160,17 +155,16 @@ impl CablePath {
     }
 }
 
-impl CableSegmentEndSchacht {
-    pub async fn fetch_connected_ducts(
-        &self,
-        credentials: Option<&OAuth2Context>,
-    ) -> Result<Vec<PotentialDuct>, FrontendError> {
-        Ok(
-            query::<FetchAvailableDuctFromSchacht, _>(Variables { id: self.id }, credentials)
-                .await?
-                .schacht
-                .map(|s| s.connecting_duct)
-                .unwrap_or_default(),
-        )
-    }
+/// The ducts connecting to the Schacht
+pub async fn fetch_connected_ducts(
+    credentials: Option<&OAuth2Context>,
+    schacht_id: i32,
+) -> Result<Vec<PotentialDuct>, FrontendError> {
+    Ok(
+        query::<FetchAvailableDuctFromSchacht, _>(Variables { id: schacht_id }, credentials)
+            .await?
+            .schacht
+            .map(|s| s.connecting_duct)
+            .unwrap_or_default(),
+    )
 }

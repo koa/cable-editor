@@ -1,3 +1,4 @@
+use crate::graphql::authenticated::{OwnerId, SchachtId, SchachtTypRef};
 use crate::{
     error::FrontendError,
     graphql::{
@@ -17,7 +18,7 @@ struct SchachtPropertiesVariables {
 struct SchachtPropertiesQuery {
     #[arguments(schachtId: $schacht_id)]
     schacht: Option<SchachtProperties>,
-    list_schacht_typ: Vec<SchachtTypeEntry>,
+    list_schacht_typ: Vec<SchachtTypRef>,
     list_owner: Vec<OwnerChoice>,
 }
 
@@ -32,20 +33,14 @@ pub struct SchachtProperties {
     /// LV95, as stored
     pub position: Option<Lv95Point>,
     pub location: Option<GeoPoint>,
-    pub owner: SchachtOwnerRef,
+    pub owner: OwnerId,
     pub lagebestimmung: Genauigkeit,
-}
-
-#[derive(cynic::QueryFragment, Debug, Clone, Copy, PartialEq)]
-#[cynic(graphql_type = "Owner")]
-pub struct SchachtOwnerRef {
-    pub id: i32,
 }
 
 /// What a Schacht's properties choose from.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SchachtChoices {
-    pub types: Box<[SchachtTypeEntry]>,
+    pub types: Box<[SchachtTypRef]>,
     pub owners: Box<[OwnerChoice]>,
 }
 
@@ -55,17 +50,10 @@ pub struct SchachtTypeRef {
     pub id: i32,
 }
 
-#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
-#[cynic(graphql_type = "SchachtTyp")]
-pub struct SchachtTypeEntry {
-    pub id: i32,
-    pub name: Option<String>,
-}
-
 #[derive(cynic::QueryFragment, Debug)]
 #[cynic(graphql_type = "Query")]
 struct SchachtChoicesQuery {
-    list_schacht_typ: Vec<SchachtTypeEntry>,
+    list_schacht_typ: Vec<SchachtTypRef>,
     list_owner: Vec<OwnerChoice>,
 }
 
@@ -151,12 +139,6 @@ pub async fn convert_point(
             .await?
             .convert_point,
     )
-}
-
-#[derive(cynic::QueryFragment, Debug, Clone, Copy)]
-#[cynic(graphql_type = "Schacht")]
-pub struct SchachtId {
-    pub id: i32,
 }
 
 #[derive(cynic::QueryVariables)]

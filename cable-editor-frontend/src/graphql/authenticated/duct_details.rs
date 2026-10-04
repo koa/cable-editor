@@ -1,10 +1,9 @@
+use crate::graphql::authenticated::CableSize;
+use crate::graphql::authenticated::map::MapSchacht;
 use crate::{
     error::FrontendError,
     graphql::{
-        authenticated::{
-            DateTime, Genauigkeit, GeoPoint, list_ducts::duct_title, schacht_types::SchachtTypIcon,
-            schema,
-        },
+        authenticated::{DateTime, Genauigkeit, GeoPoint, list_ducts::duct_title, schema},
         query,
     },
 };
@@ -31,9 +30,9 @@ pub struct DuctDetails {
     pub length: Option<f64>,
     /// From Schacht A to Schacht Z, missing without geometry
     pub line: Option<Vec<GeoPoint>>,
-    pub schacht_a: DuctEnd,
-    pub schacht_z: DuctEnd,
-    pub cables: Vec<DuctCable>,
+    pub schacht_a: MapSchacht,
+    pub schacht_z: MapSchacht,
+    pub cables: Vec<CableSize>,
     pub owner: DuctOwner,
     /// Delivered to the Leitungskataster
     pub leitungskataster: bool,
@@ -58,25 +57,6 @@ impl DuctDetails {
             &self.schacht_z.name,
         )
     }
-}
-
-#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
-#[cynic(graphql_type = "Schacht")]
-pub struct DuctEnd {
-    pub id: i32,
-    pub name: String,
-    pub location: Option<GeoPoint>,
-    /// Its icon on the map
-    pub typ: Option<SchachtTypIcon>,
-}
-
-#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
-#[cynic(graphql_type = "Cable")]
-pub struct DuctCable {
-    pub id: i32,
-    pub name: String,
-    pub bundle_count: i32,
-    pub fiber_count: i32,
 }
 
 pub async fn fetch_duct_details(

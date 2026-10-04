@@ -14,10 +14,8 @@ use crate::{
     error::FrontendError,
     graphql::authenticated::{
         PortType,
-        panel_overview::{
-            FiberOwnEndOverview, PlannedChildPanelOverview, PlannedPanelOverview,
-            PlannedPortOverview, PortUsageOverview, SchachtOverview, UsedEndPortOverview,
-        },
+        connections::{FiberOwnEnd, PlannedPort, PortUsageFragment, Schacht, UsedEndPort},
+        panel_overview::{PlannedChildPanelOverview, PlannedPanelOverview},
     },
     icons::IconLink,
     pages::router::{PanelView, PlanView},
@@ -431,12 +429,7 @@ impl ShowPanel {
         }
     }
 
-    fn render_ports_table(
-        &self,
-        ports: &[PlannedPortOverview],
-        schacht: &SchachtOverview,
-        _panel_id: i32,
-    ) -> Html {
+    fn render_ports_table(&self, ports: &[PlannedPort], schacht: &Schacht, _panel_id: i32) -> Html {
         if ports.is_empty() {
             return html! {
                 <div class="pf-v6-u-p-md pf-v6-u-color-200 pf-v6-u-text-align-center empty-state-box">
@@ -473,7 +466,7 @@ impl ShowPanel {
         }
     }
 
-    fn render_port_row(&self, port: &PlannedPortOverview, schacht: &SchachtOverview) -> Html {
+    fn render_port_row(&self, port: &PlannedPort, schacht: &Schacht) -> Html {
         let port_label = port_label(port.label.as_deref(), port.order_number).into_owned();
 
         let (type_text, type_class) = match port.port_type {
@@ -606,11 +599,7 @@ impl ShowPanel {
         }
     }
 
-    fn render_port_mobile_card(
-        &self,
-        port: &PlannedPortOverview,
-        schacht: &SchachtOverview,
-    ) -> Html {
+    fn render_port_mobile_card(&self, port: &PlannedPort, schacht: &Schacht) -> Html {
         let port_label = port_label(port.label.as_deref(), port.order_number).into_owned();
 
         let (type_text, type_class) = match port.port_type {
@@ -696,8 +685,8 @@ impl ShowPanel {
 
     fn render_connection_cell(
         &self,
-        usage_opt: Option<&PortUsageOverview>,
-        schacht: &SchachtOverview,
+        usage_opt: Option<&PortUsageFragment>,
+        schacht: &Schacht,
         _side_name: &str,
     ) -> Html {
         let Some(usage) = usage_opt else {
@@ -774,7 +763,7 @@ impl ShowPanel {
     }
 }
 
-fn count_used_ports(ports: &[PlannedPortOverview]) -> usize {
+fn count_used_ports(ports: &[PlannedPort]) -> usize {
     ports
         .iter()
         .filter(|p| {
@@ -784,7 +773,7 @@ fn count_used_ports(ports: &[PlannedPortOverview]) -> usize {
         .count()
 }
 
-fn count_modified_ports(ports: &[PlannedPortOverview]) -> usize {
+fn count_modified_ports(ports: &[PlannedPort]) -> usize {
     ports
         .iter()
         .filter(|p| {
@@ -795,7 +784,7 @@ fn count_modified_ports(ports: &[PlannedPortOverview]) -> usize {
 }
 
 /// The port the fiber ends at on its other end, if used there.
-fn cable_end_port(option: Option<&FiberOwnEndOverview>) -> Option<&UsedEndPortOverview> {
+fn cable_end_port(option: Option<&FiberOwnEnd>) -> Option<&UsedEndPort> {
     option
         .and_then(|f| f.other_end.as_ref())
         .and_then(|e| e.used_port.as_ref())

@@ -1,7 +1,9 @@
+use crate::graphql::authenticated::map::MapSchacht;
+use crate::graphql::authenticated::{CableId, OwnerId, SchachtId};
 use crate::{
     error::FrontendError,
     graphql::{
-        authenticated::{Genauigkeit, GeoPoint, schacht_types::SchachtTypIcon, schema},
+        authenticated::{Genauigkeit, GeoPoint, schema},
         mutate, query,
     },
 };
@@ -17,14 +19,14 @@ struct DuctPropertiesVariables {
 struct DuctPropertiesQuery {
     #[arguments(ductId: $duct_id)]
     duct: Option<DuctProperties>,
-    list_schacht: Vec<SchachtChoice>,
+    list_schacht: Vec<MapSchacht>,
     list_owner: Vec<OwnerChoice>,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
 #[cynic(graphql_type = "Query")]
 struct ChoicesQuery {
-    list_schacht: Vec<SchachtChoice>,
+    list_schacht: Vec<MapSchacht>,
     list_owner: Vec<OwnerChoice>,
 }
 
@@ -34,24 +36,18 @@ struct ChoicesQuery {
 pub struct DuctProperties {
     pub id: i32,
     pub description: Option<String>,
-    pub schacht_a: DuctPropertiesEnd,
-    pub schacht_z: DuctPropertiesEnd,
+    pub schacht_a: SchachtId,
+    pub schacht_z: SchachtId,
     /// From Schacht A to Schacht Z, missing without geometry
     pub line: Option<Vec<GeoPoint>>,
     /// Metres, missing without geometry
     pub length: Option<f64>,
-    pub cables: Vec<DuctPropertiesCable>,
+    pub cables: Vec<CableId>,
     pub owner: OwnerId,
     /// Delivered to the Leitungskataster
     pub leitungskataster: bool,
     pub lagebestimmung: Genauigkeit,
     pub width_mm: Option<i32>,
-}
-
-#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
-#[cynic(graphql_type = "Owner")]
-pub struct OwnerId {
-    pub id: i32,
 }
 
 /// An owner to choose for a duct; the default one is preselected for a new duct.
@@ -66,31 +62,8 @@ pub struct OwnerChoice {
 /// The choices of a duct's properties: the Schächte and the owners.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DuctChoices {
-    pub schaechte: Box<[SchachtChoice]>,
+    pub schaechte: Box<[MapSchacht]>,
     pub owners: Box<[OwnerChoice]>,
-}
-
-#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
-#[cynic(graphql_type = "Schacht")]
-pub struct DuctPropertiesEnd {
-    pub id: i32,
-}
-
-#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
-#[cynic(graphql_type = "Cable")]
-pub struct DuctPropertiesCable {
-    pub id: i32,
-}
-
-/// A Schacht to choose as end of a duct.
-#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
-#[cynic(graphql_type = "Schacht")]
-pub struct SchachtChoice {
-    pub id: i32,
-    pub name: String,
-    pub location: Option<GeoPoint>,
-    /// Its icon on the map
-    pub typ: Option<SchachtTypIcon>,
 }
 
 /// The duct (missing if it doesn't exist; not asked for a new one) and the Schächte and owners

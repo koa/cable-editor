@@ -67,6 +67,74 @@ pub fn write_port_label(out: &mut impl Write, label: &str) -> fmt::Result {
     write!(out, " : {label}")
 }
 
+// Objects as the queries refer to them, shared so each is declared once
+
+#[derive(cynic::QueryFragment, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cynic(graphql_type = "Schacht")]
+pub struct SchachtId {
+    pub id: i32,
+}
+
+/// A Schacht to link to
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
+#[cynic(graphql_type = "Schacht")]
+pub struct SchachtRef {
+    pub id: i32,
+    pub name: String,
+}
+
+#[derive(cynic::QueryFragment, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cynic(graphql_type = "Cable")]
+pub struct CableId {
+    pub id: i32,
+}
+
+/// A cable to link to
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
+#[cynic(graphql_type = "Cable")]
+pub struct CableRef {
+    pub id: i32,
+    pub name: String,
+}
+
+/// A cable with the number of its fibers
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
+#[cynic(graphql_type = "Cable")]
+pub struct CableSize {
+    pub id: i32,
+    pub name: String,
+    pub bundle_count: i32,
+    pub fiber_count: i32,
+}
+
+#[derive(cynic::QueryFragment, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cynic(graphql_type = "Panel")]
+pub struct PanelId {
+    pub id: i32,
+}
+
+/// A panel to link to, its name missing if it has none
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
+#[cynic(graphql_type = "Panel")]
+pub struct PanelRef {
+    pub id: i32,
+    pub name: Option<String>,
+}
+
+#[derive(cynic::QueryFragment, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cynic(graphql_type = "Owner")]
+pub struct OwnerId {
+    pub id: i32,
+}
+
+/// A Schacht type to link to
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
+#[cynic(graphql_type = "SchachtTyp")]
+pub struct SchachtTypRef {
+    pub id: i32,
+    pub name: Option<String>,
+}
+
 /// WGS84, for the map
 #[derive(cynic::QueryFragment, Debug, Clone, Copy, PartialEq)]
 pub struct GeoPoint {
@@ -196,11 +264,4 @@ pub enum PortType {
 pub enum PortSide {
     FRONT,
     BACK,
-}
-
-#[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
-#[cynic(graphql_type = "Panel")]
-pub struct ParentChainPanel {
-    pub id: i32,
-    pub name: Option<String>,
 }

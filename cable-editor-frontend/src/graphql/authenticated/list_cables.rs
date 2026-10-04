@@ -1,9 +1,7 @@
+use crate::graphql::authenticated::SchachtRef;
 use crate::{
     error::FrontendError,
-    graphql::{
-        authenticated::{cable_details::CableSegmentEndSchacht, schema},
-        mutate, query,
-    },
+    graphql::{authenticated::schema, mutate, query},
 };
 use yew_oauth2::context::OAuth2Context;
 
@@ -26,8 +24,8 @@ pub struct CableListEntry {
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
 #[cynic(graphql_type = "CablePath")]
 pub struct CablePathDescription {
-    pub near_schacht: CableSegmentEndSchacht,
-    pub far_schacht: CableSegmentEndSchacht,
+    pub near_schacht: SchachtRef,
+    pub far_schacht: SchachtRef,
 }
 
 pub async fn fetch_cables_list(

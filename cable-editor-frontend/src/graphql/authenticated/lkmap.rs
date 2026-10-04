@@ -1,10 +1,12 @@
 //! The delivery to the Leitungskataster (see docs/leitungskataster.md): the files of the whole
 //! network, what goes into them, the deliveries so far and when the next one is due.
 
+use crate::graphql::authenticated::SchachtRef;
+use crate::graphql::authenticated::map::MapSchacht;
 use crate::{
     error::FrontendError,
     graphql::{
-        authenticated::{DateTime, GeoPoint, schacht_types::SchachtTypIcon, schema},
+        authenticated::{DateTime, GeoPoint, schema},
         mutate, query,
     },
 };
@@ -25,9 +27,9 @@ pub struct LkmapExport {
     /// Missing when nothing has a position
     pub checksum: Option<String>,
     pub perimeter_area: Option<Vec<GeoPoint>>,
-    pub schaechte: Vec<LkmapSchacht>,
+    pub schaechte: Vec<MapSchacht>,
     pub ducts: Vec<LkmapDuct>,
-    pub schaechte_without_position: Vec<LkmapSchacht>,
+    pub schaechte_without_position: Vec<MapSchacht>,
     pub ducts_without_line: Vec<LkmapDuct>,
     /// The latest first
     pub deliveries: Vec<LkmapDelivery>,
@@ -35,29 +37,13 @@ pub struct LkmapExport {
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
-#[cynic(graphql_type = "Schacht")]
-pub struct LkmapSchacht {
-    pub id: i32,
-    pub name: String,
-    pub location: Option<GeoPoint>,
-    /// Its icon on the map
-    pub typ: Option<SchachtTypIcon>,
-}
-
-#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
 #[cynic(graphql_type = "Duct")]
 pub struct LkmapDuct {
     pub id: i32,
     pub description: Option<String>,
-    pub schacht_a: LkmapDuctEnd,
-    pub schacht_z: LkmapDuctEnd,
+    pub schacht_a: SchachtRef,
+    pub schacht_z: SchachtRef,
     pub line: Option<Vec<GeoPoint>>,
-}
-
-#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
-#[cynic(graphql_type = "Schacht")]
-pub struct LkmapDuctEnd {
-    pub name: String,
 }
 
 impl LkmapDuct {

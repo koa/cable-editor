@@ -6,6 +6,7 @@
 //! a loop the plan adds is nothing to do.
 
 use crate::components::select::Select;
+use crate::graphql::authenticated::SchachtRef;
 use crate::{
     components::{
         fiber::FiberNumber,
@@ -16,7 +17,7 @@ use crate::{
     error::FrontendError,
     graphql::authenticated::{
         PortType, local_time, port_label,
-        work_order::{PortChange, WorkOrderFiber, WorkOrderPlan, WorkOrderSchacht},
+        work_order::{PortChange, WorkOrderFiber, WorkOrderPlan},
         write_panel_path, write_port_label,
     },
     util::get_credentials,
@@ -151,7 +152,7 @@ impl WorkOrder {
 
 /// What is to be done in a Schacht
 struct SchachtOrder<'a> {
-    schacht: &'a WorkOrderSchacht,
+    schacht: &'a SchachtRef,
     panels: Vec<PanelOrder<'a>>,
 }
 
@@ -175,7 +176,7 @@ struct Splice<'a> {
 /// what changes in the field.
 fn schacht_orders(changes: &[PortChange]) -> Vec<SchachtOrder<'_>> {
     type Panels<'a> = BTreeMap<(Option<&'a str>, i32), PanelOrder<'a>>;
-    let mut by_schacht = BTreeMap::<(&str, i32), (&WorkOrderSchacht, Panels)>::new();
+    let mut by_schacht = BTreeMap::<(&str, i32), (&SchachtRef, Panels)>::new();
     for change in changes {
         let panel = &change.port.panel;
         let schacht = &panel.schacht;

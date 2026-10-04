@@ -1,3 +1,4 @@
+use crate::graphql::authenticated::{CableId, SchachtRef};
 use crate::{
     error::FrontendError,
     graphql::{authenticated::schema, query},
@@ -15,11 +16,11 @@ struct ListDuctQuery {
 pub struct DuctListEntry {
     pub id: i32,
     pub description: Option<String>,
-    pub schacht_a: DuctListSchacht,
-    pub schacht_z: DuctListSchacht,
+    pub schacht_a: SchachtRef,
+    pub schacht_z: SchachtRef,
     /// Metres, missing without geometry
     pub length: Option<f64>,
-    pub cables: Vec<DuctListCable>,
+    pub cables: Vec<CableId>,
     pub owner: DuctListOwner,
     /// Delivered to the Leitungskataster
     pub leitungskataster: bool,
@@ -39,19 +40,6 @@ impl DuctListEntry {
             &self.schacht_z.name,
         )
     }
-}
-
-#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
-#[cynic(graphql_type = "Schacht")]
-pub struct DuctListSchacht {
-    pub id: i32,
-    pub name: String,
-}
-
-#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
-#[cynic(graphql_type = "Cable")]
-pub struct DuctListCable {
-    pub id: i32,
 }
 
 /// How a duct is named: its description, else the Schächte it connects.

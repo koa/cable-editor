@@ -1,4 +1,5 @@
 use crate::error::FrontendError;
+use crate::graphql::authenticated::SchachtId;
 use crate::graphql::authenticated::schema;
 use crate::graphql::query;
 use cable_editor_common::ObjectKind;
@@ -22,16 +23,10 @@ pub struct PanelHierarchy {
     pub id: i32,
     pub name: Option<String>,
     pub parent_order: Option<i32>,
-    pub schacht: PanelSchacht,
+    pub schacht: SchachtId,
     pub parent_chain: Vec<ParentChainWithSiblingsPanel>,
     pub siblings: Vec<ChildPanelNav>,
     pub children: Vec<ChildPanelNav>,
-}
-
-#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
-#[cynic(graphql_type = "Schacht")]
-pub struct PanelSchacht {
-    pub id: i32,
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
