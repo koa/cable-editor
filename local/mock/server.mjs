@@ -222,10 +222,25 @@ const schacht = (id) => {
     rootPanels: () => panelRows.filter((p) => p[2] === id && p[3] === null).map((p) => panel(p[0])),
     cable: ({ cableId }) => cablesAt(id).find((c) => c.cable.id === cableId) ?? null,
     cables: () => cablesAt(id),
+    strayCables: ({ planId }) => strayCablesAt(planId, id),
   };
 };
+const endsAt = (c, schachtId) => c[5] === schachtId || c[6] === schachtId;
 const cablesAt = (schachtId) =>
-  cableRows.filter((c) => c[5] === schachtId || c[6] === schachtId).map((c) => cableEnd(c[0], schachtId));
+  cableRows.filter((c) => endsAt(c, schachtId)).map((c) => cableEnd(c[0], schachtId));
+// Cables at ports of the Schacht in the plan that don't end there
+const strayCablesAt = (planId, schachtId) => {
+  const ids = new Set();
+  for (const p of ports) {
+    if (panel(p.panelId).schachtId !== schachtId) continue;
+    for (const side of ['FRONT', 'BACK']) {
+      const cableId = usageRow(planId, p.id, side)?.row[2];
+      if (cableId != null && !endsAt(cableRows.find((c) => c[0] === cableId), schachtId)) ids.add(cableId);
+    }
+  }
+  return [...ids].sort((a, b) => a - b).map((cableId) => cableEnd(cableId, schachtId));
+};
+const endsHere = (cableId, schachtId) => endsAt(cableRows.find((c) => c[0] === cableId), schachtId);
 // Each cable runs through a duct of its own (id 700 + cable id), bent a little between its
 // Schächte; ducts created in the UI have no cables.
 // ductRows: { id, description, a, z, points: [{ lat, lng }] between the Schächte }
@@ -356,7 +371,7 @@ const cablePath = (cableId, fromSchacht) => {
 };
 const cableEnd = (cableId, schachtId) => ({
   cable: () => cable(cableId), schacht: () => schacht(schachtId),
-  path: () => cablePath(cableId, schachtId),
+  path: () => (endsHere(cableId, schachtId) ? cablePath(cableId, schachtId) : null),
   usedPorts: ({ planId }) => fiberUsagesAt(planId, cableId, schachtId),
   fibers: () => {
     const c = cableRows.find((r) => r[0] === cableId);
@@ -380,7 +395,7 @@ const fiberEnd = (cableId, schachtId, bundle, fiber) => ({
   cable: () => cableEnd(cableId, schachtId), bundle, fiber,
   usedPort: ({ planId }) =>
     fiberUsagesAt(planId, cableId, schachtId).find((u) => u.fiber.bundle === bundle && u.fiber.fiber === fiber) ?? null,
-  otherEnd: () => fiberEnd(cableId, farOf(cableId, schachtId), bundle, fiber),
+  otherEnd: () => (endsHere(cableId, schachtId) ? fiberEnd(cableId, farOf(cableId, schachtId), bundle, fiber) : null),
 });
 const plan = (id) => {
   const p = plans.find((x) => x.id === id);

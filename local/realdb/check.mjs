@@ -545,6 +545,12 @@ if (PG_LOG) {
     issues.length > 0 && issues.every((i) => i.cable.name === 'K1' && i.problem === 'CABLE_NOT_ENDING' && i.port.panel.schacht.id === 4),
     issues.map((i) => `${i.plan.name}:${i.cable.name}-${i.fiber}:${i.problem}`).join());
   check('brokenPortUsageCount counts them', (await brokenCount()) === issues.length);
+  const berg = (await gql(`{ schacht(schachtId: 4) { cables { cable { name } }
+    strayCables(planId: ${issues[0].plan.id}) { cable { name } path { farSchacht { id } } fibers { otherEnd { bundle } } } } }`)).schacht;
+  check('strayCables offers the cable passing through, without path and other ends',
+    !berg.cables.some((c) => c.cable.name === 'K1') && berg.strayCables.length === 1 && berg.strayCables[0].cable.name === 'K1'
+      && berg.strayCables[0].path === null && berg.strayCables[0].fibers.every((f) => f.otherEnd === null),
+    JSON.stringify(berg.strayCables).slice(0, 200));
   const remove = 'mutation($u:[PortUsageKeyInput!]!){ removeBrokenPortUsages(usages:$u) }';
   const key = (i) => ({ portId: i.port.id, planId: i.plan.id, side: i.side });
   const fitting = { portId: ports[4][0], planId: 0, side: 'FRONT' };

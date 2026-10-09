@@ -69,7 +69,8 @@ pub struct SchachtPanelEntry {
 #[cynic(graphql_type = "CableEnd")]
 pub struct SchachtCableEnd {
     pub cable: CableRef,
-    pub path: SchachtCablePath,
+    /// Always there, as `Schacht.cables` lists the cables ending in it
+    pub path: Option<SchachtCablePath>,
 }
 
 /// Oriented from the requested Schacht, so far_schacht is the other end.
@@ -80,9 +81,12 @@ pub struct SchachtCablePath {
 }
 
 impl SchachtCableEnd {
-    /// Cable label text: "<cable>-<destination>".
+    /// Cable label text: "<cable> - <destination>".
     pub fn label_text(&self) -> String {
-        format!("{} - {}", self.cable.name, self.path.far_schacht.name)
+        match &self.path {
+            Some(path) => format!("{} - {}", self.cable.name, path.far_schacht.name),
+            None => self.cable.name.clone(),
+        }
     }
 }
 

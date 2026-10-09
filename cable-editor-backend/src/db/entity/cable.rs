@@ -195,6 +195,20 @@ pub async fn cable_usages_at(
 }
 
 impl CableEnd {
+    /// The cable's path from this end, if it ends here.
+    async fn oriented_path(&self, ctx: &Context<'_>) -> ApiResult<Option<CablePath>> {
+        let Some(path) = self.cable.load_path(ctx).await? else {
+            return Ok(None);
+        };
+        Ok(if path.near_schacht == self.schacht.id {
+            Some(path)
+        } else if path.far_schacht_id() == self.schacht.id {
+            Some(path.reverse())
+        } else {
+            None
+        })
+    }
+
     /// `cable_usages_at`, loaded in batches with the request's other cable ends.
     async fn usages(&self, ctx: &Context<'_>, plan_id: i32) -> ApiResult<Box<[PortUsage]>> {
         Ok(get_loader(ctx)?
@@ -216,20 +230,10 @@ impl CableEnd {
     async fn schacht(&self) -> &Schacht {
         &self.schacht
     }
-    async fn path(&self, ctx: &Context<'_>) -> ApiResult<CablePath> {
-        let path = self
-            .cable
-            .load_path(ctx)
-            .await?
-            .ok_or(UserError::InvalidCableEnd {
-                schacht: self.schacht.id,
-                cable: self.cable.id,
-            })?;
-        Ok(if path.near_schacht == self.schacht.id {
-            path
-        } else {
-            path.reverse()
-        })
+    /// The path from this end; missing if the cable doesn't end in the Schacht (its fibers at
+    /// ports there don't fit, docs/datenpruefung.md)
+    async fn path(&self, ctx: &Context<'_>) -> ApiResult<Option<CablePath>> {
+        self.oriented_path(ctx).await
     }
 
     async fn used_ports(&self, ctx: &Context<'_>, plan_id: i32) -> ApiResult<Box<[PortUsage]>> {
@@ -270,16 +274,12 @@ impl FiberEnd {
         let usages = self.cable.usages(ctx, plan_id).await?;
         Ok(fiber_usage(&usages, self.bundle, self.fiber).cloned())
     }
+    /// Missing if the cable has no path or doesn't end here
     async fn other_end(&self, ctx: &Context<'_>) -> ApiResult<Option<FiberEnd>> {
-        let Some(path) = self.cable.cable.load_path(ctx).await? else {
+        let Some(path) = self.cable.oriented_path(ctx).await? else {
             return Ok(None);
         };
-        let other_schacht_id = if path.near_schacht == self.cable.schacht.id {
-            path.far_schacht_id()
-        } else {
-            path.near_schacht
-        };
-        let schacht = load_one(ctx, SchachtId(other_schacht_id)).await?;
+        let schacht = load_one(ctx, SchachtId(path.far_schacht_id())).await?;
         Ok(Some(FiberEnd {
             cable: CableEnd {
                 cable: self.cable.cable.clone(),

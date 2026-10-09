@@ -100,15 +100,37 @@ pub struct Schacht {
     pub id: i32,
     pub name: String,
     pub cables: Vec<CableEnd>,
+    /// Cables at ports here that don't end here (docs/datenpruefung.md), offered to take their
+    /// fibers off
+    #[arguments(planId: $plan_id)]
+    pub stray_cables: Vec<CableEnd>,
+}
+impl Schacht {
+    /// The cables ending here, then those at its ports that don't
+    pub fn all_cables(&self) -> impl Iterator<Item = &CableEnd> {
+        self.cables.iter().chain(&self.stray_cables)
+    }
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
 #[cynic(variables = "PanelVariables")]
 pub struct CableEnd {
     pub cable: CableSize,
-    pub path: CablePath,
+    /// Missing if the cable doesn't end in the Schacht
+    pub path: Option<CablePath>,
     pub fibers: Vec<FiberOwnEnd>,
 }
+impl CableEnd {
+    /// The Schacht at its other end, or that it doesn't end here
+    pub fn destination(&self) -> &str {
+        self.path
+            .as_ref()
+            .map_or(NOT_ENDING, |path| path.far_schacht.name.as_str())
+    }
+}
+/// Where a cable from `Schacht.strayCables` goes
+pub const NOT_ENDING: &str = "⚠ endet nicht in diesem Schacht";
+
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq, Eq, Hash)]
 #[cynic(graphql_type = "FiberEnd", variables = "PanelVariables")]
 pub struct FiberOwnEnd {

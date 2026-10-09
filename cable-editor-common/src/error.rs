@@ -137,11 +137,6 @@ pub enum UserError {
         duct: i32,
         schacht: i32,
     },
-    /// The path of a cable doesn't end at the Schacht it was asked from
-    InvalidCableEnd {
-        schacht: i32,
-        cable: i32,
-    },
 
     // Port usages
     /// The change would leave these port usages not fitting their cables

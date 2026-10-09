@@ -1,7 +1,6 @@
 # Konzept: Port-Belegungen prüfen
 
-Stand: 09.10.2026 – Prüfung bei Änderungen, Seite „Datenprüfung“ und Hinweis umgesetzt; die
-Editoren für kaputte Belegungen noch offen.
+Stand: 09.10.2026 – umgesetzt.
 
 ## Ziel
 
@@ -73,8 +72,14 @@ viele es sind (`brokenPortUsageCount`, für alle sichtbar). Admins finden dort d
 Der Hinweis fragt bei jeder Navigation und jede Minute neu nach, nach dem Löschen sofort. Der
 Mock hat eine solche Belegung mit `MOCK_ISSUES=1`.
 
-## Offen
+## In den Panels lösen
 
-- Loop-Editor und „Fasern auflegen“ bieten auch die Kabel an, die an ihren Ports liegen, aber
-  nicht mehr im Schacht enden. Sie sind markiert, damit sich die Belegung lösen lässt. Die
-  Übersicht eines Panels markiert die betroffenen Ports.
+Der Loop-Editor und „Fasern auflegen“ bieten die Kabel an, die im Schacht enden
+(`Schacht.cables`), dazu die Kabel, die in der Planung an seinen Ports liegen, aber nicht im
+Schacht enden (`Schacht.strayCables(planId)`). Bei einem solchen Kabel fehlt der Weg
+(`CableEnd.path` ist leer), ebenso das andere Ende seiner Fasern. Die Editoren markieren es mit
+„endet nicht in diesem Schacht“. Der Loop-Editor nimmt Kabel A von der Front der Loop-Ports und
+Kabel B von deren Rückseite. So lassen sich die Loops eines solchen Kabels auftrennen und seine
+Fasern entfernen. Neue Fasern bietet „Fasern auflegen“ nur von Kabeln an, die im Schacht enden.
+Die Übersicht eines Panels markiert Belegungen, deren Kabel nicht im Schacht endet oder die
+Faser nicht hat. Eine doppelt belegte Faser zeigt nur die Seite „Datenprüfung“.

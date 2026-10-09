@@ -79,9 +79,6 @@ pub fn user_error(error: &UserError) -> String {
         UserError::DuctNotAtSchacht { duct, schacht } => {
             format!("Die Trasse {duct} führt nicht zum Schacht {schacht}")
         }
-        UserError::InvalidCableEnd { schacht, cable } => {
-            format!("Das Kabel {cable} endet nicht im Schacht {schacht}")
-        }
 
         // A toast lists them below (`components::port_usage_issues`)
         UserError::PortUsagesBroken { usages } => match usages.len() {

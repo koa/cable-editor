@@ -13,8 +13,8 @@ use crate::{
     graphql::authenticated::{
         PortSide, PortType,
         connections::{
-            CableEnd, FiberKeyInput, FiberOwnEnd, PlannedPanel, PlannedPort, PortUsageInput,
-            PortUsageUpdateAction, UpdatePortUsage, UsedEndPort,
+            CableEnd, FiberKeyInput, FiberOwnEnd, NOT_ENDING, PlannedPanel, PlannedPort,
+            PortUsageInput, PortUsageUpdateAction, UpdatePortUsage, UsedEndPort,
         },
         port_label,
     },
@@ -624,9 +624,15 @@ impl AttachFiber {
             </div>}
         });
 
+        // Only a cable from `strayCables` has no path
+        let stray = cable_end.is_some_and(|c| c.path.is_none()).then(|| {
+            html! {<div class="pf-v6-u-font-size-sm pf-v6-u-text-color-status-warning">{NOT_ENDING}</div>}
+        });
+
         html! {
             <>
                 <div style="font-weight: bold;">{cable_name}</div>
+                {stray}
                 <div style="margin-top: 4px; margin-bottom: 4px;">
                     <FiberNumber bundle={key.bundle} fiber={key.fiber}/>
                 </div>
@@ -640,7 +646,8 @@ impl AttachFiber {
             return Html::default();
         };
 
-        // The bundles of the cables that still have free fibers
+        // The bundles of the cables that still have free fibers (only the cables ending here, a
+        // stray cable's fibers can only be taken off)
         let mut available_bundles = Vec::new();
         for cable in &situation.panel.schacht.cables {
             let free_fibers = self.get_free_fibers(cable);
@@ -728,8 +735,7 @@ impl AttachFiber {
         self.current_situation.loaded().and_then(|s| {
             s.panel
                 .schacht
-                .cables
-                .iter()
+                .all_cables()
                 .find(|c| c.cable.id == cable_id)
         })
     }

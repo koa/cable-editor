@@ -49,10 +49,9 @@ impl TableEntryRenderer<Columns> for SchachtCableEnd {
             Columns::Cable => {
                 Cell::new(html!(<CableLink id={self.cable.id} text={self.cable.name.clone()}/>))
             }
-            Columns::Destination => {
-                let far = &self.path.far_schacht;
-                Cell::new(html!(<SchachtLink id={far.id} text={far.name.clone()}/>))
-            }
+            Columns::Destination => Cell::new(html!(if let Some(path) = &self.path {
+                <SchachtLink id={path.far_schacht.id} text={path.far_schacht.name.clone()}/>
+            })),
             Columns::Label => Cell::new(self.label_text().into_prop_value()),
             Columns::Print => {
                 Cell::new(html!(<PrintLabelButton texts={LabelText::single(self.label_text())}/>))

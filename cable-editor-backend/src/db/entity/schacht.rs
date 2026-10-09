@@ -1,6 +1,7 @@
 use crate::graphql::error::ApiResult;
 use async_graphql::{Context, Object};
 use cable_editor_common::{ObjectKind, UserError};
+use diesel::sql_types::Integer;
 use diesel::{
     Associations, BoolExpressionMethods, ExpressionMethods, HasQuery, Identifiable, Insertable,
     OptionalExtension, QueryDsl,
@@ -159,6 +160,36 @@ impl Schacht {
                     })
                     .collect()
             })?)
+    }
+    /// The cables attached to ports here in the plan though they don't end here (their usages
+    /// don't fit, docs/datenpruefung.md), so the editors can take their fibers off
+    async fn stray_cables(&self, ctx: &Context<'_>, plan_id: i32) -> ApiResult<Box<[CableEnd]>> {
+        let mut connection = get_connection(ctx).await?;
+        Ok(diesel::sql_query(
+            r#"
+            SELECT DISTINCT k.*
+            FROM effective_port_usage($1) u
+            JOIN panel_port pp ON pp.id = u.port_id
+            JOIN panel p ON p.id = pp.panel_id
+            JOIN kabel k ON k.id = u.cable
+            WHERE p.schacht_id = $2
+              AND NOT EXISTS (SELECT FROM kabel_ende e WHERE e.kabel = k.id AND e.schacht = $2)
+            ORDER BY k.id
+            "#,
+        )
+        .bind::<Integer, _>(plan_id)
+        .bind::<Integer, _>(self.id)
+        .load::<Cable>(&mut connection)
+        .await
+        .map(|cables| {
+            cables
+                .into_iter()
+                .map(|cable| CableEnd {
+                    cable,
+                    schacht: self.clone(),
+                })
+                .collect()
+        })?)
     }
 }
 

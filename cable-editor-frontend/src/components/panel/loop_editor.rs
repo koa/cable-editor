@@ -9,7 +9,8 @@ use crate::{
     graphql::authenticated::{
         PortSide, PortType,
         connections::{
-            CableEnd, Fiber, FiberKeyInput, PlannedPanel, PortUsageInput, UpdatePortUsage,
+            CableEnd, Fiber, FiberKeyInput, PlannedPanel, PlannedPort, PortUsageFragment,
+            PortUsageInput, UpdatePortUsage,
         },
     },
     icons::{IconFiberConnected, IconFiberCut, IconLink, IconUnlink},
@@ -53,7 +54,7 @@ fn cable_option(cable: &CableEnd) -> (i32, String) {
             cable.cable.name,
             cable.cable.bundle_count,
             cable.cable.fiber_count,
-            cable.path.far_schacht.name
+            cable.destination()
         ),
     )
 }
@@ -246,16 +247,14 @@ impl Component for LoopPortEditor {
                     let found_cable = data
                         .panel
                         .schacht
-                        .cables
-                        .iter()
+                        .all_cables()
                         .find(|c| c.cable.id == cable_id)
                         .cloned();
                     if let Some(found) = &found_cable
                         && let Some(other_cable) = data
                             .panel
                             .schacht
-                            .cables
-                            .iter()
+                            .all_cables()
                             .filter(|c| {
                                 c.cable.id != cable_id
                                     && c.cable.bundle_count == found.cable.bundle_count
@@ -278,8 +277,7 @@ impl Component for LoopPortEditor {
                     self.cable_b = data
                         .panel
                         .schacht
-                        .cables
-                        .iter()
+                        .all_cables()
                         .find(|c| c.cable.id == cable_id)
                         .cloned();
                     ctx.link().send_message(Msg::PrepareLoopStates);
@@ -458,26 +456,16 @@ impl Component for LoopPortEditor {
                 true
             }
             Msg::DataFetched(Some(data)) => {
-                let used_cables = data
-                    .ports
-                    .iter()
-                    .filter(|p| p.port_type == PortType::Loop)
-                    .flat_map(|p| {
-                        p.front_usage
-                            .iter()
-                            .chain(p.back_usage.iter())
-                            .filter_map(|u| u.fiber.map(|f| f.cable.id))
-                    })
-                    .collect::<HashSet<_>>();
-                let mut mapped_cables = data
-                    .panel
-                    .schacht
-                    .cables
-                    .iter()
-                    .filter(|c| used_cables.contains(&c.cable.id))
-                    .cloned();
-                self.cable_a = mapped_cables.next();
-                self.cable_b = mapped_cables.next();
+                // Cable A is attached to the fronts of the loop ports, cable B to their backs
+                let loop_ports = || data.ports.iter().filter(|p| p.port_type == PortType::Loop);
+                let attached = |usage: fn(&PlannedPort) -> &Option<PortUsageFragment>| {
+                    loop_ports()
+                        .find_map(|p| usage(p).as_ref().and_then(|u| u.fiber).map(|f| f.cable.id))
+                        .and_then(|id| data.panel.schacht.all_cables().find(|c| c.cable.id == id))
+                        .cloned()
+                };
+                self.cable_a = attached(|p| &p.front_usage);
+                self.cable_b = attached(|p| &p.back_usage);
                 if self.cable_b.is_some() {
                     ctx.link().send_message(Msg::PrepareLoopStates);
                 }
@@ -554,7 +542,7 @@ impl LoopPortEditor {
             let entries = self
                 .current_situation
                 .loaded()
-                .map(|s| s.panel.schacht.cables.clone())
+                .map(|s| s.panel.schacht.all_cables().cloned().collect::<Vec<_>>())
                 .unwrap_or_default();
             let onchange = ctx
                 .link()
@@ -578,8 +566,7 @@ impl LoopPortEditor {
                 .map(|s| {
                     s.panel
                         .schacht
-                        .cables
-                        .iter()
+                        .all_cables()
                         .filter(|c| {
                             c.cable.id != cable_a.cable.id
                                 && c.cable.bundle_count == cable_a.cable.bundle_count
@@ -743,20 +730,38 @@ impl LoopPortEditor {
     }
 }
 
+/// "<far Schacht>(<cable>)", just the cable if it doesn't end here
+fn end_text(cable: &CableEnd) -> String {
+    match &cable.path {
+        Some(path) => format!("{}({})", path.far_schacht.name, cable.cable.name),
+        None => cable.cable.name.clone(),
+    }
+}
+
 /// The selected pair of cables whose fibers are looped.
 fn render_active_pair(a: &CableEnd, b: &CableEnd) -> Html {
     let connection_description = format!(
-        "{}({})->{}({}) ({}x{}).",
-        a.path.far_schacht.name,
-        a.cable.name,
-        b.path.far_schacht.name,
-        b.cable.name,
+        "{}->{} ({}x{}).",
+        end_text(a),
+        end_text(b),
         a.cable.bundle_count,
         a.cable.fiber_count
     );
+    let stray = [a, b]
+        .into_iter()
+        .filter(|cable| cable.path.is_none())
+        .map(|cable| cable.cable.name.as_str())
+        .collect::<Vec<_>>();
     html! {
-        <Alert title="Verbindung" r#type={AlertType::Info} inline=true>
-            <p>{connection_description}</p>
-        </Alert>
+        <>
+            <Alert title="Verbindung" r#type={AlertType::Info} inline=true>
+                <p>{connection_description}</p>
+            </Alert>
+            if !stray.is_empty() {
+                <Alert title="Kabel endet nicht in diesem Schacht" r#type={AlertType::Warning} inline=true>
+                    <p>{format!("{} endet nicht in diesem Schacht, seine Fasern passen nicht zu diesen Ports (Datenprüfung). Mit „Auftrennen“ lassen sich seine Loops lösen.", stray.join(" und "))}</p>
+                </Alert>
+            }
+        </>
     }
 }

@@ -15,7 +15,9 @@ use crate::{
     error::FrontendError,
     graphql::authenticated::{
         PortType,
-        connections::{FiberOwnEnd, PlannedPort, PortUsageFragment, Schacht, UsedEndPort},
+        connections::{
+            FiberOwnEnd, NOT_ENDING, PlannedPort, PortUsageFragment, Schacht, UsedEndPort,
+        },
         panel_overview::{PlannedChildPanelOverview, PlannedPanelOverview},
     },
     icons::IconLink,
@@ -676,17 +678,15 @@ impl ShowPanel {
             };
         };
 
-        // Find cable in schacht.cables
         let cable_end = schacht
-            .cables
-            .iter()
+            .all_cables()
             .find(|c| c.cable.id == fiber_info.cable.id);
 
         let cable_name = cable_end
             .map(|c| c.cable.name.clone())
             .unwrap_or_else(|| format!("Kabel {}", fiber_info.cable.id));
 
-        let far_schacht = cable_end.map(|c| &c.path.far_schacht);
+        let far_schacht = cable_end.and_then(|c| c.path.as_ref().map(|path| &path.far_schacht));
 
         // Find specific fiber end to get other end termination details
         let fiber_own_end = cable_end.and_then(|c| {
@@ -696,6 +696,14 @@ impl ShowPanel {
         });
 
         let destination = cable_end_port(fiber_own_end);
+        // Usages not fitting their cable (docs/datenpruefung.md)
+        let problem = if far_schacht.is_none() {
+            Some(NOT_ENDING)
+        } else if fiber_own_end.is_none() {
+            Some("⚠ das Kabel hat diese Faser nicht")
+        } else {
+            None
+        };
 
         html! {
             <div class="slot-assigned">
@@ -718,6 +726,9 @@ impl ShowPanel {
                 <div class="slot-fiber-row pf-v6-u-my-xs">
                     <FiberNumber bundle={fiber_info.bundle} fiber={fiber_info.fiber}/>
                 </div>
+                if let Some(problem) = problem {
+                    <div class="pf-v6-u-font-size-xs pf-v6-u-text-color-status-warning">{problem}</div>
+                }
                 if let Some(dest) = destination {
                     <div class="slot-destination-row pf-v6-u-font-size-xs">
                         <span class="destination-icon">{Icon::ArrowRight}</span>
