@@ -24,6 +24,24 @@ pub fn confirm_delete(
     })
 }
 
+/// Like `confirm_delete`, for several objects at once: "<count> <kinds> werden gelöscht".
+pub fn confirm_delete_all(
+    scope: &Scope<impl BaseComponent>,
+    kinds: &'static str,
+    count: usize,
+    on_confirm: Callback<()>,
+) -> Callback<MouseEvent> {
+    let Some(backdropper) = get_backdrop(scope) else {
+        return Callback::noop();
+    };
+    let text = AttrValue::from(format!(
+        "{count} {kinds} werden gelöscht. Das lässt sich nicht rückgängig machen."
+    ));
+    Callback::from(move |_| {
+        open_confirmation(&backdropper, kinds, text.clone(), on_confirm.clone());
+    })
+}
+
 /// Like `confirm_delete`, for a deletion started elsewhere, e.g. from a menu item.
 pub fn ask_delete(
     scope: &Scope<impl BaseComponent>,
@@ -42,6 +60,17 @@ fn open_delete_confirmation(
     name: AttrValue,
     on_confirm: Callback<()>,
 ) {
+    let text = format!("{kind} „{name}“ wird gelöscht. Das lässt sich nicht rückgängig machen.");
+    open_confirmation(backdropper, kind, text.into(), on_confirm);
+}
+
+/// `kind` names what is deleted in the title, `text` says what happens.
+fn open_confirmation(
+    backdropper: &Backdropper,
+    kind: &'static str,
+    text: AttrValue,
+    on_confirm: Callback<()>,
+) {
     let on_confirm = {
         let backdropper = backdropper.clone();
         Callback::from(move |()| {
@@ -54,7 +83,7 @@ fn open_delete_confirmation(
         Callback::from(move |()| backdropper.close())
     };
     backdropper.open(Backdrop::new(html! {
-        <DeleteConfirmationDialog {kind} {name} {on_confirm} {on_cancel}/>
+        <DeleteConfirmationDialog {kind} {text} {on_confirm} {on_cancel}/>
     }));
 }
 
@@ -62,7 +91,8 @@ fn open_delete_confirmation(
 #[derive(Debug, Clone, PartialEq, Properties)]
 pub struct DeleteConfirmationDialogProperties {
     pub kind: &'static str,
-    pub name: AttrValue,
+    /// What happens, naming what is deleted
+    pub text: AttrValue,
     #[prop_or_default]
     pub on_confirm: Callback<()>,
     #[prop_or_default]
@@ -92,7 +122,7 @@ pub fn DeleteConfirmationDialog(props: &DeleteConfirmationDialogProperties) -> H
                 variant={ModalVariant::Small}
                 {footer}
             >
-                <p>{format!("{} „{}“ wird gelöscht. Das lässt sich nicht rückgängig machen.", props.kind, props.name)}</p>
+                <p>{props.text.clone()}</p>
             </Modal>
         </Bullseye>
     }

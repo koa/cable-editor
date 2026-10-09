@@ -43,6 +43,7 @@ const ROUTES = [
   { v: ['PlanView::CabinetType'], path: '/plan/0/cabinettype/1' },
   { v: ['PlanView::Leitungskataster'], path: '/plan/0/leitungskataster', needs: 'ADMIN' },
   { v: ['PlanView::Netbox'], path: '/plan/0/netbox', needs: 'ADMIN' },
+  { v: ['PlanView::Datenpruefung'], path: '/plan/0/datenpruefung', needs: 'ADMIN' },
   { v: ['PlanView::Panel', 'PanelView::Show'], path: '/plan/0/panel/22/show' },
   { v: ['PanelView::Edit'], path: '/plan/1/panel/22/edit', needs: 'PLANNER' },
   { v: ['PanelView::Attach'], path: '/plan/1/panel/22/attach', needs: 'PLANNER' },

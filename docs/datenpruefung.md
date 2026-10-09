@@ -1,7 +1,7 @@
 # Konzept: Port-Belegungen prüfen
 
-Stand: 09.10.2026 – Prüfung bei Änderungen umgesetzt; Seite „Datenprüfung“, Hinweis und
-Reparatur noch offen.
+Stand: 09.10.2026 – Prüfung bei Änderungen, Seite „Datenprüfung“ und Hinweis umgesetzt; die
+Editoren für kaputte Belegungen noch offen.
 
 ## Ziel
 
@@ -54,14 +54,27 @@ listet darunter höchstens acht Belegungen auf („Ist-Zustand · Berg: Rack > K
 (`components/port_usage_issues.rs`) beim Anzeigen nach, über die Query `ports` sowie die Namen
 der Kabel und Planungen.
 
+## Erkennen und löschen
+
+Die Seite „Datenprüfung“ (`PlanView::Datenpruefung`, nur für Admins, im Bereichsmenü unter
+Stammdaten) zeigt alle Belegungen aus dem View, eine Zeile pro Belegung mit allen ihren Problemen:
+Planung, Port (verlinkt auf das Panel in dieser Planung), Seite, Kabel und Faser, Problem. Die
+Query dafür ist `portUsageIssues`.
+
+„Löschen“ gibt es pro Zeile und als „Alle löschen“ (`removeBrokenPortUsages`). Im Ist-Zustand
+wird die Zeile gelöscht, in einer Planung wird die Faser entfernt (eine Zeile ohne Kabel). Das
+ist neben dem Umsetzen die einzige Änderung am Ist-Zustand, weil dessen Daten falsch sind.
+Gelöscht wird nur, was der View dann noch meldet. Liegt eine Faser an zwei Ports, bleibt sie
+deshalb am zweiten, sobald der erste gelöscht ist. Wer eine Faser anders auflegen will, tut das
+im Panel.
+
+Solange es solche Belegungen gibt, zeigt `BrokenPortUsageHint` in der Breadcrumb-Leiste, wie
+viele es sind (`brokenPortUsageCount`, für alle sichtbar). Admins finden dort den Weg zur Seite.
+Der Hinweis fragt bei jeder Navigation und jede Minute neu nach, nach dem Löschen sofort. Der
+Mock hat eine solche Belegung mit `MOCK_ISSUES=1`.
+
 ## Offen
 
-- Seite „Datenprüfung“ (Admins, Stammdaten): alle Zeilen des Views mit Planung, Port, Kabel und
-  Faser, Problem; „Entfernen“ pro Zeile und für alle. Entfernt werden nur Zeilen, die der View
-  noch meldet, auch im Ist-Zustand. Das ist die eine direkte Änderung des Ist-Zustands, denn
-  dessen Daten stimmen nicht.
-- Hinweis in der Breadcrumb-Leiste wie bei Netbox, solange es Probleme gibt; für Admins mit dem
-  Weg zur Seite.
 - Loop-Editor und „Fasern auflegen“ bieten auch die Kabel an, die an ihren Ports liegen, aber
   nicht mehr im Schacht enden. Sie sind markiert, damit sich die Belegung lösen lässt. Die
   Übersicht eines Panels markiert die betroffenen Ports.

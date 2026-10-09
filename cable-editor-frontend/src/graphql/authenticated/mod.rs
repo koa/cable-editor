@@ -133,6 +133,9 @@ pub struct PanelPortInfo {
 }
 
 impl PanelPortInfo {
+    pub fn panel_id(&self) -> i32 {
+        self.panel.id
+    }
     /// The port after the path of its panel, "Schacht: Parent > Panel : Port"
     pub fn port_label(&self) -> String {
         let panel = &self.panel;
@@ -156,6 +159,7 @@ impl PanelPortInfo {
 #[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
 #[cynic(graphql_type = "Panel")]
 pub struct PanelInfo {
+    id: i32,
     name: Option<String>,
     schacht: SchachtInfo,
     parent_chain: Vec<ParentChainPanelInfo>,

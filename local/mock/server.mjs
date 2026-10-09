@@ -20,6 +20,9 @@ const ROLE = process.env.MOCK_ROLE ?? 'ADMIN';
 // Result of the last Netbox sync (docs/netbox-sync.md): OK (default), ISSUES, FEHLER or none
 // (NEU, no run yet)
 const NETBOX = process.env.MOCK_NETBOX ?? 'OK';
+// MOCK_ISSUES=1: a port usage not fitting its cable in the current state (docs/datenpruefung.md),
+// for the hint and the page "Datenprüfung"
+const ISSUES = process.env.MOCK_ISSUES === '1';
 // Mutations failing with an unexpected server error (extensions.origin) like a broken database,
 // separated by commas ("*": all), to check how the frontend shows failures. Changed while running
 // by GET /mock/fail?mutations=updateCable,deleteCable (empty: none)
@@ -181,6 +184,8 @@ portsOf(22).forEach((p, i) => baseUsage.push([p.id, 'FRONT', 11, 1, i + 1]));
 portsOf(23).slice(0, 6).forEach((p, i) => baseUsage.push([p.id, 'FRONT', 13, 2, i + 1]));
 portsOf(24).slice(0, 6).forEach((p, i) => baseUsage.push([p.id, 'FRONT', 12, 1, i + 1]));
 portsOf(32).slice(0, 8).forEach((p, i) => baseUsage.push([p.id, 'FRONT', 11, 1, i + 1]));
+// K-1002 runs from SCH 101 to SCH 103, not to Kassette A in SCH 102
+if (ISSUES) baseUsage.push([portsOf(32)[8].id, 'BACK', 12, 1, 1]);
 portsOf(32).slice(0, 4).forEach((p, i) => baseUsage.push([p.id, 'BACK', 14, 1, i + 1]));
 portsOf(23).slice(6, 8).forEach((p, i) => planUsage[1].push([p.id, 'FRONT', 15, 1, i + 1]));
 // Loops: fibers 1-4 of bundle 2 pass through from K-1002 to K-1001 uncut; plan 1 cuts 3 and 4
@@ -411,6 +416,18 @@ const plan = (id) => {
     },
   };
 };
+// Like the view port_usage_issue: the usages whose cable doesn't end in the panel's Schacht or
+// lacks the fiber (not a fiber attached twice), a row per problem
+const portUsageIssues = () => [[0, baseUsage], ...Object.entries(planUsage).map(([id, rows]) => [Number(id), rows])]
+  .flatMap(([planId, rows]) => rows.filter((u) => u[2] !== null).flatMap(([portId, side, cableId, bundle, fiber]) => {
+    const c = cableRows.find((r) => r[0] === cableId);
+    const schachtId = panelRows.find((r) => r[0] === ports.find((p) => p.id === portId).panelId)[2];
+    const problems = [];
+    if (c[5] !== schachtId && c[6] !== schachtId) problems.push('CABLE_NOT_ENDING');
+    if (bundle > c[2] || fiber > c[3]) problems.push('FIBER_OUT_OF_RANGE');
+    return problems.map((problem) => ({ planId, portId, side, cableId, bundle, fiber, problem }));
+  }));
+
 // The last run of the automatic Netbox sync, as MOCK_NETBOX says
 const netboxSync = () => {
   const connectors = ports.filter((p) => p.portType === 'CONNECTOR');
@@ -562,11 +579,28 @@ const root = {
   netboxSync: () => netboxSync(),
   plan: ({ planId }) => plan(planId),
   panel: ({ panelId }) => panel(panelId),
+  portUsageIssues: () => portUsageIssues().map((i) => ({
+    plan: plan(i.planId), port: panelPort(i.portId), side: i.side, cable: cable(i.cableId),
+    bundle: i.bundle, fiber: i.fiber, problem: i.problem,
+  })),
+  brokenPortUsageCount: () => new Set(portUsageIssues().map((i) => `${i.planId}:${i.portId}:${i.side}`)).size,
   ports: ({ portIds }) => portIds.filter((id) => ports.some((p) => p.id === id)).map(panelPort),
   netboxDevices: () => devices.map((d) => device(d.id)),
   netboxDevice: ({ netboxDeviceId }) => device(netboxDeviceId),
   // mutations
   createCable: () => cable(11), deleteCable: () => true,
+  removeBrokenPortUsages: ({ usages }) => {
+    let removed = 0;
+    for (const { portId, planId, side } of usages) {
+      if (!portUsageIssues().some((i) => i.portId === portId && i.planId === planId && i.side === side)) continue;
+      const rows = planId === 0 ? baseUsage : planUsage[planId];
+      const index = rows.findIndex((u) => u[0] === portId && u[1] === side);
+      if (planId === 0) rows.splice(index, 1);
+      else rows[index] = [portId, side, null, null, null];
+      removed += 1;
+    }
+    return removed;
+  },
   // Like the backend: fewer fibers than attached are refused with the usages it would break
   updateCable: ({ cableId, fibers }) => {
     if (fibers) {

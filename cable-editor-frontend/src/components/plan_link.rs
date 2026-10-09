@@ -75,3 +75,20 @@ pub fn PlanNameLink(props: &PlanNameLinkProps) -> Html {
     };
     html!(<Link<AppRoute> {to}>{props.text.clone()}</Link<AppRoute>>)
 }
+
+#[derive(Properties, PartialEq)]
+pub struct PlanViewLinkProps {
+    pub plan_id: i32,
+    pub to: PlanView,
+    pub children: Html,
+}
+
+/// Link to a view of another plan than the current page's, e.g. to where a problem lies.
+#[function_component]
+pub fn PlanViewLink(props: &PlanViewLinkProps) -> Html {
+    let to = AppRoute::Plan {
+        plan_id: props.plan_id,
+        view: props.to.clone(),
+    };
+    html!(<Link<AppRoute> {to}>{props.children.clone()}</Link<AppRoute>>)
+}

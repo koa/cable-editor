@@ -12,6 +12,7 @@ use crate::{
             eigentuemer::Eigentuemer,
             panel::{Panel, PanelPort},
             plan::Plan,
+            port_usage_issue::{self, PortUsageIssue},
             schacht::{Schacht, SchachtTyp},
         },
         schema::{eigentuemer, kabel, panel, panel_port, plan, schacht, schacht_typ, trasse},
@@ -31,6 +32,7 @@ use diesel_async::{
     AsyncPgConnection, RunQueryDsl, pooled_connection::deadpool::Object as DpObject,
 };
 use mutation::Mutation;
+use std::collections::HashSet;
 use tokio::sync::MutexGuard;
 
 pub type AuthenticatedGraphqlSchema = Schema<Query, Mutation, EmptySubscription>;
@@ -131,6 +133,22 @@ impl Query {
             .first(&mut connection)
             .await
             .optional()?)
+    }
+    /// The port usages not fitting their cables (docs/datenpruefung.md), a row per problem
+    #[graphql(guard = "RoleGuard(Role::Admin)")]
+    async fn port_usage_issues(&self, ctx: &Context<'_>) -> ApiResult<Box<[PortUsageIssue]>> {
+        let mut connection = get_connection(ctx).await?;
+        port_usage_issue::all(&mut connection).await
+    }
+    /// How many port usages don't fit their cables, for the hint everyone sees
+    async fn broken_port_usage_count(&self, ctx: &Context<'_>) -> ApiResult<usize> {
+        let mut connection = get_connection(ctx).await?;
+        let usages: HashSet<_> = port_usage_issue::all(&mut connection)
+            .await?
+            .iter()
+            .map(|issue| (issue.plan_id, issue.port_id, issue.side))
+            .collect();
+        Ok(usages.len())
     }
     /// Ports by id, e.g. to name the ones an error refers to; ids not found are left out.
     async fn ports(&self, ctx: &Context<'_>, port_ids: Vec<i32>) -> ApiResult<Vec<PanelPort>> {

@@ -112,19 +112,19 @@ impl Component for NetboxHint {
             AppRoute::ListOfPlans => BASELINE_PLAN_ID,
         };
         let (icon, class) = if danger {
-            (Icon::ExclamationCircle, "netbox-hint__icon--danger")
+            (Icon::ExclamationCircle, "bar-hint__icon--danger")
         } else {
-            (Icon::ExclamationTriangle, "netbox-hint__icon--warning")
+            (Icon::ExclamationTriangle, "bar-hint__icon--warning")
         };
         html! {
             <PopupMenu
                 variant={MenuToggleVariant::Plain}
-                icon={html!(<span class={classes!("netbox-hint__icon", class)}>{icon}</span>)}
-                text={html!(<span class="netbox-hint__text">{text}</span>)}
+                icon={html!(<span class={classes!("bar-hint__icon", class)}>{icon}</span>)}
+                text={html!(<span class="bar-hint__text">{text}</span>)}
                 aria_label={text}
                 align_end=true
             >
-                <div class="netbox-hint__message">
+                <div class="bar-hint__message">
                     <p>{message}</p>
                     if !details.is_empty() {
                         <ul>{for details.iter().map(|detail| html!(<li>{detail}</li>))}</ul>

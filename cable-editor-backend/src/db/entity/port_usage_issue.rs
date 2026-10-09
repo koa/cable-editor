@@ -1,9 +1,19 @@
 //! Port usages not fitting their cables (the view `port_usage_issue`), and the check refusing
 //! changes that would add ones.
 
-use crate::db::{entity::panel::PortSide, schema};
-use crate::graphql::error::ApiResult;
-use async_graphql::Enum;
+use crate::db::{
+    entity::{
+        cable::Cable,
+        panel::{PanelPort, PortSide},
+        plan::Plan,
+    },
+    schema,
+};
+use crate::graphql::{
+    error::ApiResult,
+    loader::{CableId, PanelPortId, PlanId, load_one},
+};
+use async_graphql::{Context, Enum, Object};
 use cable_editor_common::{UserError, error::BrokenPortUsage};
 use diesel::{ExpressionMethods, HasQuery, QueryDsl};
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
@@ -128,4 +138,39 @@ pub struct PortUsageIssue {
     pub bundle: i32,
     pub fiber: i32,
     pub problem: PortUsageProblem,
+}
+
+#[Object]
+impl PortUsageIssue {
+    async fn port(&self, ctx: &Context<'_>) -> ApiResult<PanelPort> {
+        load_one(ctx, PanelPortId(self.port_id)).await
+    }
+    async fn plan(&self, ctx: &Context<'_>) -> ApiResult<Plan> {
+        load_one(ctx, PlanId(self.plan_id)).await
+    }
+    async fn side(&self) -> PortSide {
+        self.side
+    }
+    async fn cable(&self, ctx: &Context<'_>) -> ApiResult<Cable> {
+        load_one(ctx, CableId(self.cable)).await
+    }
+    async fn bundle(&self) -> i32 {
+        self.bundle
+    }
+    async fn fiber(&self) -> i32 {
+        self.fiber
+    }
+    async fn problem(&self) -> PortUsageProblem {
+        self.problem
+    }
+}
+
+/// All port usages not fitting their cables, by plan, port and side.
+pub async fn all(connection: &mut AsyncPgConnection) -> ApiResult<Box<[PortUsageIssue]>> {
+    use schema::port_usage_issue as issue;
+    Ok(PortUsageIssue::query()
+        .order_by((issue::plan_id, issue::port_id, issue::side, issue::problem))
+        .load(connection)
+        .await?
+        .into_boxed_slice())
 }

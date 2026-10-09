@@ -721,16 +721,16 @@ body {
   color: var(--pf-t--global--icon--color--status--danger--default);
 }
 
-// components/netbox.rs: the hint in the breadcrumb bar
-.netbox-hint__icon--warning {
+// The hints in the breadcrumb bar: components/netbox.rs (Netbox not in sync), components/port_usage_issues.rs (port usages not fitting)
+.bar-hint__icon--warning {
   color: var(--pf-t--global--icon--color--status--warning--default);
 }
 
-.netbox-hint__icon--danger {
+.bar-hint__icon--danger {
   color: var(--pf-t--global--icon--color--status--danger--default);
 }
 
-.netbox-hint__message {
+.bar-hint__message {
   padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
   max-width: 24rem;
   overflow-wrap: anywhere;
@@ -837,7 +837,7 @@ body {
 
   // The icon is enough on phones, the breadcrumb needs the room
   .user-menu__name,
-  .netbox-hint__text {
+  .bar-hint__text {
     display: none;
   }
 

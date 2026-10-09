@@ -145,7 +145,9 @@ pub enum UserError {
 
     // Port usages
     /// The change would leave these port usages not fitting their cables
-    PortUsagesBroken { usages: Box<[BrokenPortUsage]> },
+    PortUsagesBroken {
+        usages: Box<[BrokenPortUsage]>,
+    },
 
     // Owners
     DefaultOwnerNotDeletable,

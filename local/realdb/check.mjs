@@ -527,6 +527,35 @@ const ring = coords(lk.perimeter.xtf);
 const [minE, maxE, minN, maxN] = [Math.min(...ring.map((c) => c[0])), Math.max(...ring.map((c) => c[0])), Math.min(...ring.map((c) => c[1])), Math.max(...ring.map((c) => c[1]))];
 check('the perimeter is a closed ring', ring.length > 4 && JSON.stringify(ring[0]) === JSON.stringify(ring.at(-1)), `${ring.length} points`);
 check('the perimeter lies around the delivered objects', coords(lk.lkmap.xtf).every(([e, n]) => e > minE + 9 && e < maxE - 9 && n > minN + 9 && n < maxN - 9));
+// ---------------------------------------------------------------- Datenprüfung
+// Port usages not fitting their cables: the API refuses to make them, so they are made with psql
+// (next to PG_LOG), the way a cable's path changed before the checks. Last: it deletes usages.
+const brokenCount = async () => (await gql('{ brokenPortUsageCount }')).brokenPortUsageCount;
+check('no port usage broken so far', (await brokenCount()) === 0);
+if (PG_LOG) {
+  const psql = (sql) => spawnSync(path.join(path.dirname(PG_LOG), 'pg/bin/psql'),
+    ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', 'cable', '-Atc', sql], { encoding: 'utf8' });
+  // K1 through Berg: its usages there break
+  psql(`insert into kabel_trasse (kabel, trasse, sequenz) values (${cables.K1}, 4, 2)`);
+  const issuesQuery = '{ portUsageIssues { plan { id name } port { id panel { schacht { id } } } side cable { name } bundle fiber problem } }';
+  const listed = await gql(issuesQuery);
+  console.log(`portUsageIssues${statements(listed)}`);
+  const issues = listed.portUsageIssues;
+  check('portUsageIssues lists the usages of a cable passing through',
+    issues.length > 0 && issues.every((i) => i.cable.name === 'K1' && i.problem === 'CABLE_NOT_ENDING' && i.port.panel.schacht.id === 4),
+    issues.map((i) => `${i.plan.name}:${i.cable.name}-${i.fiber}:${i.problem}`).join());
+  check('brokenPortUsageCount counts them', (await brokenCount()) === issues.length);
+  const remove = 'mutation($u:[PortUsageKeyInput!]!){ removeBrokenPortUsages(usages:$u) }';
+  const key = (i) => ({ portId: i.port.id, planId: i.plan.id, side: i.side });
+  const fitting = { portId: ports[4][0], planId: 0, side: 'FRONT' };
+  check('removeBrokenPortUsages leaves fitting usages', (await gql(remove, { u: [fitting] })).removeBrokenPortUsages === 0);
+  check('removeBrokenPortUsages deletes the broken ones', (await gql(remove, { u: issues.map(key) })).removeBrokenPortUsages === issues.length);
+  check('none broken after removing', (await brokenCount()) === 0);
+  await gql('mutation($c:Int!){ updateCable(cableId:$c, path:[1,2]) { id } }', { c: cables.K1 });
+} else {
+  console.log('skip Datenprüfung (needs PG_LOG for psql)');
+}
+
 // ilivalidator against the models of the SIA, like the canton's Checkservice (needs Java or nix
 // and the network; SKIP_ILIVALIDATOR=1 leaves it out)
 if (process.env.SKIP_ILIVALIDATOR) {

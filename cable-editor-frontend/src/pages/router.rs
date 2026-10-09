@@ -10,6 +10,7 @@ use crate::{
         netbox::NetboxHint,
         page_layout::PageLayout,
         panel::{attach_fiber::AttachFiber, loop_editor::LoopPortEditor, show::ShowPanel},
+        port_usage_issues::BrokenPortUsageHint,
         recovery::RetryScope,
         user::{RequireRole, UserMenu},
     },
@@ -29,6 +30,7 @@ use crate::{
         owner::list::ListOfOwners,
         panel::EditPanel,
         planning::{edit::EditPlan, list::ListOfPlannings},
+        port_usage_issues::PortUsageIssuesPage,
         work_order::WorkOrder,
     },
 };
@@ -192,6 +194,8 @@ pub enum PlanView {
     Leitungskataster,
     /// The automatic sync to Netbox (admins)
     Netbox,
+    /// The port usages not fitting their cables (admins, docs/datenpruefung.md)
+    Datenpruefung,
     Panel {
         id: i32,
         #[target(nested)]
@@ -222,6 +226,7 @@ impl PlanView {
             | PlanView::CabinetType { .. } => ("Schachttyp".into(), PlanView::ListOfCabinetTypes),
             PlanView::Leitungskataster => ("Leitungskataster".into(), PlanView::Leitungskataster),
             PlanView::Netbox => ("Netbox".into(), PlanView::Netbox),
+            PlanView::Datenpruefung => ("Datenprüfung".into(), PlanView::Datenpruefung),
         };
 
         // The areas of the plan in groups, each leading to its start page; the baseline plans no
@@ -253,6 +258,7 @@ impl PlanView {
                 &[
                     ("Eigentümer", PlanView::ListOfOwners),
                     ("Schachttyp", PlanView::ListOfCabinetTypes),
+                    ("Datenprüfung", PlanView::Datenpruefung),
                 ],
             ),
             (
@@ -338,7 +344,7 @@ impl AppRoute {
                     <div class="pf-v6-c-page__main-container">
                         <main class="pf-v6-c-page__main" id="main-content" tabindex="-1">
                             <PageSection r#type={PageSectionType::Breadcrumbs}>
-                                <div class="breadcrumb-bar">{breadcrumb}<NetboxHint {route}/><UserMenu/></div>
+                                <div class="breadcrumb-bar">{breadcrumb}<BrokenPortUsageHint route={route.clone()}/><NetboxHint {route}/><UserMenu/></div>
                             </PageSection>
                             <RequireRole {role}>{content}</RequireRole>
                         </main>
@@ -393,9 +399,10 @@ impl PlanView {
                 view: PanelView::Edit | PanelView::Loop | PanelView::Attach,
                 ..
             } => Role::Planner,
-            PlanView::NewCabinetType { .. } | PlanView::Leitungskataster | PlanView::Netbox => {
-                Role::Admin
-            }
+            PlanView::NewCabinetType { .. }
+            | PlanView::Leitungskataster
+            | PlanView::Netbox
+            | PlanView::Datenpruefung => Role::Admin,
             _ => Role::Reader,
         }
     }
@@ -432,6 +439,7 @@ impl PlanView {
             PlanView::Duct { id, view } => view.content(plan_id, id),
             PlanView::Leitungskataster => html!(<Leitungskataster {plan_id}/>),
             PlanView::Netbox => html!(<NetboxPage {plan_id}/>),
+            PlanView::Datenpruefung => html!(<PortUsageIssuesPage {plan_id}/>),
         }
     }
 }

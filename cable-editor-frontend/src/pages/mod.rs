@@ -9,6 +9,7 @@ pub mod netbox;
 pub mod owner;
 pub mod panel;
 pub mod planning;
+pub mod port_usage_issues;
 pub mod router;
 pub mod work_order;
 

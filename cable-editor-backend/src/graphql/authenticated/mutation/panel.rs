@@ -17,8 +17,9 @@ use async_graphql::{Context, InputObject, Object, OneofObject};
 use async_recursion::async_recursion;
 use cable_editor_common::UserError;
 use diesel::{
-    AsChangeset, BoolExpressionMethods, ExpressionMethods, QueryDsl, associations::HasTable,
-    dsl::max,
+    AsChangeset, BoolExpressionMethods, ExpressionMethods, QueryDsl,
+    associations::HasTable,
+    dsl::{exists, max},
 };
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use std::collections::HashMap;
@@ -305,6 +306,64 @@ impl PanelMutation {
 
         Ok(true)
     }
+    /// Removes port usages not fitting their cables (docs/datenpruefung.md): a row of the
+    /// baseline is deleted, one of a plan removes the fiber there. A usage fitting by now (e.g.
+    /// the other of a fiber attached twice, once the first is removed) stays. The baseline
+    /// changes here only because its rows are wrong. Returns how many were removed.
+    #[graphql(guard = "RoleGuard(Role::Admin)")]
+    async fn remove_broken_port_usages(
+        &self,
+        ctx: &Context<'_>,
+        usages: Vec<PortUsageKeyInput>,
+    ) -> ApiResult<usize> {
+        let mut connection = authenticated::get_connection(ctx).await?;
+        let conn: &mut AsyncPgConnection = &mut connection;
+        let mut removed = 0;
+        for PortUsageKeyInput {
+            port_id,
+            plan_id,
+            side,
+        } in usages
+        {
+            let broken: bool = diesel::select(exists(
+                schema::port_usage_issue::table
+                    .filter(schema::port_usage_issue::port_id.eq(port_id))
+                    .filter(schema::port_usage_issue::plan_id.eq(plan_id))
+                    .filter(schema::port_usage_issue::side.eq(side)),
+            ))
+            .get_result(conn)
+            .await?;
+            if !broken {
+                continue;
+            }
+            let row = schema::port_usage::table
+                .filter(schema::port_usage::port_id.eq(port_id))
+                .filter(schema::port_usage::plan_id.eq(plan_id))
+                .filter(schema::port_usage::side.eq(side));
+            if plan_id == BASELINE_PLAN_ID {
+                diesel::delete(row).execute(conn).await?;
+            } else {
+                diesel::update(row)
+                    .set((
+                        schema::port_usage::cable.eq(None::<i32>),
+                        schema::port_usage::bundle.eq(None::<i32>),
+                        schema::port_usage::fiber.eq(None::<i32>),
+                    ))
+                    .execute(conn)
+                    .await?;
+            }
+            removed += 1;
+        }
+        Ok(removed)
+    }
+}
+
+/// A port usage: the side of a port in a plan.
+#[derive(Debug, Clone, Copy, PartialEq, InputObject)]
+struct PortUsageKeyInput {
+    port_id: i32,
+    plan_id: i32,
+    side: PortSide,
 }
 
 #[derive(Debug, Clone, PartialEq, InputObject, Copy)]
