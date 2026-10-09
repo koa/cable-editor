@@ -665,7 +665,6 @@ impl EditCable {
                         html! {
                             <FormGroup label="Kabelweg" {label_icon}>
                                 <Table<CablePathColumn, ListModel<CablePathColumn, MemoizedTableModel<DuctPathEntry>>>
-                                    class="pf-m-warning"
                                     mode={TableMode::Compact}
                                     grid={TableGridMode::Medium}
                                     header={table_header}

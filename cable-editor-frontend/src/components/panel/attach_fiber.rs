@@ -25,8 +25,8 @@ use cable_editor_common::ObjectKind;
 use itertools::Itertools;
 use patternfly_yew::prelude::{
     Alert, AlertType, Button, ButtonVariant, Cell, CellContext, ExpansionState, Icon,
-    MemoizedTableModel, SelectItemRenderer, Spinner, Table, TableColumn, TableEntryRenderer,
-    TableGridMode, TableHeader, TableMode,
+    MemoizedTableModel, Panel, PanelMain, PanelMainBody, SelectItemRenderer, Spinner, Table,
+    TableColumn, TableEntryRenderer, TableGridMode, TableHeader, TableMode,
 };
 use std::{
     cell::RefCell,
@@ -350,9 +350,9 @@ impl AttachFiber {
         let can_save = has_changes && validation_errors.is_empty();
 
         html! {
-            <div class="pf-v6-c-panel">
-                <div class="pf-v6-c-panel__main">
-                    <div class="pf-v6-c-panel__main-body">
+            <Panel>
+                <PanelMain>
+                    <PanelMainBody>
                         { for validation_errors.iter().map(|err| html! {
                             <Alert title={err.clone()} r#type={AlertType::Warning} inline=true />
                         }) }
@@ -369,9 +369,9 @@ impl AttachFiber {
                                 onclick={ctx.link().callback(|_| Msg::Save)}
                             />
                         </div>
-                    </div>
-                </div>
-            </div>
+                    </PanelMainBody>
+                </PanelMain>
+            </Panel>
         }
     }
 

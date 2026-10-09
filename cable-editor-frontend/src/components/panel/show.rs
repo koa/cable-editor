@@ -25,7 +25,9 @@ use crate::{
     util::get_credentials,
 };
 use cable_editor_common::ObjectKind;
-use patternfly_yew::prelude::{Card, CardBody, CardTitle, Divider, Icon, Level, Title};
+use patternfly_yew::prelude::{
+    Card, CardBody, CardTitle, Color, Divider, Icon, Label, Level, Title,
+};
 use yew::{Component, Context, Html, Properties, classes, html, platform::spawn_local};
 
 #[derive(Properties, PartialEq, Clone)]
@@ -203,12 +205,7 @@ impl ShowPanel {
                             </div>
                             <div class="overview-header-badges">
                                 if modified_ports > 0 {
-                                    <span class="pf-v6-c-label pf-m-orange">
-                                        <span class="pf-v6-c-label__content">
-                                            <span class="pf-v6-c-label__icon">{Icon::InProgress}</span>
-                                            {format!("{modified_ports} Ports geändert")}
-                                        </span>
-                                    </span>
+                                    <Label color={Color::Orange} icon={Icon::InProgress} label={format!("{modified_ports} Ports geändert")}/>
                                 }
                             </div>
                         </div>
@@ -306,9 +303,7 @@ impl ShowPanel {
                                 </Title>
                             </div>
                             <div class="panel-section-actions">
-                                <span class="pf-v6-c-label pf-m-grey">
-                                    <span class="pf-v6-c-label__content">{format!("{} Ports", root_planned.ports.len())}</span>
-                                </span>
+                                <Label color={Color::Grey} label={format!("{} Ports", root_planned.ports.len())}/>
                             </div>
                         </div>
 
@@ -342,9 +337,7 @@ impl ShowPanel {
                                     </Title>
                                 </div>
                                 <div class="panel-section-actions">
-                                    <span class="pf-v6-c-label pf-m-cyan">
-                                        <span class="pf-v6-c-label__content">{format!("{} Ports", child.ports.len())}</span>
-                                    </span>
+                                    <Label color={Color::Teal} label={format!("{} Ports", child.ports.len())}/>
                                     <PanelLabelButton
                                         id={child_id}
                                         name={child.panel.name.clone()}
@@ -440,11 +433,7 @@ impl ShowPanel {
     fn render_port_row(&self, port: &PlannedPort, schacht: &Schacht) -> Html {
         let port_label = port_label(port.label.as_deref(), port.order_number).into_owned();
 
-        let (type_text, type_class) = match port.port_type {
-            PortType::Splice => ("Spleiss", "pf-m-green"),
-            PortType::Connector => ("Stecker", "pf-m-cyan"),
-            PortType::Loop => ("Loop", "pf-m-purple"),
-        };
+        let (type_text, type_color) = port_type_label(port.port_type);
         let loop_fiber = if port.port_type == PortType::Loop {
             if let Some(loop_fiber) = port
                 .front_usage
@@ -524,9 +513,7 @@ impl ShowPanel {
                         }
                     </div>
                     <div class="pf-v6-u-mt-xs pf-v6-u-display-flex pf-v6-u-align-items-center">
-                        <span class={classes!("pf-v6-c-label", type_class, "port-type-label")}>
-                            <span class="pf-v6-c-label__content">{type_text}</span>
-                        </span>
+                        <Label color={type_color} label={type_text}/>
                         <span class="pf-v6-u-font-size-xs pf-v6-u-color-200 pf-v6-u-ml-xs">
                             {format!("(#{})", port.order_number)}
                         </span>
@@ -544,9 +531,7 @@ impl ShowPanel {
                         }
                     </div>
                     <div class="pf-v6-u-mt-xs">
-                        <span class={classes!("pf-v6-c-label", type_class, "port-type-label")}>
-                            <span class="pf-v6-c-label__content">{type_text}</span>
-                        </span>
+                        <Label color={type_color} label={type_text}/>
                     </div>
                 </div>
             }
@@ -573,11 +558,7 @@ impl ShowPanel {
     fn render_port_mobile_card(&self, port: &PlannedPort, schacht: &Schacht) -> Html {
         let port_label = port_label(port.label.as_deref(), port.order_number).into_owned();
 
-        let (type_text, type_class) = match port.port_type {
-            PortType::Splice => ("Spleiss", "pf-m-green"),
-            PortType::Connector => ("Stecker", "pf-m-cyan"),
-            PortType::Loop => ("Loop", "pf-m-purple"),
-        };
+        let (type_text, type_color) = port_type_label(port.port_type);
 
         let loop_fiber = if port.port_type == PortType::Loop {
             if let Some(loop_fiber) = port
@@ -624,16 +605,9 @@ impl ShowPanel {
                 <div class="mobile-card-header">
                     {mobile_port_title}
                     <div class="mobile-card-badges">
-                        <span class={classes!("pf-v6-c-label", type_class)}>
-                            <span class="pf-v6-c-label__content">{type_text}</span>
-                        </span>
+                        <Label color={type_color} label={type_text}/>
                         if is_modified {
-                            <span class="pf-v6-c-label pf-m-orange">
-                                <span class="pf-v6-c-label__content">
-                                    <span class="pf-v6-c-label__icon">{Icon::InProgress}</span>
-                                    {"Planung"}
-                                </span>
-                            </span>
+                            <Label color={Color::Orange} icon={Icon::InProgress} label="Planung"/>
                         }
                     </div>
                 </div>
@@ -769,4 +743,13 @@ fn cable_end_port(option: Option<&FiberOwnEnd>) -> Option<&UsedEndPort> {
         .and_then(|f| f.other_end.as_ref())
         .and_then(|e| e.used_port.as_ref())
         .and_then(|p| p.panel_side_end_port.as_ref())
+}
+
+/// The name of a port type and the colour of its label
+fn port_type_label(port_type: PortType) -> (&'static str, Color) {
+    match port_type {
+        PortType::Splice => ("Spleiss", Color::Green),
+        PortType::Connector => ("Stecker", Color::Teal),
+        PortType::Loop => ("Loop", Color::Purple),
+    }
 }

@@ -21,8 +21,9 @@ use crate::{
 use cable_editor_common::ObjectKind;
 use patternfly_yew::prelude::{
     ActionGroup, Backdrop, Bullseye, Button, ButtonVariant, Cell, CellContext, Color,
-    ExpansionState, Form, FormGroup, Label, Level, MemoizedTableModel, Modal, ModalVariant, Table,
-    TableColumn, TableEntryRenderer, TableGridMode, TableHeader, TableMode, TextInput, Title,
+    ExpansionState, Form, FormGroup, Label, Level, MemoizedTableModel, Modal, ModalVariant, Panel,
+    PanelMain, PanelMainBody, Table, TableColumn, TableEntryRenderer, TableGridMode, TableHeader,
+    TableMode, TextInput, Title,
 };
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use yew::{
@@ -449,9 +450,9 @@ impl EditPlan {
         };
 
         html! {
-            <div class="pf-v6-c-panel">
-                <div class="pf-v6-c-panel__main">
-                    <div class="pf-v6-c-panel__main-body">
+            <Panel>
+                <PanelMain>
+                    <PanelMainBody>
                         <Form>
                             <FormGroup label="Art">
                                 <div><strong>{kind}</strong></div>
@@ -517,9 +518,9 @@ impl EditPlan {
                                 </div>
                             }
                         }
-                    </div>
-                </div>
-            </div>
+                    </PanelMainBody>
+                </PanelMain>
+            </Panel>
         }
     }
 }

@@ -1,4 +1,5 @@
 use crate::{
+    components::icon_button::IconButton,
     error::{BrowserPart, FrontendError},
     icons::{IconLink, IconUnlink},
 };
@@ -9,16 +10,17 @@ use futures::{
 };
 use patternfly_yew::prelude::{
     ActionGroup, Backdrop, Bullseye, Button, ButtonType, ButtonVariant, Form, FormGroup, Icon,
-    Modal, ModalVariant, TextInput, TextInputType, use_backdrop,
+    Modal, ModalVariant, TextInput, TextInputType, ToggleGroup, ToggleGroupItem, use_backdrop,
 };
 use std::{future::Future, pin::pin, rc::Rc, time::Duration};
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{CanvasRenderingContext2d, Document, HtmlCanvasElement, Storage, window};
 use yew::{
-    AttrValue, Callback, Component, Html, Properties, UseStateHandle, classes, function_component,
-    hook, html,
+    AttrValue, Callback, Component, Html, Properties, UseStateHandle, function_component, hook,
+    html,
     html::{IntoPropValue, Scope},
+    html_nested,
     platform::{spawn_local, time::sleep},
     prelude::SubmitEvent,
     use_effect_with, use_memo, use_state,
@@ -122,9 +124,7 @@ pub fn PrinterStatusBar() -> Html {
             <div class="printer-status-bar">
                 {error_view(&error)}
                 <div class="printer-status-bar__row">
-                    <button type="button" class="pf-v6-c-button pf-m-plain" aria-label={label} title={label} onclick={toggle} disabled={*busy}>
-                        <span class="pf-v6-c-button__icon">{icon}</span>
-                    </button>
+                    <IconButton {icon} name={label} onclick={toggle} disabled={*busy}/>
                     <span class="printer-status-bar__text" title={description.clone()}>{description}</span>
                 </div>
             </div>
@@ -281,21 +281,17 @@ fn LabelForm(props: &LabelFormProps) -> Html {
     let choices = (props.texts.len() > 1).then(|| {
         let items = props.texts.iter().enumerate().map(|(index, choice)| {
             let active = index == *selected;
-            let onclick = {
+            let onchange = {
                 let selected = selected.clone();
-                Callback::from(move |_| selected.set(index))
+                Callback::from(move |()| selected.set(index))
             };
-            html! {
-                <div class="pf-v6-c-toggle-group__item">
-                    <button type="button" class={classes!("pf-v6-c-toggle-group__button", active.then_some("pf-m-selected"))} aria-pressed={active.to_string()} {onclick}>
-                        <span class="pf-v6-c-toggle-group__text">{choice.label.clone()}</span>
-                    </button>
-                </div>
+            html_nested! {
+                <ToggleGroupItem text={choice.label.as_str()} selected={active} {onchange}/>
             }
         });
         html! {
             <FormGroup label="Text">
-                <div class="pf-v6-c-toggle-group">{for items}</div>
+                <ToggleGroup>{for items}</ToggleGroup>
             </FormGroup>
         }
     });
@@ -368,9 +364,7 @@ fn error_view(error: &UseStateHandle<Option<FrontendError>>) -> Html {
     html! {
         <div class="printer-error">
             {IntoPropValue::<Html>::into_prop_value(e)}
-            <button type="button" class="pf-v6-c-button pf-m-plain" aria-label="Schliessen" title="Schliessen" onclick={ondismiss}>
-                <span class="pf-v6-c-button__icon">{Icon::Times}</span>
-            </button>
+            <IconButton icon={Icon::Times} name="Schliessen" onclick={ondismiss}/>
         </div>
     }
 }

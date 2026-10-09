@@ -12,7 +12,8 @@ use crate::{
     util::{get_credentials, toast_error, toast_success},
 };
 use patternfly_yew::prelude::{
-    ActionGroup, Button, ButtonVariant, Icon, Spinner, TextInput, ToggleGroup, ToggleGroupItem,
+    ActionGroup, Button, ButtonVariant, Icon, Panel, PanelMain, PanelMainBody, Spinner, TextInput,
+    ToggleGroup, ToggleGroupItem,
 };
 use yew::{Component, Context, Html, Properties, html, html::IntoPropValue, platform::spawn_local};
 
@@ -431,9 +432,9 @@ impl PortEditor {
             .map(<&FrontendError>::into_prop_value);
 
         html! {
-            <div class="pf-v6-c-panel">
-                <div class="pf-v6-c-panel__main">
-                    <div class="pf-v6-c-panel__main-body">
+            <Panel>
+                <PanelMain>
+                    <PanelMainBody>
                         {error}
                         <ActionGroup>
                             <Button label="Port hinzufügen" variant={ButtonVariant::Secondary} onclick={ctx.link().callback(|_| Msg::AddPort)} />
@@ -453,9 +454,9 @@ impl PortEditor {
                                 { for rows }
                             </tbody>
                         </table>
-                    </div>
-                </div>
-            </div>
+                    </PanelMainBody>
+                </PanelMain>
+            </Panel>
         }
     }
 }

@@ -23,8 +23,8 @@ use crate::graphql::authenticated::connections::{FiberOwnEnd, PortUsageUpdateAct
 use itertools::Itertools;
 use patternfly_yew::prelude::{
     ActionGroup, Alert, AlertType, Button, ButtonVariant, Cell, CellContext, ExpansionState,
-    FormGroup, Grid, GridItem, Icon, MemoizedTableModel, Spinner, Table, TableColumn,
-    TableEntryRenderer, TableGridMode, TableHeader, TableMode,
+    FormGroup, Grid, GridItem, Icon, MemoizedTableModel, Panel, PanelMain, PanelMainBody, Spinner,
+    Table, TableColumn, TableEntryRenderer, TableGridMode, TableHeader, TableMode,
 };
 use std::{
     cell::RefCell,
@@ -513,9 +513,9 @@ impl LoopPortEditor {
         self.unsaved.set(!unmodified);
 
         html! {
-            <div class="pf-v6-c-panel">
-                <div class="pf-v6-c-panel__main">
-                    <div class="pf-v6-c-panel__main-body">
+            <Panel>
+                <PanelMain>
+                    <PanelMainBody>
 
                         if let (Some(cable_a), Some(cable_b)) = (&self.cable_a, &self.cable_b) {
                             { render_active_pair(cable_a, cable_b) }
@@ -531,9 +531,9 @@ impl LoopPortEditor {
                         } else {
                             { self.render_cable_selection(ctx) }
                         }
-                    </div>
-                </div>
-            </div>
+                    </PanelMainBody>
+                </PanelMain>
+            </Panel>
         }
     }
 

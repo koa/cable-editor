@@ -20,9 +20,12 @@ use crate::{
 use cable_editor_common::error::BrokenPortUsage;
 use gloo_events::EventListener;
 use gloo_timers::callback::Interval;
-use patternfly_yew::prelude::{Icon, MenuToggleVariant, Spinner, SpinnerSize};
+use patternfly_yew::prelude::{Icon, List, ListItem, MenuToggleVariant, Spinner, SpinnerSize};
 use std::rc::Rc;
-use yew::{Component, Context, Html, Properties, html, platform::spawn_local};
+use yew::{
+    Component, Context, Html, Properties, html, html_nested, platform::spawn_local,
+    virtual_dom::VChild,
+};
 
 /// How many usages the list shows, the rest only counted (it is in a toast)
 const SHOWN: usize = 8;
@@ -80,9 +83,9 @@ impl Component for BrokenPortUsageList {
             Load::Pending => html!(<Spinner size={SpinnerSize::Md} />),
             Load::Failed(error) => html!(<p>{error.title()}</p>),
             Load::Loaded(names) => html! {
-                <ul class="pf-v6-c-list">
+                <List>
                     { for usages.iter().take(SHOWN).map(|usage| line(names, usage)) }
-                </ul>
+                </List>
             },
         };
         html! {
@@ -96,7 +99,7 @@ impl Component for BrokenPortUsageList {
     }
 }
 
-fn line(names: &PortUsageNames, usage: &BrokenPortUsage) -> Html {
+fn line(names: &PortUsageNames, usage: &BrokenPortUsage) -> VChild<ListItem> {
     let plan = names
         .list_plan
         .iter()
@@ -118,12 +121,12 @@ fn line(names: &PortUsageNames, usage: &BrokenPortUsage) -> Html {
             || format!("Kabel {}", usage.cable),
             |cable| cable.name.clone(),
         );
-    html! {
-        <li>
+    html_nested! {
+        <ListItem>
             {format!("{plan} · {port} · {cable} ")}
             <FiberNumber bundle={usage.bundle} fiber={usage.fiber}/>
             {" · "}{messages::port_usage_problem(usage.problem)}
-        </li>
+        </ListItem>
     }
 }
 
