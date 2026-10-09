@@ -23,6 +23,7 @@ pub mod owners;
 pub mod panel_navigation;
 pub mod panel_overview;
 pub mod plan_details;
+pub mod port_usage_issues;
 pub mod schacht_cables;
 pub mod schacht_properties;
 pub mod schacht_types;
@@ -119,6 +120,55 @@ pub struct PanelId {
 pub struct PanelRef {
     pub id: i32,
     pub name: Option<String>,
+}
+
+/// A port to name, with the path of its panel
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
+#[cynic(graphql_type = "PanelPort")]
+pub struct PanelPortInfo {
+    pub id: i32,
+    order_number: i32,
+    panel: PanelInfo,
+    label: Option<String>,
+}
+
+impl PanelPortInfo {
+    /// The port after the path of its panel, "Schacht: Parent > Panel : Port"
+    pub fn port_label(&self) -> String {
+        let panel = &self.panel;
+        let label = port_label(self.label.as_deref(), self.order_number);
+        // Writing into a String can't fail
+        let mut result = String::new();
+        let _ = write_panel_path(
+            &mut result,
+            Some(&panel.schacht.name),
+            panel
+                .parent_chain
+                .iter()
+                .filter_map(|p| p.name.as_deref())
+                .chain(panel.name.as_deref()),
+        )
+        .and_then(|()| write_port_label(&mut result, &label));
+        result
+    }
+}
+
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
+#[cynic(graphql_type = "Panel")]
+pub struct PanelInfo {
+    name: Option<String>,
+    schacht: SchachtInfo,
+    parent_chain: Vec<ParentChainPanelInfo>,
+}
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
+#[cynic(graphql_type = "Panel")]
+struct ParentChainPanelInfo {
+    name: Option<String>,
+}
+#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
+#[cynic(graphql_type = "Schacht")]
+struct SchachtInfo {
+    name: String,
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone, Copy, PartialEq, Eq, Hash)]

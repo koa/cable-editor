@@ -144,18 +144,9 @@ impl Schacht {
     async fn cables(&self, ctx: &Context<'_>) -> ApiResult<Box<[CableEnd]>> {
         let mut connection = get_connection(ctx).await?;
         Ok(schema::kabel::table
-            // The cables with their ducts
-            .inner_join(schema::kabel_trasse::table.inner_join(schema::trasse::table))
-            // Only the ducts at this Schacht
-            .filter(
-                schema::trasse::schacht_a
-                    .eq(self.id)
-                    .or(schema::trasse::schacht_z.eq(self.id)),
-            )
-            // A cable ends here if only one of its ducts touches the Schacht; one passing
-            // through has two
-            .group_by(schema::kabel::id)
-            .having(diesel::dsl::count(schema::trasse::id).eq(1))
+            .inner_join(schema::kabel_ende::table)
+            .filter(schema::kabel_ende::schacht.eq(self.id))
+            .order_by(schema::kabel::id)
             .select(schema::kabel::all_columns)
             .load::<Cable>(&mut connection)
             .await

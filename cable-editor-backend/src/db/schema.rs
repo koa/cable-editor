@@ -17,6 +17,10 @@ pub mod sql_types {
     #[derive(diesel::query_builder::QueryId, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "lkmap_punkt_objektart_enum"))]
     pub struct LkmapPunktObjektartEnum;
+
+    #[derive(diesel::query_builder::QueryId, diesel::sql_types::SqlType)]
+    #[diesel(postgres_type(name = "port_usage_problem_enum"))]
+    pub struct PortUsageProblemEnum;
 }
 
 diesel::table! {
@@ -46,6 +50,14 @@ diesel::table! {
         sequenz -> Int4,
     }
 }
+// A view: the Schächte where a cable ends
+diesel::table! {
+    kabel_ende (kabel, schacht) {
+        kabel -> Int4,
+        schacht -> Int4,
+    }
+}
+
 diesel::table! {
     lk_lieferung (id) {
         id -> Int4,
@@ -136,6 +148,22 @@ diesel::table! {
     }
 }
 
+// A view: the port usages not fitting the cables, a row per problem
+diesel::table! {
+    use diesel::sql_types::*;
+    use super::sql_types::{PortSideEnum, PortUsageProblemEnum};
+
+    port_usage_issue (port_id, plan_id, side, problem) {
+        port_id -> Int4,
+        plan_id -> Int4,
+        side -> PortSideEnum,
+        cable -> Int4,
+        bundle -> Int4,
+        fiber -> Int4,
+        problem -> PortUsageProblemEnum,
+    }
+}
+
 diesel::table! {
     use diesel::sql_types::*;
     use postgis_diesel::sql_types::Geometry;
@@ -218,10 +246,15 @@ diesel::joinable!(panel_port -> panel (panel_id));
 diesel::joinable!(port_usage -> kabel (cable));
 diesel::joinable!(port_usage -> panel_port (port_id));
 diesel::joinable!(port_usage -> plan (plan_id));
+diesel::joinable!(kabel_ende -> kabel (kabel));
+diesel::joinable!(port_usage_issue -> kabel (cable));
+diesel::joinable!(port_usage_issue -> panel_port (port_id));
+diesel::joinable!(port_usage_issue -> plan (plan_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     eigentuemer,
     kabel,
+    kabel_ende,
     kabel_trasse,
     lk_lieferung,
     netbox_sync,
@@ -231,6 +264,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     panel_port,
     plan,
     port_usage,
+    port_usage_issue,
     schacht,
     schacht_typ,
     trasse,

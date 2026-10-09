@@ -4,7 +4,10 @@ use crate::db::entity::plan::BASELINE_PLAN_ID;
 use crate::graphql::error::ApiResult;
 use crate::{
     db::{
-        entity::panel::{InsertPanel, InsertPanelPort, PanelPortType, PortSide, PortUsage},
+        entity::{
+            panel::{InsertPanel, InsertPanelPort, PanelPortType, PortSide, PortUsage},
+            port_usage_issue::{IssueCheck, IssueScope},
+        },
         schema,
     },
     graphql::authenticated,
@@ -228,6 +231,15 @@ impl PanelMutation {
         }
         let mut connection = authenticated::get_connection(ctx).await?;
         let conn: &mut AsyncPgConnection = &mut connection;
+        let port_ids: Box<[i32]> = changes.iter().map(|change| change.port_id).collect();
+        let check = IssueCheck::before(
+            conn,
+            IssueScope::Ports {
+                plan_id,
+                port_ids: &port_ids,
+            },
+        )
+        .await?;
         for PortUsageInput {
             port_id,
             side,
@@ -289,6 +301,7 @@ impl PanelMutation {
                     .await?;
             }
         }
+        check.after(conn).await?;
 
         Ok(true)
     }

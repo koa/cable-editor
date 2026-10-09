@@ -5,7 +5,7 @@
 use crate::graphql::authenticated::netbox_sync::SyncIssue;
 use cable_editor_common::{
     ObjectKind, UserError,
-    error::{NetboxStep, PlanPorts},
+    error::{NetboxStep, PlanPorts, PortUsageProblem},
 };
 use itertools::Itertools;
 
@@ -83,6 +83,12 @@ pub fn user_error(error: &UserError) -> String {
             format!("Das Kabel {cable} endet nicht im Schacht {schacht}")
         }
 
+        // A toast lists them below (`components::port_usage_issues`)
+        UserError::PortUsagesBroken { usages } => match usages.len() {
+            1 => "Die Änderung passt nicht zu einer Port-Belegung".into(),
+            count => format!("Die Änderung passt nicht zu {count} Port-Belegungen"),
+        },
+
         UserError::DefaultOwnerNotDeletable => {
             "Der Standard-Eigentümer kann nicht gelöscht werden, zuerst einen anderen als Standard \
              setzen"
@@ -142,12 +148,21 @@ pub fn user_error(error: &UserError) -> String {
     }
 }
 
-/// The kind of object in a sentence, e.g. "Schacht".
+/// Why a port usage doesn't fit its cable, as the end of a sentence.
+pub fn port_usage_problem(problem: PortUsageProblem) -> &'static str {
+    match problem {
+        PortUsageProblem::CableNotEnding => "das Kabel endet nicht im Schacht",
+        PortUsageProblem::FiberOutOfRange => "das Kabel hat diese Faser nicht",
+        PortUsageProblem::FiberTwice => "die Faser liegt auch an einem anderen Port",
+    }
+}
+
 /// An object that doesn't exist, whether the backend or a page found out.
 pub fn not_found(kind: ObjectKind, id: i64) -> String {
     format!("{} {id} nicht gefunden", object(kind))
 }
 
+/// The kind of object in a sentence, e.g. "Schacht".
 fn object(kind: ObjectKind) -> &'static str {
     match kind {
         ObjectKind::Schacht => "Schacht",

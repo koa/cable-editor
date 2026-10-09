@@ -10,11 +10,11 @@ use crate::{
             Duct,
             cable::Cable,
             eigentuemer::Eigentuemer,
-            panel::Panel,
+            panel::{Panel, PanelPort},
             plan::Plan,
             schacht::{Schacht, SchachtTyp},
         },
-        schema::{eigentuemer, kabel, panel, plan, schacht, schacht_typ, trasse},
+        schema::{eigentuemer, kabel, panel, panel_port, plan, schacht, schacht_typ, trasse},
     },
     graphql::{
         authorization::{Role, RoleGuard},
@@ -131,6 +131,14 @@ impl Query {
             .first(&mut connection)
             .await
             .optional()?)
+    }
+    /// Ports by id, e.g. to name the ones an error refers to; ids not found are left out.
+    async fn ports(&self, ctx: &Context<'_>, port_ids: Vec<i32>) -> ApiResult<Vec<PanelPort>> {
+        let mut connection = get_connection(ctx).await?;
+        Ok(PanelPort::query()
+            .filter(panel_port::id.eq_any(port_ids))
+            .load(&mut connection)
+            .await?)
     }
     /// A position in LV95 and WGS84, e.g. to preview a typed position on the map.
     async fn convert_point(

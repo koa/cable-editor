@@ -562,10 +562,22 @@ const root = {
   netboxSync: () => netboxSync(),
   plan: ({ planId }) => plan(planId),
   panel: ({ panelId }) => panel(panelId),
+  ports: ({ portIds }) => portIds.filter((id) => ports.some((p) => p.id === id)).map(panelPort),
   netboxDevices: () => devices.map((d) => device(d.id)),
   netboxDevice: ({ netboxDeviceId }) => device(netboxDeviceId),
   // mutations
-  createCable: () => cable(11), updateCable: () => cable(11), deleteCable: () => true,
+  createCable: () => cable(11), deleteCable: () => true,
+  // Like the backend: fewer fibers than attached are refused with the usages it would break
+  updateCable: ({ cableId, fibers }) => {
+    if (fibers) {
+      const usages = [[0, baseUsage], ...Object.entries(planUsage).map(([id, rows]) => [Number(id), rows])]
+        .flatMap(([planId, rows]) => rows
+          .filter((u) => u[2] === cableId && (u[3] > fibers.bundleCount || u[4] > fibers.fiberCount))
+          .map((u) => ({ plan: planId, port: u[0], cable: u[2], bundle: u[3], fiber: u[4], problem: 'FiberOutOfRange' })));
+      if (usages.length) refuse('PortUsagesBroken', { usages });
+    }
+    return cable(cableId) ?? cable(11);
+  },
   createPanel: () => true, updatePanels: () => true, createPlan: () => true,
   updateCabinetPanels: () => true, updatePanelPorts: () => true, setPortUsage: () => true,
   updatePlan: ({ planId }) => plan(planId), implementPlan: ({ planId }) => plan(planId),

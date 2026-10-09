@@ -2,6 +2,7 @@ use crate::db::{
     entity::{
         panel::PortUsage,
         plan::{BASELINE_PLAN_ID, Plan},
+        port_usage_issue::{IssueCheck, IssueScope},
     },
     schema,
 };
@@ -23,6 +24,16 @@ pub async fn implement_plan(plan_id: i32, conn: &mut AsyncPgConnection) -> ApiRe
         .filter(schema::port_usage::plan_id.eq(plan_id))
         .load(conn)
         .await?;
+    // The master data may have changed since the plan's ports were checked
+    let port_ids: Box<[i32]> = ports_to_apply.iter().map(|usage| usage.port_id).collect();
+    let check = IssueCheck::before(
+        conn,
+        IssueScope::Ports {
+            plan_id: BASELINE_PLAN_ID,
+            port_ids: &port_ids,
+        },
+    )
+    .await?;
 
     let mut usages_to_add = Vec::new();
     let mut usages_to_remove = Vec::new();
@@ -75,6 +86,7 @@ pub async fn implement_plan(plan_id: i32, conn: &mut AsyncPgConnection) -> ApiRe
             .execute(conn)
             .await?;
     }
+    check.after(conn).await?;
     diesel::delete(schema::port_usage::table.filter(schema::port_usage::plan_id.eq(plan_id)))
         .execute(conn)
         .await?;

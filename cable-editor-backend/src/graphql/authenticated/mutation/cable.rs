@@ -3,7 +3,10 @@
 use crate::graphql::error::ApiResult;
 use crate::{
     db::{
-        entity::cable::{Cable, UpdateCableChangeset},
+        entity::{
+            cable::{Cable, UpdateCableChangeset},
+            port_usage_issue::{IssueCheck, IssueScope},
+        },
         schema,
     },
     graphql::authenticated,
@@ -70,12 +73,18 @@ impl CableMutation {
             buendel_anz,
             faser_anz,
         };
+        // Its path and fibers must still fit the ports its fibers are attached to
+        let check = if path.is_some() || changeset.buendel_anz.is_some() {
+            Some(IssueCheck::before(&mut connection, IssueScope::Cable(cable_id)).await?)
+        } else {
+            None
+        };
 
         if let Some(path) = path {
             set_path(&mut connection, cable_id, path).await?;
         }
 
-        Ok(if changeset.any() {
+        let cable = if changeset.any() {
             diesel::update(schema::kabel::table.find(cable_id))
                 .set(&changeset)
                 .get_result::<Cable>(&mut connection)
@@ -87,7 +96,11 @@ impl CableMutation {
                 .first::<Cable>(&mut connection)
                 .await
                 .optional()?
-        })
+        };
+        if let Some(check) = check {
+            check.after(&mut connection).await?;
+        }
+        Ok(cable)
     }
     /// Refused while its fibers are attached to ports, in the current state or in a plan.
     #[graphql(guard = "RoleGuard(Role::Admin)")]

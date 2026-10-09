@@ -1,4 +1,5 @@
 use crate::{
+    components::port_usage_issues::BrokenPortUsageList,
     error::FrontendError,
     graphql::authenticated::current_user::Role,
     pages::router::{AppRoute, PlanView},
@@ -8,7 +9,9 @@ use std::time::Duration;
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{Blob, BlobPropertyBag, HtmlAnchorElement, Url};
 use yew::html::Scope;
-use yew::{BaseComponent, Callback, html};
+use cable_editor_common::UserError;
+use std::rc::Rc;
+use yew::{BaseComponent, Callback, Html, html};
 use yew_nested_router::prelude::RouterContext;
 use yew_oauth2::context::OAuth2Context;
 
@@ -34,25 +37,34 @@ pub fn get_toaster(scope: &Scope<impl BaseComponent>) -> Option<Toaster> {
 }
 
 /// What a toast tells about an error: the message for users, with the technical cause where
-/// there is one (for a `FrontendError` its `title`, not the English `Display`).
+/// there is one (for a `FrontendError` its `title`, not the English `Display`; port usages a
+/// change would break listed below it).
 pub trait ToastText {
-    fn toast_text(&self) -> String;
+    fn toast_text(&self) -> Html;
 }
 
 impl ToastText for FrontendError {
-    fn toast_text(&self) -> String {
-        self.title()
+    fn toast_text(&self) -> Html {
+        match self {
+            FrontendError::User(UserError::PortUsagesBroken { usages }) => html! {
+                <>
+                    <p>{self.title()}</p>
+                    <BrokenPortUsageList usages={Rc::from(usages.as_ref())}/>
+                </>
+            },
+            _ => html!(self.title()),
+        }
     }
 }
 
 impl ToastText for String {
-    fn toast_text(&self) -> String {
-        self.clone()
+    fn toast_text(&self) -> Html {
+        html!(self.clone())
     }
 }
 
 impl<T: ToastText + ?Sized> ToastText for &T {
-    fn toast_text(&self) -> String {
+    fn toast_text(&self) -> Html {
         (**self).toast_text()
     }
 }
@@ -68,7 +80,7 @@ pub fn toast_error(
         toaster.toast(Toast {
             title: title.into(),
             r#type: AlertType::Danger,
-            body: html!(error.toast_text()),
+            body: error.toast_text(),
             ..Toast::default()
         });
     }

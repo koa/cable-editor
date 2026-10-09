@@ -4,6 +4,7 @@ pub mod lkmap;
 pub mod panel;
 pub mod path;
 pub mod plan;
+pub mod port_usage_issue;
 pub mod schacht;
 pub mod trasse;
 

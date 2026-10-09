@@ -287,6 +287,37 @@ await refused('createCable without path', 'mutation{ createCable(name:"Leer", fi
 const spare = (await gql('mutation{ createCable(name:"Reserve", fibers:{bundleCount:2,fiberCount:6}, path:[5]){ id bundleCount fiberCount } }')).createCable;
 check('createCable stores the structure', spare.bundleCount === 2 && spare.fiberCount === 6);
 check('deleteCable without ports', (await gql('mutation($c:Int!){ deleteCable(cableId:$c) }', { c: spare.id })).deleteCable === true);
+// Port usages must fit their cables: refused with the usages a change would break
+// (by id, the frontend loads the names: `ports` names the ports)
+const cableNames = Object.fromEntries(Object.entries(cables).map(([name, id]) => [id, name]));
+const broken = async (label, query, variables, expected) => {
+  const result = await run(query, variables);
+  const reason = result.errors?.[0]?.extensions?.userError;
+  if (reason?.code !== 'PortUsagesBroken') {
+    check(label, false, JSON.stringify(reason ?? result.errors?.[0]?.message ?? 'not refused'));
+    return;
+  }
+  const planNames = Object.fromEntries((await gql('{ listPlan { id name } }')).listPlan.map((p) => [p.id, p.name]));
+  const found = reason.usages.map((u) => `${planNames[u.plan]}:${cableNames[u.cable]}-${u.fiber}:${u.problem}`).sort().join();
+  const { ports: named } = await gql('query($p:[Int!]!){ ports(portIds:$p) { id panel { schacht { id } } } }', { p: reason.usages.map((u) => u.port) });
+  const inBerg = named.length === new Set(reason.usages.map((u) => u.port)).size && named.every((port) => port.panel.schacht.id === 4);
+  check(label, found === expected && inBerg, `${found}${inBerg ? '' : ' (ports not named)'}`);
+};
+const throughBerg = [1, 2, 4];
+await broken('updateCable through the Schacht its fibers are attached in', 'mutation($c:Int!,$p:[Int!]!){ updateCable(cableId:$c, path:$p) { id } }', { c: cables.K1, p: throughBerg },
+  [1, 2, 3, 4, 5, 6].map((f) => `Baseline:K1-${f}:CableNotEnding`).sort().join());
+await broken('updateCable with fewer fibers than attached', 'mutation($c:Int!){ updateCable(cableId:$c, fibers:{bundleCount:1,fiberCount:4}) { id } }', { c: cables.K1 },
+  'Baseline:K1-5:FiberOutOfRange,Baseline:K1-6:FiberOutOfRange');
+check('updateCable still renames', (await gql('mutation($c:Int!){ updateCable(cableId:$c, name:"K1") { name } }', { c: cables.K1 })).updateCable.name === 'K1');
+const wrong = await planId('Falsch belegt');
+const setUsage = 'mutation($pl:Int!,$c:[PortUsageInput!]!){ setPortUsage(planId:$pl, changes:$c) }';
+await broken('setPortUsage with a cable not ending in the Schacht', setUsage, { pl: wrong, c: [attach(ports[4][0], 'BACK', cables.K3, 1)] }, 'Falsch belegt:K3-1:CableNotEnding');
+await broken('setPortUsage with a fiber the cable lacks', setUsage, { pl: wrong, c: [attach(ports[4][0], 'BACK', cables.K1, 13)] }, 'Falsch belegt:K1-13:FiberOutOfRange');
+await broken('setPortUsage with a fiber attached at another port', setUsage, { pl: wrong, c: [attach(ports[4][0], 'BACK', cables.K1, 2)] }, 'Falsch belegt:K1-2:FiberTwice');
+// Moving a fiber within one request is fine
+await gql(setUsage, { pl: wrong, c: [attach(ports[4][0], 'BACK', cables.K1, 2), attach(ports[4][1], 'BACK', cables.K1, 1)] });
+check('setPortUsage swapping two fibers', true);
+await gql(setUsage, { pl: wrong, c: [ports[4][0], ports[4][1]].map((portId) => ({ portId, side: 'BACK', fiber: { reset: true } })) });
 await gql('mutation($d:Int!){ deleteDuct(ductId:$d) }', { d: duct.createDuct.id });
 await gql('mutation($id:Int!){ deleteSchacht(schachtId:$id) }', { id: schachtId });
 

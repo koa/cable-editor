@@ -1,4 +1,4 @@
-use crate::graphql::authenticated::{DateTime, port_label, write_panel_path, write_port_label};
+use crate::graphql::authenticated::{DateTime, PanelInfo, PanelPortInfo};
 use crate::{
     error::FrontendError,
     graphql::{authenticated::schema, mutate, query},
@@ -109,51 +109,6 @@ pub struct MissingNetboxReferenceError {
     pub port: PanelPortInfo,
 }
 
-#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
-#[cynic(graphql_type = "PanelPort")]
-pub struct PanelPortInfo {
-    order_number: i32,
-    panel: PanelInfo,
-    label: Option<String>,
-}
-
-impl PanelPortInfo {
-    pub fn port_label(&self) -> String {
-        let panel = &self.panel;
-        let label = port_label(self.label.as_deref(), self.order_number);
-        // Writing into a String can't fail
-        let mut result = String::new();
-        let _ = write_panel_path(
-            &mut result,
-            Some(&panel.schacht.name),
-            panel
-                .parent_chain
-                .iter()
-                .filter_map(|p| p.name.as_deref())
-                .chain(panel.name.as_deref()),
-        )
-        .and_then(|()| write_port_label(&mut result, &label));
-        result
-    }
-}
-
-#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
-#[cynic(graphql_type = "Panel")]
-pub struct PanelInfo {
-    name: Option<String>,
-    schacht: SchachtInfo,
-    parent_chain: Vec<ParentChainPanelInfo>,
-}
-#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
-#[cynic(graphql_type = "Panel")]
-struct ParentChainPanelInfo {
-    name: Option<String>,
-}
-#[derive(cynic::QueryFragment, Debug, Clone, PartialEq)]
-#[cynic(graphql_type = "Schacht")]
-struct SchachtInfo {
-    name: String,
-}
 #[derive(cynic::QueryFragment, Debug)]
 #[cynic(graphql_type = "BlindEndError")]
 pub struct BlindEndError {

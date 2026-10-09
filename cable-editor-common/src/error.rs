@@ -28,6 +28,29 @@ pub struct PlanPorts {
     pub ports: i64,
 }
 
+/// Why a port usage doesn't fit its cable (the view `port_usage_issue`).
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PortUsageProblem {
+    /// The cable doesn't end in the Schacht of the port's panel
+    CableNotEnding,
+    /// The cable has no such bundle or fiber
+    FiberOutOfRange,
+    /// The same fiber end is at another port side too
+    FiberTwice,
+}
+
+/// A port usage a change would leave not fitting its cable, by id: the frontend loads the names
+/// when it shows them. The fiber is part of it, a refused usage was never stored.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BrokenPortUsage {
+    pub plan: i32,
+    pub port: i32,
+    pub cable: i32,
+    pub bundle: i32,
+    pub fiber: i32,
+    pub problem: PortUsageProblem,
+}
+
 /// What the Netbox sync was doing when Netbox refused.
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NetboxStep {
@@ -119,6 +142,10 @@ pub enum UserError {
         schacht: i32,
         cable: i32,
     },
+
+    // Port usages
+    /// The change would leave these port usages not fitting their cables
+    PortUsagesBroken { usages: Box<[BrokenPortUsage]> },
 
     // Owners
     DefaultOwnerNotDeletable,
