@@ -67,6 +67,22 @@ const TOAST_TITLE = /konnte(n)? nicht (gespeichert|angelegt|gelöscht|geladen|an
 // Erfolgs-Toast: "Schacht gespeichert", "In Netbox aktiviert", "Sync angestossen", "Standard-Eigentümer gesetzt"
 const SUCCESS_TITLE = /^[\p{L}\d -]+ (gespeichert|angelegt|gelöscht|geändert|angestossen|abgeschlossen|aktiviert|umbenannt|gesetzt|geliefert|zurückgenommen|bestätigt)$/u;
 
+// PatternFly blocks patternfly-yew has a component for (`Panel`, `Label`, `List`, ...); the
+// elements (`__`) come with their block
+const PF_REPLACEABLE = /pf-v6-c-(panel|label|list|toggle-group|divider|card|alert|title|empty-state|description-list)(?![\w-])/;
+
+// Every class of the PatternFly CSS the app loads (assets/style.scss), null before `npm install`
+const PF_CLASSES = (() => {
+  const dir = path.join(ROOT, '../node/node_modules/@patternfly/patternfly');
+  try {
+    const css = ['patternfly.css', 'patternfly-addons.css'].map((file) => fs.readFileSync(path.join(dir, file), 'utf8')).join('\n');
+    return new Set([...css.matchAll(/\.(pf-[\w-]+)/g)].map((m) => m[1]));
+  } catch {
+    console.log('pf-klasse-unbekannt: PatternFly-CSS fehlt (npm install in cable-editor-frontend/node), nicht geprüft');
+    return null;
+  }
+})();
+
 // Functions of graphql/ that send a mutation: what pages and components call to change stored
 // data, as the regular expression of their call (`Type::name(`, `.name(` for methods, `name(`)
 const MUTATIONS = files
@@ -175,6 +191,28 @@ const rules = [
     id: 'roher-link',
     message: 'PlanLink statt Link<AppRoute> verwenden',
     find: (f) => (f.rel === path.join('components', 'plan_link.rs') ? [] : grep(f, /<Link<AppRoute>/).map((line) => ({ line }))),
+  },
+  {
+    id: 'tabelle-listtable',
+    message: 'Tabellen als ListTable (components/table.rs) bauen, Abschnitt 6',
+    step: 7,
+    find: (f) => (f.rel === path.join('components', 'table.rs') ? [] : grep(f, /<Table<|<ComposableTable\b|<table\b/).map((line) => ({ line }))),
+  },
+  {
+    id: 'pf-klasse-statt-komponente',
+    message: 'die Komponente von patternfly-yew statt der PatternFly-Klasse verwenden, Abschnitt 6',
+    find: (f) => grep(f, PF_REPLACEABLE).map((line) => ({ line, note: f.lines[line].match(PF_REPLACEABLE)[0] })),
+  },
+  {
+    id: 'pf-klasse-unbekannt',
+    message: 'diese Klasse gibt es in PatternFly 6 nicht',
+    find: (f) =>
+      PF_CLASSES
+        ? f.lines.flatMap((line, i) =>
+          isComment(line) ? [] : [...line.matchAll(/\b(pf-v6-[cul]-[\w-]+|pf-m-[\w-]+)/g)]
+            .filter((m) => !PF_CLASSES.has(m[1]))
+            .map((m) => ({ line: i, note: m[1] })))
+        : [],
   },
 ];
 

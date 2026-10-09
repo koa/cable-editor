@@ -1,6 +1,6 @@
 # Konzept: Einheitliche Bedienung im Frontend
 
-Stand: 30.09.2026 – offene Fragen entschieden; das Prüfgerüst steht, alle Schritte unter „Umsetzung“ sind umgesetzt.
+Stand: 09.10.2026 – offene Fragen entschieden; das Prüfgerüst steht, Schritt 7 unter „Umsetzung“ ist noch offen.
 
 Diese Regeln gelten für jede neue oder geänderte Seite. Sie stammen aus einer Durchsicht des
 ganzen Frontends; wo der Code noch abweicht, steht es unter „Umsetzung“. Wie Fehler entstehen
@@ -137,6 +137,26 @@ und was das Backend liefert, steht in `fehlermeldungen.md`, der Aufbau des Bread
 - **Dialoge mit Formular:** „Speichern“ oder „Anlegen“ und „Abbrechen“; Enter sendet ab,
   Abbrechen und Esc schliessen ohne Rückfrage.
 
+## 6. Tabellen und PatternFly-Komponenten
+
+- **Tabellen:** jede Tabelle ist ein `ListTable` (`components/table.rs`): kompakt, auf dem Handy
+  ein Block je Zeile mit der Spaltenüberschrift vor jeder Zelle (Grid-Modus von PatternFly), ohne
+  Zeilen an ihrer Stelle ein Satz, was fehlt (`empty`, z. B. „Keine Kabel.“). Die Spalten sind ein
+  Enum `Columns`, der Tabellenkopf heisst `header`. Eine Tabelle von Hand (`<table>`,
+  `Table`, `ComposableTable`) braucht einen Grund (`konventionen:ignore`), z. B. der Druck des
+  Arbeitsauftrags, der ohne Grid-Modus auskommen muss.
+- **Aktionen einer Zeile:** eine einzelne Aktion ist ein Knopf in der letzten Spalte (ohne
+  Überschrift), mehrere sind ein Menü (`PopupMenu`).
+- **Komponenten statt Klassen:** wo patternfly-yew eine Komponente hat (`Panel`, `Label`, `List`,
+  `ToggleGroup`, `Divider`, `Card`, `Alert`, `Title`), wird sie verwendet, nicht die Klassen von
+  PatternFly auf HTML-Elementen. Ausnahmen, weil patternfly-yew es nicht kann: Links mit dem
+  Aussehen eines Knopfs (`PlanLink` mit `pf-v6-c-button`, ein `Button` ist kein Link), Knöpfe mit
+  `title` (`IconButton`, `PrintPageButton`), das eigene `PopupMenu`, Seite und Breadcrumb im
+  Router, die Data-List der Panels (patternfly-yew hat keine) und das Faser-Label
+  (`FiberLabel`: eigene Farben, `Label` kennt nur seine Palette).
+- **Nur Klassen, die es gibt:** eine Klasse von PatternFly 5 (`pf-v6-u-color-200`, `pf-m-cyan`)
+  hat in PatternFly 6 keine Wirkung. Gedämpfter Text ist `pf-v6-u-text-color-subtle`.
+
 ## Prüfung
 
 Die Einhaltung wird nur lokal geprüft, nicht in der CI. Vor jedem Review einer Änderung am
@@ -147,7 +167,7 @@ noch nicht eingeschalteten Prüfungen einzeln. Drei Ebenen, von der strengsten z
 | Ebene | Werkzeug | Prüft |
 | --- | --- | --- |
 | Compiler | `cargo clippy -p cable-editor-frontend --target wasm32-unknown-unknown` (`cable-editor-frontend/clippy.toml`, `[lints.clippy]`) | keine Browser-Dialoge (`alert`, `confirm`, `prompt`), kein `log::error!` (Fehler gehören in die Oberfläche), keine Panics (`unwrap`, `expect`, `panic!`), kein rohes `Link` des Routers |
-| Quelltext | `local/konventionen/static.mjs` | Beschriftungen (Abschnitt 1), Fehler als `FrontendError` und Toast-Titel (4), Symbolknöpfe als `IconButton`, „Seite drucken“ nur an einer Stelle, `PlanLink` statt `Link<AppRoute>` (3) |
+| Quelltext | `local/konventionen/static.mjs` | Beschriftungen (Abschnitt 1), Fehler als `FrontendError` und Toast-Titel (4), Symbolknöpfe als `IconButton`, „Seite drucken“ nur an einer Stelle, `PlanLink` statt `Link<AppRoute>` (3), Tabellen als `ListTable`, Komponenten statt Klassen von PatternFly, keine Klassen, die es in PatternFly 6 nicht gibt (6) |
 | Browser | `local/konventionen/pages.mjs` (Playwright gegen den Mock) | Verlassen einer Seite mit Änderungen (Link, „Zurück“, Fenster schliessen), jede Route als Handy und Desktop: keine Konsolenfehler, kein waagerechter Überlauf, genau eine sichtbare `h1`, höchstens ein aktiver Eintrag je Breadcrumb-Menü, „Keine Berechtigung“ ohne die nötige Rolle, jeder Knopf und Link hat einen Namen |
 
 - Eine Prüfung mit „ausstehend“ gehört zu einem Umsetzungsschritt, der noch fehlt; der Commit
@@ -205,6 +225,10 @@ Schrittweise, je ein Commit, jeder vor dem Commit durchgesehen:
    um den Router, `Unsaved` in den Formularen der Schächte, Trassen, Schachttypen, Kabel, in
    Planung, Panel-Editor, Fasern auflegen und Loops. `pages.mjs` prüft Link, „Zurück“ und
    das Schliessen des Fensters (`LEAVE_FLOWS`) und dass nach dem Speichern nicht mehr gefragt wird.
+7. Tabellen und Komponenten nach Abschnitt 6: `Panel`, `Label`, `List`, `ToggleGroup`,
+   `Divider` und `IconButton` statt Klassen; `ListTable` für alle Tabellen mit
+   `Table`; `pf-v6-u-color-200` durch `pf-v6-u-text-color-subtle` ersetzt. Offen: die Tabellen
+   von Hand in Panel-Übersicht, Port-Editor und Arbeitsauftrag (Regel `tabelle-listtable`).
 
 ## Entschieden
 

@@ -7,7 +7,7 @@ use crate::components::unsaved::Unsaved;
 use crate::{
     components::{
         fiber::{FiberLabel, FiberNumber},
-        table::ListModel,
+        table::ListTable,
     },
     error::FrontendError,
     graphql::authenticated::{
@@ -24,19 +24,17 @@ use crate::{
 use cable_editor_common::ObjectKind;
 use itertools::Itertools;
 use patternfly_yew::prelude::{
-    Alert, AlertType, Button, ButtonVariant, Cell, CellContext, ExpansionState, Icon,
-    MemoizedTableModel, Panel, PanelMain, PanelMainBody, SelectItemRenderer, Spinner, Table,
-    TableColumn, TableEntryRenderer, TableGridMode, TableHeader, TableMode,
+    Alert, AlertType, Button, ButtonVariant, Cell, CellContext, Icon, Panel, PanelMain,
+    PanelMainBody, SelectItemRenderer, Spinner, TableColumn, TableEntryRenderer, TableHeader,
 };
 use std::{
-    cell::RefCell,
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, HashSet},
     rc::Rc,
 };
 use yew::{Component, Context, Html, Properties, html, html_nested, platform::spawn_local};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
-enum AttachColumn {
+enum Columns {
     Front,
     Port,
     Back,
@@ -62,12 +60,12 @@ struct PortRow {
     back: Html,
 }
 
-impl TableEntryRenderer<AttachColumn> for PortRow {
-    fn render_cell(&self, context: CellContext<'_, AttachColumn>) -> Cell {
+impl TableEntryRenderer<Columns> for PortRow {
+    fn render_cell(&self, context: CellContext<'_, Columns>) -> Cell {
         match context.column {
-            AttachColumn::Front => Cell::new(self.front.clone()),
-            AttachColumn::Port => Cell::new(self.port.clone()),
-            AttachColumn::Back => Cell::new(self.back.clone()),
+            Columns::Front => Cell::new(self.front.clone()),
+            Columns::Port => Cell::new(self.port.clone()),
+            Columns::Back => Cell::new(self.back.clone()),
         }
     }
 }
@@ -83,7 +81,6 @@ pub struct AttachFiber {
     slot_states: BTreeMap<(i32, PortSide), SlotState>,
     edit_slot: Option<SlotEdit>,
     reset_ports: HashSet<i32>,
-    table_state: Rc<RefCell<HashMap<usize, ExpansionState<AttachColumn>>>>,
     saving: bool,
     unsaved: Unsaved,
 }
@@ -115,7 +112,6 @@ impl Component for AttachFiber {
             slot_states: BTreeMap::new(),
             edit_slot: None,
             reset_ports: HashSet::new(),
-            table_state: Rc::default(),
             saving: false,
         }
     }
@@ -438,35 +434,29 @@ impl AttachFiber {
         let mut ports: Vec<&PlannedPort> = situation.ports.iter().collect();
         ports.sort_by_key(|p| p.order_number);
 
-        let mut entries = Vec::with_capacity(ports.len());
+        let mut rows = Vec::with_capacity(ports.len());
 
         for port in ports {
-            entries.push(PortRow {
+            rows.push(PortRow {
                 front: self.view_slot(ctx, port, PortSide::FRONT),
                 port: self.view_port_info(ctx, port),
                 back: self.view_slot(ctx, port, PortSide::BACK),
             });
         }
 
-        let table_model = ListModel::new(
-            MemoizedTableModel::new(Rc::new(entries)),
-            self.table_state.clone(),
-        );
-
         let header = html_nested! {
-            <TableHeader<AttachColumn>>
-                <TableColumn<AttachColumn> label="Front-Belegung" index={AttachColumn::Front} />
-                <TableColumn<AttachColumn> label="Port" index={AttachColumn::Port} />
-                <TableColumn<AttachColumn> label="Back-Belegung" index={AttachColumn::Back} />
-            </TableHeader<AttachColumn>>
+            <TableHeader<Columns>>
+                <TableColumn<Columns> label="Front-Belegung" index={Columns::Front} />
+                <TableColumn<Columns> label="Port" index={Columns::Port} />
+                <TableColumn<Columns> label="Back-Belegung" index={Columns::Back} />
+            </TableHeader<Columns>>
         };
 
         html! {
-            <Table<AttachColumn, ListModel<AttachColumn, MemoizedTableModel<PortRow>>>
-                mode={TableMode::Compact}
-                grid={TableGridMode::Medium}
+            <ListTable<Columns, PortRow>
                 {header}
-                entries={table_model}
+                rows={Rc::new(rows)}
+                empty="Das Panel hat keine Ports."
             />
         }
     }
@@ -499,7 +489,7 @@ impl AttachFiber {
 
         let loop_hint = if is_loop {
             Some(
-                html!(<div class="pf-v6-u-font-size-sm pf-v6-u-color-200">{"Bearbeitung im Loop-Editor"}</div>),
+                html!(<div class="pf-v6-u-font-size-sm pf-v6-u-text-color-subtle">{"Bearbeitung im Loop-Editor"}</div>),
             )
         } else {
             None
@@ -525,7 +515,7 @@ impl AttachFiber {
                 html! {
                     <div style="display: flex; align-items: center; gap: 6px;">
                         <FiberNumber bundle={fiber_info.bundle} fiber={fiber_info.fiber}/>
-                        <span class="pf-v6-u-font-size-xs pf-v6-u-color-200">
+                        <span class="pf-v6-u-font-size-xs pf-v6-u-text-color-subtle">
                             {format!("(#{})", port.order_number)}
                         </span>
                     </div>
@@ -534,7 +524,7 @@ impl AttachFiber {
                 html! {
                     <div style="display: flex; align-items: center; gap: 6px;">
                         <strong>{"Loop"}</strong>
-                        <span class="pf-v6-u-font-size-xs pf-v6-u-color-200">
+                        <span class="pf-v6-u-font-size-xs pf-v6-u-text-color-subtle">
                             {format!("(#{})", port.order_number)}
                         </span>
                     </div>
@@ -619,7 +609,7 @@ impl AttachFiber {
                 .find(|f| f.bundle == key.bundle && f.fiber == key.fiber)
         }))
         .map(|text| {
-            html! {<div class="pf-v6-u-font-size-sm pf-v6-u-color-200">
+            html! {<div class="pf-v6-u-font-size-sm pf-v6-u-text-color-subtle">
                 {Icon::ArrowRight} {" "} {text}
             </div>}
         });

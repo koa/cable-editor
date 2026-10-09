@@ -63,7 +63,7 @@ pub struct EditCabinetProps {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
-enum PanelColumn {
+enum Columns {
     Name,
     SelectNetbox(Rc<[OverviewNetboxDevice]>),
     Actions { modified: bool, plan_id: i32 },
@@ -90,10 +90,10 @@ pub enum PanelEditAction {
     },
 }
 
-impl TreeTableColumn<IdOrNew, PanelEntry, PanelEditAction> for PanelColumn {
+impl TreeTableColumn<IdOrNew, PanelEntry, PanelEditAction> for Columns {
     fn render_cell(&self, context: TreeTableContext<IdOrNew, PanelEntry, PanelEditAction>) -> Cell {
         match self {
-            PanelColumn::Name => {
+            Columns::Name => {
                 let text = context.row.name.as_deref().unwrap_or_default().to_string();
                 let id = *context.key;
                 let callback = context.callback.clone();
@@ -112,7 +112,7 @@ impl TreeTableColumn<IdOrNew, PanelEntry, PanelEditAction> for PanelColumn {
                     </div>
                 ))
             }
-            PanelColumn::Actions { modified, plan_id } => {
+            Columns::Actions { modified, plan_id } => {
                 let mut buttons = Vec::new();
                 if context.parent.is_some() {
                     let key = *context.key;
@@ -169,7 +169,7 @@ impl TreeTableColumn<IdOrNew, PanelEntry, PanelEditAction> for PanelColumn {
 
                 Cell::new(html!(<div class="panel-actions">{for buttons}</div>))
             }
-            PanelColumn::SelectNetbox(devices) => {
+            Columns::SelectNetbox(devices) => {
                 let id = *context.key;
                 let onchange = context
                     .callback
@@ -461,12 +461,12 @@ impl Component for EditCabinet {
             let plan_id = ctx.props().plan_id;
             let netbox_devices = self.netbox_devices.clone();
             let header = html_nested! {
-                <TableHeader<PanelColumn>>
-                    <TableColumn<PanelColumn> label="Name" index={PanelColumn::Name} />
-                    <TableColumn<PanelColumn> label="Netbox" index={PanelColumn::SelectNetbox(netbox_devices)} />
+                <TableHeader<Columns>>
+                    <TableColumn<Columns> label="Name" index={Columns::Name} />
+                    <TableColumn<Columns> label="Netbox" index={Columns::SelectNetbox(netbox_devices)} />
                     // Labelled, as the phone layout of tree tables hides cells without a label
-                    <TableColumn<PanelColumn> label="Aktionen" index={PanelColumn::Actions{modified,plan_id}} />
-                </TableHeader<PanelColumn>>
+                    <TableColumn<Columns> label="Aktionen" index={Columns::Actions{modified,plan_id}} />
+                </TableHeader<Columns>>
             };
             let model = self.model.clone();
             let error = self
@@ -480,7 +480,7 @@ impl Component for EditCabinet {
             html! {
                 <>
                 {error}
-                <TreeTable<IdOrNew, PanelEntry,PanelEditAction, PanelColumn>
+                <TreeTable<IdOrNew, PanelEntry,PanelEditAction, Columns>
                     state={self.state.clone()}
                     mode={TableMode::Default}
                     {row_event}

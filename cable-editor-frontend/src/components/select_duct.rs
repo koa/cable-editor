@@ -1,15 +1,12 @@
 use crate::components::load::Load;
 use crate::{
-    components::table::ListModel,
+    components::table::ListTable,
     error::FrontendError,
     graphql::authenticated::list_ducts::{DuctListEntry, fetch_duct_list},
     util::get_credentials,
 };
-use patternfly_yew::prelude::{
-    Cell, CellContext, ExpansionState, MemoizedTableModel, Table, TableColumn, TableEntryRenderer,
-    TableGridMode, TableHeader, TableMode,
-};
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use patternfly_yew::prelude::{Cell, CellContext, TableColumn, TableEntryRenderer, TableHeader};
+use std::rc::Rc;
 use yew::{
     Callback, Component, Context, Html, Properties, html, html::IntoPropValue, html_nested,
     platform::spawn_local,
@@ -18,7 +15,6 @@ use yew::{
 #[derive(Debug, Default)]
 pub struct SelectDuct {
     found_ducts: Load<Rc<Vec<DuctListEntry>>>,
-    table_state: Rc<RefCell<HashMap<usize, ExpansionState<Columns>>>>,
 }
 pub enum Msg {
     Data(Box<[DuctListEntry]>),
@@ -72,10 +68,6 @@ impl Component for SelectDuct {
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         self.found_ducts.view(|table| {
-            let entries = ListModel::new(
-                MemoizedTableModel::new(table.clone()),
-                self.table_state.clone(),
-            );
             let header = html_nested! {
                 <TableHeader<Columns>>
                     <TableColumn<Columns> label="Schacht" index={Columns::SchachtA}/>
@@ -85,13 +77,12 @@ impl Component for SelectDuct {
             };
             let onrowclick = ctx.props().on_select.clone();
             html! {
-                <Table<Columns, ListModel<Columns, MemoizedTableModel<DuctListEntry>>>
-                    mode={TableMode::Compact}
-                    grid={TableGridMode::Medium}
+                <ListTable<Columns, DuctListEntry>
+                    {header}
+                    rows={table.clone()}
+                    empty="Keine Trassen."
                     caption="Trassen"
                     {onrowclick}
-                    {header}
-                    {entries}
                 />
             }
         })

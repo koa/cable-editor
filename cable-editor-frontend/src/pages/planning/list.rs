@@ -1,17 +1,17 @@
 use crate::components::load::Load;
 use crate::components::page_layout::PageLayout;
 use crate::{
-    components::{plan_link::PlanNameLink, table::ListModel},
+    components::{plan_link::PlanNameLink, table::ListTable},
     error::FrontendError,
     graphql::authenticated::{current_user::Role, list_plans::PlanListEntry},
     util::{get_backdrop, get_credentials, get_role, toast_error, toast_success},
 };
 use patternfly_yew::prelude::{
     ActionGroup, Backdrop, Bullseye, Button, ButtonType, ButtonVariant, Cell, CellContext, Color,
-    ExpansionState, Form, FormGroup, Label, LabelIcon, MemoizedTableModel, Modal, PopoverBody,
-    Table, TableColumn, TableEntryRenderer, TableGridMode, TableHeader, TableMode, TextInput,
+    Form, FormGroup, Label, LabelIcon, Modal, PopoverBody, TableColumn, TableEntryRenderer,
+    TableHeader, TextInput,
 };
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::rc::Rc;
 use web_sys::SubmitEvent;
 use yew::{
     Callback, Component, Context, Html, Properties, html, html_nested, platform::spawn_local,
@@ -19,7 +19,6 @@ use yew::{
 
 pub struct ListOfPlannings {
     data: Load<Rc<Vec<PlanListEntry>>>,
-    table_state: Rc<RefCell<HashMap<usize, ExpansionState<Columns>>>>,
 }
 
 #[derive(Debug)]
@@ -45,7 +44,6 @@ impl Component for ListOfPlannings {
     fn create(_ctx: &Context<Self>) -> Self {
         ListOfPlannings {
             data: Load::Pending,
-            table_state: Rc::default(),
         }
     }
 
@@ -89,10 +87,6 @@ impl Component for ListOfPlannings {
 impl ListOfPlannings {
     fn view_content(&self, ctx: &Context<Self>) -> Html {
         self.data.view(|data| {
-            let entries = ListModel::new(
-                MemoizedTableModel::new(data.clone()),
-                self.table_state.clone(),
-            );
             let header = html_nested! {
                 <TableHeader<Columns>>
                     <TableColumn<Columns> label="Name" index={Columns::Name}/>
@@ -133,11 +127,10 @@ impl ListOfPlannings {
                 });
             html! {
                 <>
-                <Table<Columns, ListModel<Columns, MemoizedTableModel<PlanListEntry>>>
-                    mode={TableMode::Compact}
-                    grid={TableGridMode::Medium}
+                <ListTable<Columns, PlanListEntry>
                     {header}
-                    {entries}
+                    rows={data.clone()}
+                    empty="Keine Planungen."
                 />
                 {create_button}
                 </>

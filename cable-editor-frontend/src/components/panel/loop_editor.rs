@@ -4,7 +4,7 @@ use crate::components::page_layout::{PageLayout, object_title};
 use crate::components::unsaved::Unsaved;
 use crate::graphql::authenticated::{CableId, CableSize};
 use crate::{
-    components::{fiber::FiberNumber, table::ListModel},
+    components::{fiber::FiberNumber, table::ListTable},
     error::FrontendError,
     graphql::authenticated::{
         PortSide, PortType,
@@ -22,12 +22,11 @@ use crate::components::select::Select;
 use crate::graphql::authenticated::connections::{FiberOwnEnd, PortUsageUpdateAction, UsedEndPort};
 use itertools::Itertools;
 use patternfly_yew::prelude::{
-    ActionGroup, Alert, AlertType, Button, ButtonVariant, Cell, CellContext, ExpansionState,
-    FormGroup, Grid, GridItem, Icon, MemoizedTableModel, Panel, PanelMain, PanelMainBody, Spinner,
-    Table, TableColumn, TableEntryRenderer, TableGridMode, TableHeader, TableMode,
+    ActionGroup, Alert, AlertType, Button, ButtonVariant, Cell, CellContext, FormGroup, Grid,
+    GridItem, Icon, Panel, PanelMain, PanelMainBody, Spinner, TableColumn, TableEntryRenderer,
+    TableHeader,
 };
 use std::{
-    cell::RefCell,
     collections::{BTreeMap, HashMap, HashSet},
     rc::Rc,
 };
@@ -37,7 +36,7 @@ use yew::{
 };
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
-enum LoopColumn {
+enum Columns {
     Fiber,
     Status,
     Actions,
@@ -84,13 +83,13 @@ struct FiberLoopEntry {
     pub reset: Callback<(i32, i32)>,
 }
 
-impl TableEntryRenderer<LoopColumn> for FiberLoopEntry {
-    fn render_cell(&self, context: CellContext<'_, LoopColumn>) -> Cell {
+impl TableEntryRenderer<Columns> for FiberLoopEntry {
+    fn render_cell(&self, context: CellContext<'_, Columns>) -> Cell {
         match context.column {
-            LoopColumn::Fiber => {
+            Columns::Fiber => {
                 Cell::new(html!(<FiberNumber bundle={self.bundle} fiber={self.fiber}/>))
             }
-            LoopColumn::Status => {
+            Columns::Status => {
                 let (icon, text) = match &self.data.status {
                     FiberStatus::Free => (html!(<IconFiberCut/>), "Frei "),
                     FiberStatus::Looped => (html!(<IconFiberConnected/>), "Verbunden "),
@@ -108,7 +107,7 @@ impl TableEntryRenderer<LoopColumn> for FiberLoopEntry {
                 };
                 Cell::new(node)
             }
-            LoopColumn::Actions => {
+            Columns::Actions => {
                 let bundle = self.bundle;
                 let fiber = self.fiber;
                 let reset_button = if self.data.modified_in_plan && !self.data.reset {
@@ -160,8 +159,8 @@ impl TableEntryRenderer<LoopColumn> for FiberLoopEntry {
                     }
                 }
             }
-            LoopColumn::TerminationA | LoopColumn::TerminationB => {
-                let end_port = if let LoopColumn::TerminationA = context.column {
+            Columns::TerminationA | Columns::TerminationB => {
+                let end_port = if let Columns::TerminationA = context.column {
                     self.data.end_port_a.as_ref()
                 } else {
                     self.data.end_port_b.as_ref()
@@ -186,7 +185,6 @@ pub struct LoopPortEditor {
     // The fibers' states, by (bundle, fiber)
     fiber_states: BTreeMap<(i32, i32), FiberData>,
 
-    table_state: Rc<RefCell<HashMap<usize, ExpansionState<LoopColumn>>>>,
     saving: bool,
     missing_port_count: usize,
     unsaved: Unsaved,
@@ -217,7 +215,6 @@ impl Component for LoopPortEditor {
             cable_a: None,
             cable_b: None,
             fiber_states: BTreeMap::new(),
-            table_state: Rc::default(),
             saving: false,
             missing_port_count: 0,
             unsaved: Unsaved::new(ctx.link()),
@@ -607,11 +604,11 @@ impl LoopPortEditor {
         }
     }
     fn render_fiber_table(&self, ctx: &Context<Self>) -> Html {
-        let mut entries = Vec::new();
+        let mut rows = Vec::new();
         let scope = ctx.link().clone();
 
         for ((bundle, fiber), data) in self.fiber_states.iter() {
-            entries.push(FiberLoopEntry {
+            rows.push(FiberLoopEntry {
                 bundle: *bundle,
                 fiber: *fiber,
                 data: data.clone(),
@@ -621,27 +618,21 @@ impl LoopPortEditor {
             })
         }
 
-        let table_model = ListModel::new(
-            MemoizedTableModel::new(Rc::new(entries)),
-            self.table_state.clone(),
-        );
-
         let header = html_nested! {
-            <TableHeader<LoopColumn>>
-                <TableColumn<LoopColumn> label="Ende" index={LoopColumn::TerminationA} />
-                <TableColumn<LoopColumn> label="Faser" index={LoopColumn::Fiber} />
-                <TableColumn<LoopColumn> label="Status" index={LoopColumn::Status} />
-                <TableColumn<LoopColumn> label="Aktion" index={LoopColumn::Actions} />
-                <TableColumn<LoopColumn> label="Ende" index={LoopColumn::TerminationB} />
-            </TableHeader<LoopColumn>>
+            <TableHeader<Columns>>
+                <TableColumn<Columns> label="Ende" index={Columns::TerminationA} />
+                <TableColumn<Columns> label="Faser" index={Columns::Fiber} />
+                <TableColumn<Columns> label="Status" index={Columns::Status} />
+                <TableColumn<Columns> label="Aktion" index={Columns::Actions} />
+                <TableColumn<Columns> label="Ende" index={Columns::TerminationB} />
+            </TableHeader<Columns>>
         };
 
         html! {
-            <Table<LoopColumn, ListModel<LoopColumn, MemoizedTableModel<FiberLoopEntry>>>
-                mode={TableMode::Compact}
-                grid={TableGridMode::Medium}
+            <ListTable<Columns, FiberLoopEntry>
                 {header}
-                entries={table_model}
+                rows={Rc::new(rows)}
+                empty="Die Kabel haben keine Fasern."
             />
         }
     }

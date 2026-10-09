@@ -6,7 +6,7 @@ use crate::graphql::authenticated::port_label;
 use crate::{
     components::{
         links::{CableLink, PanelLink, SchachtLink},
-        table::ListModel,
+        table::ListTable,
     },
     error::FrontendError,
     graphql::authenticated::{
@@ -20,12 +20,11 @@ use crate::{
 };
 use cable_editor_common::ObjectKind;
 use patternfly_yew::prelude::{
-    ActionGroup, Backdrop, Bullseye, Button, ButtonVariant, Cell, CellContext, Color,
-    ExpansionState, Form, FormGroup, Label, Level, MemoizedTableModel, Modal, ModalVariant, Panel,
-    PanelMain, PanelMainBody, Table, TableColumn, TableEntryRenderer, TableGridMode, TableHeader,
-    TableMode, TextInput, Title,
+    ActionGroup, Backdrop, Bullseye, Button, ButtonVariant, Cell, CellContext, Color, Form,
+    FormGroup, Label, Level, Modal, ModalVariant, Panel, PanelMain, PanelMainBody, TableColumn,
+    TableEntryRenderer, TableHeader, TextInput, Title,
 };
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{collections::HashMap, rc::Rc};
 use yew::{
     Callback, Component, Context, Html, Properties, html, html::IntoPropValue, html_nested,
     platform::spawn_local,
@@ -38,7 +37,7 @@ pub struct EditPlanProps {
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
-enum UsageColumn {
+enum Columns {
     Location,
     Port,
     Front,
@@ -63,10 +62,10 @@ struct PanelChain {
     panel_name: String,
 }
 
-impl TableEntryRenderer<UsageColumn> for PortUsageRow {
-    fn render_cell(&self, context: CellContext<'_, UsageColumn>) -> Cell {
+impl TableEntryRenderer<Columns> for PortUsageRow {
+    fn render_cell(&self, context: CellContext<'_, Columns>) -> Cell {
         match context.column {
-            UsageColumn::Location => Cell::new(html! {
+            Columns::Location => Cell::new(html! {
                 <>
                     // Separated like `write_panel_path`, "Schacht: Parent > Panel"
                     <SchachtLink id={self.schacht_id} text={self.schacht_name.clone()}/>
@@ -79,21 +78,21 @@ impl TableEntryRenderer<UsageColumn> for PortUsageRow {
                 </>
             }),
             // Ports have no page of their own, their panel's connection overview shows them
-            UsageColumn::Port => Cell::new(match self.panel.last() {
+            Columns::Port => Cell::new(match self.panel.last() {
                 Some(panel) => {
                     html!(<PanelLink id={panel.panel_id} text={self.port_label.clone()}/>)
                 }
                 None => self.port_label.clone().into_prop_value(),
             }),
-            UsageColumn::Front => Cell::new(render_action(&self.front)),
-            UsageColumn::Back => Cell::new(render_action(&self.back)),
+            Columns::Front => Cell::new(render_action(&self.front)),
+            Columns::Back => Cell::new(render_action(&self.back)),
         }
     }
 }
 
 fn render_action(usage: &Option<PortUsage>) -> Html {
     match usage {
-        None => html! { <span class="pf-v6-u-color-200">{"Unverändert"}</span> },
+        None => html! { <span class="pf-v6-u-text-color-subtle">{"Unverändert"}</span> },
         Some(u) => {
             if let Some(fiber) = &u.fiber {
                 html! {
@@ -117,7 +116,6 @@ pub struct EditPlan {
     details: Load<PlanDetails>,
     edit_name: String,
     saving: bool,
-    table_state: Rc<RefCell<HashMap<usize, ExpansionState<UsageColumn>>>>,
     unsaved: Unsaved,
 }
 
@@ -167,7 +165,6 @@ impl Component for EditPlan {
             details: Load::Pending,
             edit_name: String::new(),
             saving: false,
-            table_state: Rc::default(),
         }
     }
 
@@ -429,18 +426,13 @@ impl EditPlan {
                 .then(a.port_label.cmp(&b.port_label))
         });
 
-        let table_model = ListModel::new(
-            MemoizedTableModel::new(Rc::new(rows)),
-            self.table_state.clone(),
-        );
-
         let header = html_nested! {
-            <TableHeader<UsageColumn>>
-                <TableColumn<UsageColumn> label="Schacht: Panel" index={UsageColumn::Location} />
-                <TableColumn<UsageColumn> label="Port" index={UsageColumn::Port} />
-                <TableColumn<UsageColumn> label="Vorne" index={UsageColumn::Front} />
-                <TableColumn<UsageColumn> label="Hinten" index={UsageColumn::Back} />
-            </TableHeader<UsageColumn>>
+            <TableHeader<Columns>>
+                <TableColumn<Columns> label="Schacht: Panel" index={Columns::Location} />
+                <TableColumn<Columns> label="Port" index={Columns::Port} />
+                <TableColumn<Columns> label="Vorne" index={Columns::Front} />
+                <TableColumn<Columns> label="Hinten" index={Columns::Back} />
+            </TableHeader<Columns>>
         };
 
         let kind = if details.is_baseline {
@@ -498,11 +490,10 @@ impl EditPlan {
                         if is_open {
                             <div class="pf-v6-u-mt-xl">
                                 <Title level={Level::H2}>{"Geplante Änderungen"}</Title>
-                                <Table<UsageColumn, ListModel<UsageColumn, MemoizedTableModel<PortUsageRow>>>
-                                    mode={TableMode::Compact}
-                                    grid={TableGridMode::Medium}
+                                <ListTable<Columns, PortUsageRow>
                                     {header}
-                                    entries={table_model}
+                                    rows={Rc::new(rows)}
+                                    empty="Keine geplanten Änderungen."
                                 />
                             </div>
                             if role >= Role::Admin {

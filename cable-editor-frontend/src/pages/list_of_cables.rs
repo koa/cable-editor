@@ -4,7 +4,7 @@ use crate::{
         links::{CableLink, SchachtLink},
         page_layout::PageLayout,
         plan_link::PlanLink,
-        table::ListModel,
+        table::ListTable,
     },
     error::FrontendError,
     graphql::authenticated::{
@@ -15,10 +15,9 @@ use crate::{
     util::{get_credentials, get_role},
 };
 use patternfly_yew::prelude::{
-    Cell, CellContext, ExpansionState, MemoizedTableModel, Order, Table, TableColumn,
-    TableEntryRenderer, TableGridMode, TableHeader, TableHeaderSortBy, TableMode,
+    Cell, CellContext, Order, TableColumn, TableEntryRenderer, TableHeader, TableHeaderSortBy,
 };
-use std::{cell::RefCell, cmp::Ordering, collections::HashMap, rc::Rc};
+use std::{cmp::Ordering, rc::Rc};
 use uuid::Uuid;
 use yew::{
     Component, Context, Html, html, html::IntoPropValue, html_nested, platform::spawn_local,
@@ -72,8 +71,6 @@ pub struct ListOfCables {
     /// `None` while loading
     cables: Load<Rc<Vec<CableListEntry>>>,
     sort: Option<TableHeaderSortBy<Columns>>,
-    /// Required by `ListModel`; the rows don't expand
-    table_state: Rc<RefCell<HashMap<usize, ExpansionState<Columns>>>>,
 }
 
 pub enum Msg {
@@ -91,7 +88,6 @@ impl Component for ListOfCables {
         Self {
             cables: Load::Pending,
             sort: None,
-            table_state: Rc::default(),
         }
     }
 
@@ -168,17 +164,12 @@ impl ListOfCables {
                 <TableColumn<Columns> label="Bis" index={Columns::SchachtZ} {onsort} {sortby}/>
             </TableHeader<Columns>>
         };
-        let entries = ListModel::new(
-            MemoizedTableModel::new(cables.clone()),
-            self.table_state.clone(),
-        );
         html! {
             <>
-                <Table<Columns, ListModel<Columns, MemoizedTableModel<CableListEntry>>>
-                    mode={TableMode::Compact}
-                    grid={TableGridMode::Medium}
+                <ListTable<Columns, CableListEntry>
                     {header}
-                    {entries}
+                    rows={cables.clone()}
+                    empty="Keine Kabel."
                 />
                 if get_role(ctx.link()) >= Role::Planner {
                     // Not stretched to the width of the page's content

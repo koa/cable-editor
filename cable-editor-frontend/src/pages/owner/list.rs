@@ -7,7 +7,7 @@ use crate::{
         dialog::ask_delete,
         menu::popup::{MenuActionItem, MenuGroup, PopupMenu},
         page_layout::PageLayout,
-        table::ListModel,
+        table::ListTable,
     },
     error::FrontendError,
     graphql::authenticated::{
@@ -21,11 +21,10 @@ use crate::{
 };
 use patternfly_yew::prelude::{
     ActionGroup, Backdrop, Bullseye, Button, ButtonType, ButtonVariant, Cell, CellContext,
-    Checkbox, CheckboxState, Color, ExpansionState, Form, FormGroup, Icon, Label,
-    MemoizedTableModel, MenuToggleVariant, Modal, ModalVariant, Table, TableColumn,
-    TableEntryRenderer, TableGridMode, TableHeader, TableMode, TextInput,
+    Checkbox, CheckboxState, Color, Form, FormGroup, Icon, Label, MenuToggleVariant, Modal,
+    ModalVariant, TableColumn, TableEntryRenderer, TableHeader, TextInput,
 };
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::rc::Rc;
 use web_sys::SubmitEvent;
 use yew::{
     Callback, Component, Context, Html, Properties, html, html::IntoPropValue, html_nested,
@@ -126,8 +125,6 @@ impl OwnerRow {
 pub struct ListOfOwners {
     /// `None` while loading
     owners: Load<Rc<Vec<OwnerRow>>>,
-    /// Required by `ListModel`; the rows don't expand
-    table_state: Rc<RefCell<HashMap<usize, ExpansionState<Columns>>>>,
 }
 
 pub enum Msg {
@@ -149,7 +146,6 @@ impl Component for ListOfOwners {
         ctx.link().send_message(Msg::Load);
         Self {
             owners: Load::Pending,
-            table_state: Rc::default(),
         }
     }
 
@@ -270,17 +266,12 @@ impl ListOfOwners {
                 <TableColumn<Columns> index={Columns::Actions}/>
             </TableHeader<Columns>>
         };
-        let entries = ListModel::new(
-            MemoizedTableModel::new(owners.clone()),
-            self.table_state.clone(),
-        );
         html! {
             <>
-                <Table<Columns, ListModel<Columns, MemoizedTableModel<OwnerRow>>>
-                    mode={TableMode::Compact}
-                    grid={TableGridMode::Medium}
+                <ListTable<Columns, OwnerRow>
                     {header}
-                    {entries}
+                    rows={owners.clone()}
+                    empty="Keine Eigentümer."
                 />
                 if is_admin {
                     // Not stretched to the width of the page's content

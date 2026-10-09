@@ -374,7 +374,7 @@ impl ShowPanel {
                 if total_ports == 0 {
                     <Card class="empty-panel-card pf-v6-u-mb-xl">
                         <CardBody>
-                            <div class="pf-v6-u-text-align-center pf-v6-u-color-200 pf-v6-u-p-lg">
+                            <div class="pf-v6-u-text-align-center pf-v6-u-text-color-subtle pf-v6-u-p-lg">
                                 {Icon::ExclamationTriangle}
                                 <span class="pf-v6-u-ml-sm">{"Keine Ports auf diesen Panels vorhanden."}</span>
                             </div>
@@ -396,7 +396,7 @@ impl ShowPanel {
     fn render_ports_table(&self, ports: &[PlannedPort], schacht: &Schacht, _panel_id: i32) -> Html {
         if ports.is_empty() {
             return html! {
-                <div class="pf-v6-u-p-md pf-v6-u-color-200 pf-v6-u-text-align-center empty-state-box">
+                <div class="pf-v6-u-p-md pf-v6-u-text-color-subtle pf-v6-u-text-align-center empty-state-box">
                     {"Keine Ports auf diesem Panel vorhanden."}
                 </div>
             };
@@ -514,7 +514,7 @@ impl ShowPanel {
                     </div>
                     <div class="pf-v6-u-mt-xs pf-v6-u-display-flex pf-v6-u-align-items-center">
                         <Label color={type_color} label={type_text}/>
-                        <span class="pf-v6-u-font-size-xs pf-v6-u-color-200 pf-v6-u-ml-xs">
+                        <span class="pf-v6-u-font-size-xs pf-v6-u-text-color-subtle pf-v6-u-ml-xs">
                             {format!("(#{})", port.order_number)}
                         </span>
                     </div>
@@ -586,7 +586,7 @@ impl ShowPanel {
             html! {
                 <div class="mobile-port-title">
                     <FiberNumber bundle={loop_fiber.bundle} fiber={loop_fiber.fiber}/>
-                    <span class="pf-v6-u-font-size-xs pf-v6-u-color-200 pf-v6-u-ml-xs">
+                    <span class="pf-v6-u-font-size-xs pf-v6-u-text-color-subtle pf-v6-u-ml-xs">
                         {format!("(#{})", port.order_number)}
                     </span>
                 </div>
@@ -686,7 +686,7 @@ impl ShowPanel {
                         <CableLink id={fiber_info.cable.id} text={cable_name}/>
                     </span>
                     if let Some(far_schacht) = far_schacht {
-                        <span class="cable-far-schacht pf-v6-u-font-size-xs pf-v6-u-color-200">
+                        <span class="cable-far-schacht pf-v6-u-font-size-xs pf-v6-u-text-color-subtle">
                             {" ➔ "}
                             <SchachtLink id={far_schacht.id} text={far_schacht.name.clone()}/>
                         </span>

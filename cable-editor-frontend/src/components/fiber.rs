@@ -21,6 +21,7 @@ pub fn fiber_label(props: &FiberLabelProps) -> Html {
 
     let fiber_class = format!("swisscom-fiber-{}", base_num);
     let classes = classes!(
+        // konventionen:ignore pf-klasse-statt-komponente Label knows only its palette and text
         "pf-v6-c-label",
         "swisscom-fiber-label",
         fiber_class,

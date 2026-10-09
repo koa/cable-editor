@@ -9,7 +9,7 @@ use crate::components::{
 use crate::graphql::authenticated::SchachtRef;
 use crate::graphql::authenticated::cable_details::fetch_connected_ducts;
 use crate::{
-    components::table::ListModel,
+    components::table::ListTable,
     error::FrontendError,
     graphql::authenticated::{
         IdOrNew,
@@ -25,12 +25,11 @@ use crate::{
 };
 use cable_editor_common::ObjectKind;
 use patternfly_yew::prelude::{
-    Backdrop, Bullseye, Button, ButtonVariant, Cell, CellContext, ExpansionState, Form, FormGroup,
-    Icon, InputState, LabelIcon, MemoizedTableModel, Modal, ModalVariant, SimpleList,
-    SimpleListItem, Spinner, Table, TableColumn, TableEntryRenderer, TableGridMode, TableHeader,
-    TableMode, TextInput, Toolbar, ToolbarContent, ToolbarItem,
+    Backdrop, Bullseye, Button, ButtonVariant, Cell, CellContext, Form, FormGroup, Icon,
+    InputState, LabelIcon, Modal, ModalVariant, SimpleList, SimpleListItem, Spinner, TableColumn,
+    TableEntryRenderer, TableHeader, TextInput, Toolbar, ToolbarContent, ToolbarItem,
 };
-use std::{cell::RefCell, collections::HashMap, mem, rc::Rc};
+use std::{mem, rc::Rc};
 use yew::{
     Callback, Component, Context, Html, Properties, function_component, html, html::IntoPropValue,
     html::Scope, html_nested, platform::spawn_local,
@@ -51,37 +50,37 @@ enum DuctPathEntry {
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
-enum CablePathColumn {
+enum Columns {
     Schacht,
     Length,
     Position,
     Actions,
 }
 
-impl TableEntryRenderer<CablePathColumn> for DuctPathEntry {
-    fn render_cell(&self, context: CellContext<'_, CablePathColumn>) -> Cell {
+impl TableEntryRenderer<Columns> for DuctPathEntry {
+    fn render_cell(&self, context: CellContext<'_, Columns>) -> Cell {
         match context.column {
-            CablePathColumn::Schacht => match self {
+            Columns::Schacht => match self {
                 DuctPathEntry::Schacht { schacht, .. } => {
                     Cell::new(schacht.name.as_str().into_prop_value())
                 }
                 _ => Cell::default(),
             },
-            CablePathColumn::Length => if let DuctPathEntry::Duct { duct, .. } = self {
+            Columns::Length => if let DuctPathEntry::Duct { duct, .. } = self {
                 duct.length
             } else {
                 None
             }
             .map(|l| Cell::new(format!("{l:.1} m").into_prop_value()))
             .unwrap_or_default(),
-            CablePathColumn::Position => {
+            Columns::Position => {
                 if let DuctPathEntry::Schacht { pos, .. } = self {
                     Cell::new(format!("{pos:.1} m").into_prop_value())
                 } else {
                     Cell::default()
                 }
             }
-            CablePathColumn::Actions => match self {
+            Columns::Actions => match self {
                 DuctPathEntry::Duct {
                     duct,
                     on_remove: Some(on_remove),
@@ -202,7 +201,6 @@ pub struct EditCable {
     fiber_count: String,
     saving: bool,
     path: Option<CablePath>,
-    table_state: Rc<RefCell<HashMap<usize, ExpansionState<CablePathColumn>>>>,
     unsaved: Unsaved,
 }
 pub enum Msg {
@@ -646,16 +644,14 @@ impl EditCable {
                     }
 
                     entries
-                }).map(|cable_path| MemoizedTableModel::new(Rc::new(cable_path)))
-                    .map(|d| ListModel::new(d, self.table_state.clone()))
-                    .map(|entries| {
-                        let table_header = html_nested! {
-                            <TableHeader<CablePathColumn>>
-                                <TableColumn<CablePathColumn> label="Name" index={CablePathColumn::Schacht} />
-                                <TableColumn<CablePathColumn> label="Position" index={CablePathColumn::Position} />
-                                <TableColumn<CablePathColumn> label="Segmentlänge" index={CablePathColumn::Length} />
-                                <TableColumn<CablePathColumn> index={CablePathColumn::Actions} />
-                            </TableHeader<CablePathColumn>>
+                }).map(|rows| {
+                        let header = html_nested! {
+                            <TableHeader<Columns>>
+                                <TableColumn<Columns> label="Name" index={Columns::Schacht} />
+                                <TableColumn<Columns> label="Position" index={Columns::Position} />
+                                <TableColumn<Columns> label="Segmentlänge" index={Columns::Length} />
+                                <TableColumn<Columns> index={Columns::Actions} />
+                            </TableHeader<Columns>>
                         };
                         let label_icon = if path_changed {
                             LabelIcon::Children(Icon::CheckCircle.as_html())
@@ -664,11 +660,10 @@ impl EditCable {
                         };
                         html! {
                             <FormGroup label="Kabelweg" {label_icon}>
-                                <Table<CablePathColumn, ListModel<CablePathColumn, MemoizedTableModel<DuctPathEntry>>>
-                                    mode={TableMode::Compact}
-                                    grid={TableGridMode::Medium}
-                                    header={table_header}
-                                    {entries}
+                                <ListTable<Columns, DuctPathEntry>
+                                    {header}
+                                    rows={Rc::new(rows)}
+                                    empty="Kein Kabelweg erfasst."
                                 />
                             </FormGroup>
                         }

@@ -10,7 +10,7 @@ use crate::{
         page_layout::PageLayout,
         plan_link::PlanNameLink,
         port_usage_issues::notify_changed,
-        table::ListModel,
+        table::ListTable,
     },
     error::{FrontendError, messages},
     graphql::authenticated::{
@@ -23,10 +23,9 @@ use crate::{
     util::{get_credentials, toast_error, toast_success},
 };
 use patternfly_yew::prelude::{
-    Button, ButtonVariant, Cell, CellContext, ExpansionState, MemoizedTableModel, Table,
-    TableColumn, TableEntryRenderer, TableGridMode, TableHeader, TableMode,
+    Button, ButtonVariant, Cell, CellContext, TableColumn, TableEntryRenderer, TableHeader,
 };
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::rc::Rc;
 use yew::{
     Callback, Component, Context, Html, Properties, html, html_nested, platform::spawn_local,
 };
@@ -104,8 +103,6 @@ pub struct PortUsageIssuesPageProps {
 pub struct PortUsageIssuesPage {
     rows: Load<Rc<Vec<UsageRow>>>,
     deleting: bool,
-    /// Required by `ListModel`; the rows don't expand
-    table_state: Rc<RefCell<HashMap<usize, ExpansionState<Columns>>>>,
 }
 
 pub enum Msg {
@@ -124,7 +121,6 @@ impl Component for PortUsageIssuesPage {
         Self {
             rows: Load::Pending,
             deleting: false,
-            table_state: Rc::default(),
         }
     }
 
@@ -220,9 +216,6 @@ impl PortUsageIssuesPage {
     }
 
     fn view_rows(&self, ctx: &Context<Self>, rows: &Rc<Vec<UsageRow>>) -> Html {
-        if rows.is_empty() {
-            return html!(<p>{"Alle Port-Belegungen passen zu ihren Kabeln."}</p>);
-        }
         let header = html_nested! {
             <TableHeader<Columns>>
                 <TableColumn<Columns> label="Planung" index={Columns::Plan}/>
@@ -233,10 +226,6 @@ impl PortUsageIssuesPage {
                 <TableColumn<Columns> index={Columns::Actions}/>
             </TableHeader<Columns>>
         };
-        let entries = ListModel::new(
-            MemoizedTableModel::new(rows.clone()),
-            self.table_state.clone(),
-        );
         let all: Vec<PortUsageKeyInput> = rows
             .iter()
             .map(|row| PortUsageKeyInput {
@@ -253,23 +242,26 @@ impl PortUsageIssuesPage {
         );
         html! {
             <>
-                <p class="pf-v6-u-mb-md">
-                    {"Diese Ports sind mit Fasern belegt, die nicht zu ihrem Kabel passen, zum Beispiel weil der Weg des Kabels geändert wurde. Löschen macht die Seite des Ports frei: im Ist-Zustand sofort, in einer Planung als Änderung der Planung. Wer die Faser anders auflegen will, tut das im Panel selbst. Liegt eine Faser an zwei Ports, bleibt sie am zweiten, sobald der erste gelöscht ist."}
-                </p>
-                <Table<Columns, ListModel<Columns, MemoizedTableModel<UsageRow>>>
-                    mode={TableMode::Compact}
-                    grid={TableGridMode::Medium}
+                if !rows.is_empty() {
+                    <p class="pf-v6-u-mb-md">
+                        {"Diese Ports sind mit Fasern belegt, die nicht zu ihrem Kabel passen, zum Beispiel weil der Weg des Kabels geändert wurde. Löschen macht die Seite des Ports frei: im Ist-Zustand sofort, in einer Planung als Änderung der Planung. Wer die Faser anders auflegen will, tut das im Panel selbst. Liegt eine Faser an zwei Ports, bleibt sie am zweiten, sobald der erste gelöscht ist."}
+                    </p>
+                }
+                <ListTable<Columns, UsageRow>
                     {header}
-                    {entries}
+                    rows={rows.clone()}
+                    empty="Alle Port-Belegungen passen zu ihren Kabeln."
                 />
-                <div class="pf-v6-u-mt-md">
-                    <Button
-                        label="Alle löschen"
-                        variant={ButtonVariant::DangerSecondary}
-                        disabled={self.deleting}
-                        onclick={delete_all}
-                    />
-                </div>
+                if !rows.is_empty() {
+                    <div class="pf-v6-u-mt-md">
+                        <Button
+                            label="Alle löschen"
+                            variant={ButtonVariant::DangerSecondary}
+                            disabled={self.deleting}
+                            onclick={delete_all}
+                        />
+                    </div>
+                }
             </>
         }
     }

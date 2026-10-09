@@ -1,5 +1,5 @@
 use crate::pages::router::AppRoute;
-use patternfly_yew::prelude::{Icon, MenuToggle, MenuToggleVariant};
+use patternfly_yew::prelude::{Divider, Icon, MenuToggle, MenuToggleVariant};
 use wasm_bindgen::JsCast;
 use web_sys::{Element, HtmlElement, Node};
 use yew::events::{FocusEvent, KeyboardEvent, MouseEvent};
@@ -223,7 +223,7 @@ pub fn MenuGroup(props: &MenuGroupProps) -> Html {
     html! {
         <>
             if props.divider {
-                <hr class="pf-v6-c-divider"/>
+                <Divider/>
             }
             <section class="pf-v6-c-menu__group">
                 if let Some(title) = &props.title {

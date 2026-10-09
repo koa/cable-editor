@@ -144,7 +144,7 @@ impl NetboxPage {
                         </DescriptionGroup>
                     }
                 </DescriptionList>
-                <p class="pf-v6-u-mt-md pf-v6-u-color-200">
+                <p class="pf-v6-u-mt-md pf-v6-u-text-color-subtle">
                     {"Die Circuits werden nach jeder Änderung der aktiven Planung synchronisiert und zusätzlich alle paar Stunden, was auch Änderungen von Hand in Netbox ausgleicht. Welche Planung Netbox zeigt, bestimmt die Seite „Planung bearbeiten“ einer Planung."}
                 </p>
                 <div class="pf-v6-u-mt-md pf-v6-u-mb-xl">

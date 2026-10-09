@@ -1,7 +1,7 @@
 use crate::components::load::Load;
 use crate::components::page_layout::PageLayout;
 use crate::{
-    components::{links::SchachtLink, plan_link::PlanLink, table::ListModel},
+    components::{links::SchachtLink, plan_link::PlanLink, table::ListTable},
     error::FrontendError,
     graphql::authenticated::{
         current_user::Role,
@@ -11,10 +11,9 @@ use crate::{
     util::{get_credentials, get_role},
 };
 use patternfly_yew::prelude::{
-    Cell, CellContext, ExpansionState, MemoizedTableModel, Table, TableColumn, TableEntryRenderer,
-    TableGridMode, TableHeader, TableHeaderSortBy, TableMode,
+    Cell, CellContext, TableColumn, TableEntryRenderer, TableHeader, TableHeaderSortBy,
 };
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::rc::Rc;
 use uuid::Uuid;
 use yew::{
     Component, Context, Html, Properties, html,
@@ -26,8 +25,6 @@ use yew::{
 pub struct ListOfCabinets {
     data: Load<Rc<Vec<SchachtListEntry>>>,
     sort: Option<TableHeaderSortBy<Columns>>,
-    /// Required by `ListModel`; the rows don't expand
-    table_state: Rc<RefCell<HashMap<usize, ExpansionState<Columns>>>>,
 }
 
 pub enum Msg {
@@ -50,7 +47,6 @@ impl Component for ListOfCabinets {
         ListOfCabinets {
             data: Load::Pending,
             sort: None,
-            table_state: Rc::default(),
         }
     }
 
@@ -88,11 +84,6 @@ impl ListOfCabinets {
     fn view_content(&self, ctx: &Context<Self>) -> Html {
         self.data.view(|data| {
             let onsort = ctx.link().callback(Msg::OnSort);
-            let entries = ListModel::new(
-                MemoizedTableModel::new(data.clone()),
-                self.table_state.clone(),
-            );
-
             let header = html_nested! {
                 <TableHeader<Columns>>
                     <TableColumn<Columns> label="Name" index={Columns::Name} onsort={onsort.clone()} sortby={self.sort}/>
@@ -108,11 +99,10 @@ impl ListOfCabinets {
             });
             html! {
                 <>
-                <Table<Columns, ListModel<Columns, MemoizedTableModel<SchachtListEntry>>>
-                    mode={TableMode::Compact}
-                    grid={TableGridMode::Medium}
+                <ListTable<Columns, SchachtListEntry>
                     {header}
-                    {entries}
+                    rows={data.clone()}
+                    empty="Keine Schächte."
                 />
                 {new_schacht}
                 </>

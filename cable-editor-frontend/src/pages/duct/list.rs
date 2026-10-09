@@ -4,7 +4,7 @@ use crate::{
         links::{DuctLink, OwnerLink, SchachtLink},
         page_layout::PageLayout,
         plan_link::PlanLink,
-        table::ListModel,
+        table::ListTable,
     },
     error::FrontendError,
     graphql::authenticated::{
@@ -15,10 +15,9 @@ use crate::{
     util::{get_credentials, get_role},
 };
 use patternfly_yew::prelude::{
-    Cell, CellContext, ExpansionState, MemoizedTableModel, Order, Table, TableColumn,
-    TableEntryRenderer, TableGridMode, TableHeader, TableHeaderSortBy, TableMode,
+    Cell, CellContext, Order, TableColumn, TableEntryRenderer, TableHeader, TableHeaderSortBy,
 };
-use std::{cell::RefCell, cmp::Ordering, collections::HashMap, rc::Rc};
+use std::{cmp::Ordering, rc::Rc};
 use uuid::Uuid;
 use yew::{
     Component, Context, Html, html, html::IntoPropValue, html_nested, platform::spawn_local,
@@ -65,8 +64,6 @@ pub struct ListOfDucts {
     /// `None` while loading
     ducts: Load<Rc<Vec<DuctListEntry>>>,
     sort: Option<TableHeaderSortBy<Columns>>,
-    /// Required by `ListModel`; the rows don't expand
-    table_state: Rc<RefCell<HashMap<usize, ExpansionState<Columns>>>>,
 }
 
 pub enum Msg {
@@ -87,7 +84,6 @@ impl Component for ListOfDucts {
         Self {
             ducts: Load::Pending,
             sort: None,
-            table_state: Rc::default(),
         }
     }
 
@@ -148,17 +144,12 @@ impl ListOfDucts {
                 <TableColumn<Columns> label="LK" index={Columns::Lk} {onsort} {sortby}/>
             </TableHeader<Columns>>
         };
-        let entries = ListModel::new(
-            MemoizedTableModel::new(ducts.clone()),
-            self.table_state.clone(),
-        );
         html! {
             <>
-                <Table<Columns, ListModel<Columns, MemoizedTableModel<DuctListEntry>>>
-                    mode={TableMode::Compact}
-                    grid={TableGridMode::Medium}
+                <ListTable<Columns, DuctListEntry>
                     {header}
-                    {entries}
+                    rows={ducts.clone()}
+                    empty="Keine Trassen."
                 />
                 if get_role(ctx.link()) >= Role::Planner {
                     // Not stretched to the width of the page's content

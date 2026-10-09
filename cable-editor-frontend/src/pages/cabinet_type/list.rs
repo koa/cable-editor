@@ -2,7 +2,7 @@
 
 use crate::components::load::Load;
 use crate::{
-    components::{page_layout::PageLayout, plan_link::PlanLink, table::ListModel},
+    components::{page_layout::PageLayout, plan_link::PlanLink, table::ListTable},
     error::FrontendError,
     graphql::authenticated::{
         current_user::Role,
@@ -11,11 +11,8 @@ use crate::{
     pages::router::PlanView,
     util::{get_credentials, get_role},
 };
-use patternfly_yew::prelude::{
-    Cell, CellContext, ExpansionState, MemoizedTableModel, Table, TableColumn, TableEntryRenderer,
-    TableGridMode, TableHeader, TableMode,
-};
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use patternfly_yew::prelude::{Cell, CellContext, TableColumn, TableEntryRenderer, TableHeader};
+use std::rc::Rc;
 use uuid::Uuid;
 use yew::{
     Component, Context, Html, html, html::IntoPropValue, html_nested, platform::spawn_local,
@@ -53,8 +50,6 @@ impl TableEntryRenderer<Columns> for SchachtTypEntry {
 pub struct ListOfCabinetTypes {
     /// `None` while loading
     types: Load<Rc<Vec<SchachtTypEntry>>>,
-    /// Required by `ListModel`; the rows don't expand
-    table_state: Rc<RefCell<HashMap<usize, ExpansionState<Columns>>>>,
 }
 
 pub enum Msg {
@@ -75,7 +70,6 @@ impl Component for ListOfCabinetTypes {
         });
         Self {
             types: Load::Pending,
-            table_state: Rc::default(),
         }
     }
 
@@ -97,17 +91,12 @@ impl Component for ListOfCabinetTypes {
                         <TableColumn<Columns> label="Schächte" index={Columns::Schaechte}/>
                     </TableHeader<Columns>>
                 };
-                let entries = ListModel::new(
-                    MemoizedTableModel::new(types.clone()),
-                    self.table_state.clone(),
-                );
                 html! {
                     <>
-                        <Table<Columns, ListModel<Columns, MemoizedTableModel<SchachtTypEntry>>>
-                            mode={TableMode::Compact}
-                            grid={TableGridMode::Medium}
+                        <ListTable<Columns, SchachtTypEntry>
                             {header}
-                            {entries}
+                            rows={types.clone()}
+                            empty="Keine Schachttypen."
                         />
                         if get_role(ctx.link()) >= Role::Admin {
                             <div>

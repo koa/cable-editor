@@ -5,7 +5,7 @@ use crate::{
         links::{CableLink, PanelLink, SchachtLink},
         page_layout::{PageLayout, object_title},
         plan_link::PlanLink,
-        table::ListModel,
+        table::ListTable,
     },
     error::FrontendError,
     graphql::authenticated::{
@@ -19,11 +19,10 @@ use crate::{
     util::{get_credentials, get_role},
 };
 use patternfly_yew::prelude::{
-    Cell, CellContext, DescriptionGroup, DescriptionList, ExpansionState, Level,
-    MemoizedTableModel, Table, TableColumn, TableEntryRenderer, TableGridMode, TableHeader,
-    TableMode, Title,
+    Cell, CellContext, DescriptionGroup, DescriptionList, Level, TableColumn, TableEntryRenderer,
+    TableHeader, Title,
 };
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::rc::Rc;
 use yew::{
     Component, Context, Html, Properties, html, html::IntoPropValue, html_nested,
     platform::spawn_local,
@@ -74,7 +73,7 @@ fn view_panel(panel: &SchachtPanelEntry) -> Html {
                     <div class="pf-v6-c-data-list__cell schacht-panels__name" style={depth}>
                         <PanelLink id={panel.id} text={name}/>
                         if panel.port_count > 0 {
-                            <span class="pf-v6-u-ml-sm pf-v6-u-color-200">
+                            <span class="pf-v6-u-ml-sm pf-v6-u-text-color-subtle">
                                 {format!("{} Ports", panel.port_count)}
                             </span>
                         }
@@ -98,8 +97,6 @@ pub struct CabinetOverview {
     schacht: Load<SchachtCables>,
     /// The cables of `schacht`, sorted by name
     cables: Rc<Vec<SchachtCableEnd>>,
-    /// Required by `ListModel`; the rows don't expand
-    table_state: Rc<RefCell<HashMap<usize, ExpansionState<Columns>>>>,
     printing: bool,
 }
 
@@ -119,7 +116,6 @@ impl Component for CabinetOverview {
         Self {
             schacht: Load::Pending,
             cables: Rc::default(),
-            table_state: Rc::default(),
             printing: false,
         }
     }
@@ -182,10 +178,6 @@ impl CabinetOverview {
                 { for self.printing.then(|| html_nested!(<TableColumn<Columns> index={Columns::Print}/>)) }
             </TableHeader<Columns>>
         };
-        let entries = ListModel::new(
-            MemoizedTableModel::new(self.cables.clone()),
-            self.table_state.clone(),
-        );
         let panels = schacht.panels();
         let edit_panels = PlanView::Cabinet {
             id: ctx.props().cabinet_id,
@@ -210,7 +202,7 @@ impl CabinetOverview {
                     <div>
                         <Title level={Level::H2}>{"Panels"}</Title>
                         if panels.is_empty() {
-                            <p class="pf-v6-u-color-200">{"Keine Panels im Schacht."}</p>
+                            <p class="pf-v6-u-text-color-subtle">{"Keine Panels im Schacht."}</p>
                         } else {
                             <ul class="pf-v6-c-data-list pf-m-compact schacht-panels" role="list" aria-label="Panels">
                                 {for panels.iter().map(view_panel)}
@@ -226,11 +218,10 @@ impl CabinetOverview {
                     </div>
                     <div>
                         <Title level={Level::H2}>{"Kabel"}</Title>
-                        <Table<Columns, ListModel<Columns, MemoizedTableModel<SchachtCableEnd>>>
-                            mode={TableMode::Compact}
-                            grid={TableGridMode::Medium}
+                        <ListTable<Columns, SchachtCableEnd>
                             {header}
-                            {entries}
+                            rows={self.cables.clone()}
+                            empty="Keine Kabel enden in diesem Schacht."
                         />
                     </div>
                 </div>

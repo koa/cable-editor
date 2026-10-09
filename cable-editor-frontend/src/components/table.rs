@@ -2,9 +2,10 @@ use crate::components::menu::popup::{MenuGroup, PopupMenu};
 use patternfly_yew::{
     ouia,
     prelude::{
-        Caption, Cell, ComposableTable, ExpansionState, Icon, MenuToggleVariant, Ouia,
-        OuiaComponentType, OuiaSafe, StateModel, StateModelIter, TableBody, TableData,
-        TableDataModel, TableGridMode, TableHeader, TableMode, TableModel,
+        Caption, Cell, ComposableTable, ExpansionState, Icon, MemoizedTableModel,
+        MenuToggleVariant, Ouia, OuiaComponentType, OuiaSafe, StateModel, StateModelIter, Table,
+        TableBody, TableData, TableDataModel, TableEntryRenderer, TableGridMode, TableHeader,
+        TableMode, TableModel,
     },
 };
 use std::{
@@ -20,7 +21,7 @@ use yew::{
     function_component, html, virtual_dom::VChild,
 };
 
-pub struct ListModel<C, M>
+struct ListModel<C, M>
 where
     C: Clone + Eq + 'static,
     M: PartialEq + Clone + TableDataModel<C> + 'static,
@@ -35,7 +36,7 @@ where
     M: PartialEq + Clone + TableDataModel<C> + 'static,
     M::Key: Hash,
 {
-    pub fn new(data: M, state: Rc<RefCell<HashMap<M::Key, ExpansionState<C>>>>) -> ListModel<C, M> {
+    fn new(data: M, state: Rc<RefCell<HashMap<M::Key, ExpansionState<C>>>>) -> ListModel<C, M> {
         ListModel {
             model: Rc::new(StateModel::new(data, state)),
         }
@@ -86,6 +87,84 @@ where
 {
     fn eq(&self, other: &Self) -> bool {
         self.model == other.model
+    }
+}
+
+#[derive(Properties)]
+pub struct ListTableProps<C, R>
+where
+    C: Clone + Eq + 'static,
+    R: TableEntryRenderer<C> + Clone + 'static,
+{
+    pub header: VChild<TableHeader<C>>,
+    pub rows: Rc<Vec<R>>,
+    /// Shown in place of the table without rows: what is missing, e.g. "Keine Kabel."
+    pub empty: AttrValue,
+    #[prop_or_default]
+    pub caption: Option<String>,
+    #[prop_or_default]
+    pub onrowclick: Option<Callback<R>>,
+}
+
+impl<C, R> PartialEq for ListTableProps<C, R>
+where
+    C: Clone + Eq + 'static,
+    R: TableEntryRenderer<C> + Clone + 'static,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.header == other.header
+            && Rc::ptr_eq(&self.rows, &other.rows)
+            && self.empty == other.empty
+            && self.caption == other.caption
+            && self.onrowclick == other.onrowclick
+    }
+}
+
+/// The table of every page: compact, on phones one block per row with each cell labelled by its
+/// column (grid mode), a sentence in its place without rows. Keeps the expansion state
+/// patternfly-yew's model needs, though no table expands rows.
+pub struct ListTable<C, R>
+where
+    C: Clone + Eq + 'static,
+{
+    state: Rc<RefCell<HashMap<usize, ExpansionState<C>>>>,
+    row: PhantomData<R>,
+}
+
+impl<C, R> Component for ListTable<C, R>
+where
+    C: Clone + Eq + 'static,
+    R: TableEntryRenderer<C> + Clone + 'static,
+{
+    type Message = ();
+    type Properties = ListTableProps<C, R>;
+
+    fn create(_ctx: &Context<Self>) -> Self {
+        Self {
+            state: Rc::default(),
+            row: PhantomData,
+        }
+    }
+
+    fn view(&self, ctx: &Context<Self>) -> Html {
+        let props = ctx.props();
+        if props.rows.is_empty() {
+            return html!(<p class="pf-v6-u-text-color-subtle">{props.empty.clone()}</p>);
+        }
+        let entries = ListModel::new(
+            MemoizedTableModel::new(props.rows.clone()),
+            self.state.clone(),
+        );
+        html! {
+            <Table<C, ListModel<C, MemoizedTableModel<R>>>
+                mode={TableMode::Compact}
+                grid={TableGridMode::Medium}
+                caption={props.caption.clone()}
+                onrowclick={props.onrowclick.clone()}
+                header={props.header.clone()}
+                {entries}
+            />
+        }
     }
 }
 
