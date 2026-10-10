@@ -1,6 +1,6 @@
 # Konzept: Einheitliche Bedienung im Frontend
 
-Stand: 09.10.2026 – offene Fragen entschieden; das Prüfgerüst steht, Schritt 7 unter „Umsetzung“ ist noch offen.
+Stand: 10.10.2026 – offene Fragen entschieden; das Prüfgerüst steht, alle Schritte unter „Umsetzung“ sind umgesetzt.
 
 Diese Regeln gelten für jede neue oder geänderte Seite. Sie stammen aus einer Durchsicht des
 ganzen Frontends; wo der Code noch abweicht, steht es unter „Umsetzung“. Wie Fehler entstehen
@@ -142,11 +142,16 @@ und was das Backend liefert, steht in `fehlermeldungen.md`, der Aufbau des Bread
 - **Tabellen:** jede Tabelle ist ein `ListTable` (`components/table.rs`): kompakt, auf dem Handy
   ein Block je Zeile mit der Spaltenüberschrift vor jeder Zelle (Grid-Modus von PatternFly), ohne
   Zeilen an ihrer Stelle ein Satz, was fehlt (`empty`, z. B. „Keine Kabel.“). Die Spalten sind ein
-  Enum `Columns`, der Tabellenkopf heisst `header`. Eine Tabelle von Hand (`<table>`,
-  `Table`, `ComposableTable`) braucht einen Grund (`konventionen:ignore`), z. B. der Druck des
-  Arbeitsauftrags, der ohne Grid-Modus auskommen muss.
-- **Aktionen einer Zeile:** eine einzelne Aktion ist ein Knopf in der letzten Spalte (ohne
-  Überschrift), mehrere sind ein Menü (`PopupMenu`).
+  Enum `Columns`, der Tabellenkopf heisst `header`, Spaltenbreiten setzt `TableColumn`
+  (`width`), nicht CSS. Eine Seite, die gedruckt wird (Panel-Übersicht, Arbeitsauftrag), setzt
+  `printable`: PatternFlys Grid-Modus hängt nur von der Breite ab und machte auch aus der
+  schmalen A4-Seite Blöcke, so bleibt sie auf Papier eine Tabelle und wird nur auf dem
+  Bildschirm eines Handys zu Blöcken. Eine Zeile kann eine Klasse tragen (`row_class`, z. B.
+  geändert in der Planung). Eine Tabelle von Hand (`<table>`, `Table`, `ComposableTable`)
+  braucht einen Grund (`konventionen:ignore`).
+- **Aktionen einer Zeile:** in der letzten Spalte ohne Überschrift. Handgriffe eines Editors
+  (verschieben, entfernen) sind Symbolknöpfe nebeneinander, Aktionen mit Text ab zwei ein Menü
+  (`PopupMenu`), eine einzelne ein Knopf.
 - **Komponenten statt Klassen:** wo patternfly-yew eine Komponente hat (`Panel`, `Label`, `List`,
   `ToggleGroup`, `Divider`, `Card`, `Alert`, `Title`), wird sie verwendet, nicht die Klassen von
   PatternFly auf HTML-Elementen. Ausnahmen, weil patternfly-yew es nicht kann: Links mit dem
@@ -225,10 +230,11 @@ Schrittweise, je ein Commit, jeder vor dem Commit durchgesehen:
    um den Router, `Unsaved` in den Formularen der Schächte, Trassen, Schachttypen, Kabel, in
    Planung, Panel-Editor, Fasern auflegen und Loops. `pages.mjs` prüft Link, „Zurück“ und
    das Schliessen des Fensters (`LEAVE_FLOWS`) und dass nach dem Speichern nicht mehr gefragt wird.
-7. Tabellen und Komponenten nach Abschnitt 6: `Panel`, `Label`, `List`, `ToggleGroup`,
-   `Divider` und `IconButton` statt Klassen; `ListTable` für alle Tabellen mit
-   `Table`; `pf-v6-u-color-200` durch `pf-v6-u-text-color-subtle` ersetzt. Offen: die Tabellen
-   von Hand in Panel-Übersicht, Port-Editor und Arbeitsauftrag (Regel `tabelle-listtable`).
+7. (erledigt) Tabellen und Komponenten nach Abschnitt 6: `Panel`, `Label`, `List`,
+   `ToggleGroup`, `Divider` und `IconButton` statt Klassen; `ListTable` für alle Tabellen, auch
+   die von Hand in Panel-Übersicht, Port-Editor und Arbeitsauftrag (die Panel-Übersicht ohne
+   ihre eigene Kartenansicht fürs Handy); `pf-v6-u-color-200` durch `pf-v6-u-text-color-subtle`
+   ersetzt. `node local/mock/screenshot.mjs --print` zeigt eine Seite, wie sie gedruckt wird.
 
 ## Entschieden
 

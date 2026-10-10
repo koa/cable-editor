@@ -2,6 +2,7 @@ use crate::components::icon_button::IconButton;
 use crate::components::load::Load;
 use crate::components::page_layout::{PageLayout, object_title};
 use crate::components::select::Select;
+use crate::components::table::ListTable;
 use crate::components::unsaved::Unsaved;
 use crate::{
     error::FrontendError,
@@ -12,10 +13,14 @@ use crate::{
     util::{get_credentials, toast_error, toast_success},
 };
 use patternfly_yew::prelude::{
-    ActionGroup, Button, ButtonVariant, Icon, Panel, PanelMain, PanelMainBody, Spinner, TextInput,
-    ToggleGroup, ToggleGroupItem,
+    ActionGroup, Button, ButtonVariant, Cell, CellContext, Icon, Panel, PanelMain, PanelMainBody,
+    Spinner, TableColumn, TableEntryRenderer, TableHeader, TextInput, ToggleGroup, ToggleGroupItem,
 };
-use yew::{Component, Context, Html, Properties, html, html::IntoPropValue, platform::spawn_local};
+use std::rc::Rc;
+use yew::{
+    Callback, Component, Context, Html, MouseEvent, Properties, html, html::IntoPropValue,
+    html_nested, platform::spawn_local,
+};
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct EditablePort {
@@ -71,6 +76,71 @@ pub struct PortEditor {
 pub struct StoredPorts {
     ports: Vec<EditablePort>,
     panel_name: Option<Box<str>>,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+enum Columns {
+    Label,
+    Type,
+    Netbox,
+    Actions,
+}
+
+/// A port not deleted, with what its inputs send
+#[derive(Clone)]
+struct PortRow {
+    label: Box<str>,
+    port_type: PortType,
+    netbox_port: Option<i32>,
+    netbox_options: Box<[(i32, String)]>,
+    is_first: bool,
+    is_last: bool,
+    onlabel: Callback<String>,
+    ontype: Callback<PortType>,
+    onnetbox: Callback<Option<i32>>,
+    onup: Callback<MouseEvent>,
+    ondown: Callback<MouseEvent>,
+    ondelete: Callback<MouseEvent>,
+}
+
+impl TableEntryRenderer<Columns> for PortRow {
+    fn render_cell(&self, context: CellContext<'_, Columns>) -> Cell {
+        Cell::new(match context.column {
+            Columns::Label => html! {
+                <TextInput value={self.label.to_string()} onchange={self.onlabel.clone()} />
+            },
+            Columns::Type => {
+                let item = |text: &'static str, port_type: PortType| {
+                    let ontype = self.ontype.clone();
+                    html_nested! {
+                        <ToggleGroupItem
+                            {text}
+                            onchange={move |()| ontype.emit(port_type)}
+                            selected={self.port_type == port_type}
+                        />
+                    }
+                };
+                html! {
+                    <ToggleGroup>
+                        {item("Spleiss", PortType::Splice)}
+                        {item("Stecker", PortType::Connector)}
+                        {item("Loop", PortType::Loop)}
+                    </ToggleGroup>
+                }
+            }
+            Columns::Netbox => html! {
+                <Select<i32> value={self.netbox_port} onchange={self.onnetbox.clone()} placeholder=" - " options={self.netbox_options.clone()}/>
+            },
+            // One element: on phones the cell lays out each child on its own
+            Columns::Actions => html! {
+                <div>
+                    <IconButton icon={Icon::AngleUp} name="Nach oben" onclick={self.onup.clone()} disabled={self.is_first} />
+                    <IconButton icon={Icon::AngleDown} name="Nach unten" onclick={self.ondown.clone()} disabled={self.is_last} />
+                    <IconButton icon={Icon::Trash} name="Entfernen" variant={ButtonVariant::DangerSecondary} onclick={self.ondelete.clone()} />
+                </div>
+            },
+        })
+    }
 }
 
 impl PortEditor {
@@ -360,71 +430,44 @@ impl PortEditor {
             .map(|(i, _)| i)
             .collect();
 
-        let rows = visible_indices.iter().enumerate().map(|(pos, &idx)| {
-            let is_first = pos == 0;
-            let is_last = pos == visible_indices.len() - 1;
-            let port = &self.ports[idx];
-            let row_key = match &port.id {
-                IdOrNew::Id(db_id) => db_id.to_string(),
-                IdOrNew::Temporary(uuid) => uuid.to_string(),
-            };
-            let on_label_change = ctx.link().callback(move |val: String| Msg::UpdateLabel(idx, val.into_boxed_str()));
-
-            let onselect =ctx.link().callback(move |pt |{
-                    Msg::UpdateType(idx, pt)
-            });
-
-            let on_delete = ctx.link().callback(move |_| Msg::MarkDeleted(idx));
-            let on_up = ctx.link().callback(move |_| Msg::MoveUp(idx));
-            let on_down = ctx.link().callback(move |_| Msg::MoveDown(idx));
-            let selected=port.port_type;
-
-            let on_netbox_change = ctx.link().callback(move |port_id| Msg::UpdateNetboxId { idx, port_id });
-            let netbox_options = self
-                .netbox_ports
-                .iter()
-                .map(|np| (np.id, np.name.clone()))
-                .collect::<Box<[_]>>();
-
-            html! {
-                <tr class="pf-v6-c-table__tr" key={row_key}>
-                    //<td class="pf-v6-c-table__td">{ port.order_number }</td>
-                    <td class="pf-v6-c-table__td">
-                        <TextInput value={port.label.to_string()} onchange={on_label_change} />
-                    </td>
-                    <td class="pf-v6-c-table__td">
-                        <ToggleGroup>
-                            <ToggleGroupItem
-                                text="Spleiss"
-                                key=0
-                                onchange={let cb = onselect.clone(); move |_| cb.emit(PortType::Splice)}
-                                selected={selected == PortType::Splice}
-                            />
-                            <ToggleGroupItem
-                                text="Stecker"
-                                key=1
-                                onchange={let cb = onselect.clone(); move |_| cb.emit(PortType::Connector)}
-                                selected={selected == PortType::Connector}
-                            />
-                            <ToggleGroupItem
-                                text="Loop"
-                                key=2
-                                onchange={let cb = onselect.clone(); move |_| cb.emit(PortType::Loop)}
-                                selected={selected == PortType::Loop}
-                            />
-                        </ToggleGroup>
-                    </td>
-                    <td class="pf-v6-c-table__td">
-                        <Select<i32> value={port.netbox_port} onchange={on_netbox_change} placeholder=" - " options={netbox_options}/>
-                    </td>
-                    <td class="pf-v6-c-table__td">
-                        <IconButton icon={Icon::AngleUp} name="Nach oben" onclick={on_up} disabled={is_first} />
-                        <IconButton icon={Icon::AngleDown} name="Nach unten" onclick={on_down} disabled={is_last} />
-                        <IconButton icon={Icon::Trash} name="Entfernen" variant={ButtonVariant::DangerSecondary} onclick={on_delete} />
-                    </td>
-                </tr>
-            }
-        });
+        let netbox_options: Box<[(i32, String)]> = self
+            .netbox_ports
+            .iter()
+            .map(|np| (np.id, np.name.clone()))
+            .collect();
+        let rows: Vec<PortRow> = visible_indices
+            .iter()
+            .enumerate()
+            .map(|(pos, &idx)| {
+                let port = &self.ports[idx];
+                PortRow {
+                    label: port.label.clone(),
+                    port_type: port.port_type,
+                    netbox_port: port.netbox_port,
+                    netbox_options: netbox_options.clone(),
+                    is_first: pos == 0,
+                    is_last: pos == visible_indices.len() - 1,
+                    onlabel: ctx
+                        .link()
+                        .callback(move |val: String| Msg::UpdateLabel(idx, val.into_boxed_str())),
+                    ontype: ctx.link().callback(move |pt| Msg::UpdateType(idx, pt)),
+                    onnetbox: ctx
+                        .link()
+                        .callback(move |port_id| Msg::UpdateNetboxId { idx, port_id }),
+                    onup: ctx.link().callback(move |_| Msg::MoveUp(idx)),
+                    ondown: ctx.link().callback(move |_| Msg::MoveDown(idx)),
+                    ondelete: ctx.link().callback(move |_| Msg::MarkDeleted(idx)),
+                }
+            })
+            .collect();
+        let header = html_nested! {
+            <TableHeader<Columns>>
+                <TableColumn<Columns> label="Bezeichnung" index={Columns::Label}/>
+                <TableColumn<Columns> label="Typ" index={Columns::Type}/>
+                <TableColumn<Columns> label="Netbox" index={Columns::Netbox}/>
+                <TableColumn<Columns> index={Columns::Actions}/>
+            </TableHeader<Columns>>
+        };
 
         let error: Option<Html> = self
             .netbox_error
@@ -440,20 +483,11 @@ impl PortEditor {
                             <Button label="Port hinzufügen" variant={ButtonVariant::Secondary} onclick={ctx.link().callback(|_| Msg::AddPort)} />
                             <Button label="Speichern" variant={ButtonVariant::Primary} onclick={ctx.link().callback(|_| Msg::Save)} disabled={self.ports == stored.ports} />
                         </ActionGroup>
-                        <table class="pf-v6-c-table pf-m-grid-md pf-m-compact" role="grid">
-                            <thead>
-                                <tr class="pf-v6-c-table__tr">
-                                    //<th class="pf-v6-c-table__th">{"Nr."}</th>
-                                    <th class="pf-v6-c-table__th">{"Bezeichnung"}</th>
-                                    <th class="pf-v6-c-table__th">{"Typ"}</th>
-                                    <th class="pf-v6-c-table__th">{"Netbox"}</th>
-                                    <th class="pf-v6-c-table__th">{"Aktionen"}</th>
-                                </tr>
-                            </thead>
-                            <tbody class="pf-v6-c-table__tbody">
-                                { for rows }
-                            </tbody>
-                        </table>
+                        <ListTable<Columns, PortRow>
+                            {header}
+                            rows={Rc::new(rows)}
+                            empty="Das Panel hat keine Ports."
+                        />
                     </PanelMainBody>
                 </PanelMain>
             </Panel>

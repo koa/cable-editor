@@ -2,10 +2,9 @@ use crate::components::menu::popup::{MenuGroup, PopupMenu};
 use patternfly_yew::{
     ouia,
     prelude::{
-        Caption, Cell, ComposableTable, ExpansionState, Icon, MemoizedTableModel,
-        MenuToggleVariant, Ouia, OuiaComponentType, OuiaSafe, StateModel, StateModelIter, Table,
-        TableBody, TableData, TableDataModel, TableEntryRenderer, TableGridMode, TableHeader,
-        TableMode, TableModel,
+        Caption, Cell, CellContext, ComposableTable, Icon, MenuToggleVariant, Ouia,
+        OuiaComponentType, OuiaSafe, TableBody, TableData, TableEntryRenderer, TableGridMode,
+        TableHeader, TableMode, TableRow,
     },
 };
 use std::{
@@ -21,75 +20,6 @@ use yew::{
     function_component, html, virtual_dom::VChild,
 };
 
-struct ListModel<C, M>
-where
-    C: Clone + Eq + 'static,
-    M: PartialEq + Clone + TableDataModel<C> + 'static,
-    M::Key: Hash,
-{
-    model: Rc<StateModel<C, M>>,
-}
-
-impl<C, M> ListModel<C, M>
-where
-    C: Clone + Eq + 'static,
-    M: PartialEq + Clone + TableDataModel<C> + 'static,
-    M::Key: Hash,
-{
-    fn new(data: M, state: Rc<RefCell<HashMap<M::Key, ExpansionState<C>>>>) -> ListModel<C, M> {
-        ListModel {
-            model: Rc::new(StateModel::new(data, state)),
-        }
-    }
-}
-
-impl<C, M> TableModel<C> for ListModel<C, M>
-where
-    C: Clone + Eq + 'static,
-    M: PartialEq + Clone + TableDataModel<C> + 'static,
-    M::Key: Hash,
-{
-    type Iterator<'i> = StateModelIter<'i, M::Key, M::Item, C>;
-    type Item = M::Item;
-    type Key = M::Key;
-
-    fn len(&self) -> usize {
-        self.model.len()
-    }
-
-    fn is_empty(&self) -> bool {
-        self.model.is_empty()
-    }
-
-    fn iter(&self) -> Self::Iterator<'_> {
-        self.model.iter()
-    }
-}
-
-impl<C, M> Clone for ListModel<C, M>
-where
-    C: Clone + Eq + 'static,
-    M: PartialEq + Clone + TableDataModel<C> + 'static,
-    M::Key: Hash,
-{
-    fn clone(&self) -> Self {
-        Self {
-            model: self.model.clone(),
-        }
-    }
-}
-
-impl<C, M> PartialEq for ListModel<C, M>
-where
-    C: Clone + Eq + 'static,
-    M: PartialEq + Clone + TableDataModel<C> + 'static,
-    M::Key: Hash,
-{
-    fn eq(&self, other: &Self) -> bool {
-        self.model == other.model
-    }
-}
-
 #[derive(Properties)]
 pub struct ListTableProps<C, R>
 where
@@ -100,8 +30,17 @@ where
     pub rows: Rc<Vec<R>>,
     /// Shown in place of the table without rows: what is missing, e.g. "Keine Kabel."
     pub empty: AttrValue,
+    /// A page that is printed: a table on paper too (PatternFly's grid mode depends on the width,
+    /// so it would turn the narrow page into blocks), a block per row only on phone screens
     #[prop_or_default]
-    pub caption: Option<String>,
+    pub printable: bool,
+    /// Classes of a row, e.g. one marking it changed
+    #[prop_or_default]
+    pub row_class: Option<Callback<R, Classes>>,
+    #[prop_or_default]
+    pub class: Classes,
+    #[prop_or_default]
+    pub caption: Option<AttrValue>,
     #[prop_or_default]
     pub onrowclick: Option<Callback<R>>,
 }
@@ -115,56 +54,68 @@ where
         self.header == other.header
             && Rc::ptr_eq(&self.rows, &other.rows)
             && self.empty == other.empty
+            && self.printable == other.printable
+            && self.row_class == other.row_class
+            && self.class == other.class
             && self.caption == other.caption
             && self.onrowclick == other.onrowclick
     }
 }
 
-/// The table of every page: compact, on phones one block per row with each cell labelled by its
-/// column (grid mode), a sentence in its place without rows. Keeps the expansion state
-/// patternfly-yew's model needs, though no table expands rows.
-pub struct ListTable<C, R>
-where
-    C: Clone + Eq + 'static,
-{
-    state: Rc<RefCell<HashMap<usize, ExpansionState<C>>>>,
-    row: PhantomData<R>,
-}
-
-impl<C, R> Component for ListTable<C, R>
+/// The table of every page: compact, on phones a block per row with each cell labelled by its
+/// column, a sentence in its place without rows. Built from patternfly-yew's composable parts, as
+/// its `Table` can't give a row a class.
+#[function_component(ListTable)]
+pub fn list_table<C, R>(props: &ListTableProps<C, R>) -> Html
 where
     C: Clone + Eq + 'static,
     R: TableEntryRenderer<C> + Clone + 'static,
 {
-    type Message = ();
-    type Properties = ListTableProps<C, R>;
-
-    fn create(_ctx: &Context<Self>) -> Self {
-        Self {
-            state: Rc::default(),
-            row: PhantomData,
-        }
+    if props.rows.is_empty() {
+        return html!(<p class="pf-v6-u-text-color-subtle">{props.empty.clone()}</p>);
     }
-
-    fn view(&self, ctx: &Context<Self>) -> Html {
-        let props = ctx.props();
-        if props.rows.is_empty() {
-            return html!(<p class="pf-v6-u-text-color-subtle">{props.empty.clone()}</p>);
-        }
-        let entries = ListModel::new(
-            MemoizedTableModel::new(props.rows.clone()),
-            self.state.clone(),
-        );
-        html! {
-            <Table<C, ListModel<C, MemoizedTableModel<R>>>
-                mode={TableMode::Compact}
-                grid={TableGridMode::Medium}
-                caption={props.caption.clone()}
-                onrowclick={props.onrowclick.clone()}
-                header={props.header.clone()}
-                {entries}
-            />
-        }
+    let columns = &props.header.props.children;
+    let rows = props.rows.iter().map(|row| {
+        let class = props
+            .row_class
+            .as_ref()
+            .map(|row_class| row_class.emit(row.clone()))
+            .unwrap_or_default();
+        let onclick = props.onrowclick.as_ref().map(|onrowclick| {
+            let onrowclick = onrowclick.clone();
+            let row = row.clone();
+            Callback::from(move |_: MouseEvent| onrowclick.emit(row.clone()))
+        });
+        let cells = columns.iter().map(|column| {
+            let cell = row.render_cell(CellContext {
+                column: &column.props.index,
+            });
+            html! {
+                <TableData
+                    data_label={column.props.label.clone().map(AttrValue::from)}
+                    center={cell.center}
+                    text_modifier={cell.text_modifier}
+                >
+                    {cell.content}
+                </TableData>
+            }
+        });
+        html!(<TableRow {class} {onclick}>{for cells}</TableRow>)
+    });
+    let (grid, class) = if props.printable {
+        (None, classes!(props.class.clone(), "list-table--printable"))
+    } else {
+        (Some(TableGridMode::Medium), props.class.clone())
+    };
+    html! {
+        <ComposableTable mode={TableMode::Compact} {grid} {class}>
+            if let Some(caption) = &props.caption {
+                <Caption>{caption.clone()}</Caption>
+            }
+            // The rows have no cell for actions of patternfly-yew's own
+            <TableHeader<C> hide_actions=true ..(*props.header.props).clone() />
+            <TableBody>{for rows}</TableBody>
+        </ComposableTable>
     }
 }
 

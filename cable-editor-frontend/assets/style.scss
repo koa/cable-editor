@@ -307,27 +307,16 @@ body {
     }
   }
 
-  .panel-connections-wrapper {
-    width: 100%;
-  }
-
   .panel-connections-table {
-    width: 100%;
-    border-collapse: collapse;
+    @media print, screen and (min-width: 48rem) {
+      td {
+        vertical-align: top;
+      }
 
-    th {
-      background: var(--pf-t--global--background--color--secondary--default);
-      font-weight: 600;
-      padding: 10px 14px;
-      border-bottom: 2px solid var(--pf-t--global--border--color--default);
-      font-size: 0.9rem;
-      color: var(--pf-t--global--text--color--subtle);
-    }
-
-    td {
-      padding: 10px 14px;
-      border-bottom: 1px solid var(--pf-t--global--border--color--default);
-      vertical-align: top;
+      td:nth-child(3) {
+        vertical-align: middle;
+        text-align: center;
+      }
     }
 
     .port-row {
@@ -439,10 +428,6 @@ body {
       padding: 4px 0;
     }
   }
-
-  .panel-connections-mobile {
-    display: none;
-  }
 }
 
 /* =========================================================================
@@ -462,82 +447,6 @@ body {
 
       .stat-value {
         font-size: 1.25rem;
-      }
-    }
-
-    .panel-connections-table {
-      display: none !important;
-    }
-
-    .panel-connections-mobile {
-      display: flex !important;
-      flex-direction: column;
-      gap: 12px;
-      padding: 12px;
-
-      .port-mobile-card {
-        background: var(--pf-t--global--background--color--primary--default);
-        border: 1px solid var(--pf-t--global--border--color--default);
-        border-radius: 6px;
-        padding: 12px;
-        box-shadow: var(--pf-t--global--box-shadow--sm);
-
-        &.modified-card {
-          border-color: var(--pf-t--global--border--color--status--warning--default);
-          background: color-mix(in srgb, var(--pf-t--global--color--status--warning--default) 8%, transparent);
-        }
-
-        .mobile-card-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding-bottom: 8px;
-          border-bottom: 1px solid var(--pf-t--global--border--color--default);
-          margin-bottom: 10px;
-
-          .mobile-port-title {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-          }
-
-          .port-number-badge {
-            font-size: 0.8rem;
-            background: var(--pf-t--global--color--nonstatus--gray--default);
-            color: var(--pf-t--global--text--color--nonstatus--on-gray--default);
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-weight: bold;
-          }
-        }
-
-        .mobile-card-body {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-
-          .mobile-slot {
-            background: var(--pf-t--global--background--color--secondary--default);
-            border: 1px solid var(--pf-t--global--border--color--default);
-            border-radius: 4px;
-            padding: 8px 10px;
-
-            .slot-side-label {
-              font-size: 0.75rem;
-              text-transform: uppercase;
-              font-weight: bold;
-              color: var(--pf-t--global--text--color--subtle);
-              margin-bottom: 4px;
-            }
-          }
-
-          .mobile-slot-divider {
-            text-align: center;
-            color: var(--pf-t--global--icon--color--subtle);
-            font-size: 0.9rem;
-            margin: -2px 0;
-          }
-        }
       }
     }
   }
@@ -664,10 +573,6 @@ body {
         page-break-inside: avoid !important;
         break-inside: avoid !important;
       }
-    }
-
-    .panel-connections-mobile {
-      display: none !important;
     }
   }
 }
@@ -1024,21 +929,10 @@ body {
   gap: var(--pf-t--global--spacer--xs);
 }
 
-// Place and work line up across the tables of a panel, the fibers share the rest
-.work-order__table {
-  @media print, screen and (min-width: 48rem) {
-    table-layout: fixed;
-
-    th:nth-child(1) {
-      width: 22%;
-    }
-
-    th:nth-child(2) {
-      width: 16%;
-    }
-  }
-
-  // On phones a block per row, each cell labelled with its column
+// `ListTable` of a page that is printed: on phone screens a block per row, each cell labelled with
+// its column, like PatternFly's grid mode, which depends on the width alone and would turn the
+// printed page into blocks too
+.list-table--printable {
   @media screen and (max-width: 47.99rem) {
     thead {
       display: none;
@@ -1054,11 +948,19 @@ body {
       grid-template-columns: 6rem minmax(0, 1fr);
       gap: var(--pf-t--global--spacer--sm);
       padding-block: var(--pf-t--global--spacer--xs);
+      // Lined up with the first cell
+      padding-inline: var(--pf-v6-c-table--cell--first-last-child--PaddingInline);
 
       &::before {
         content: attr(data-label);
         font-weight: var(--pf-t--global--font--weight--body--bold);
       }
+    }
+  }
+
+  @media print {
+    tr {
+      break-inside: avoid;
     }
   }
 }
@@ -1080,7 +982,6 @@ body {
     margin-block-start: 0;
   }
 
-  .work-order__table tr,
   .work-order__loop {
     break-inside: avoid;
   }

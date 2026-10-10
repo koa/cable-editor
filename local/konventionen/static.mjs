@@ -195,7 +195,6 @@ const rules = [
   {
     id: 'tabelle-listtable',
     message: 'Tabellen als ListTable (components/table.rs) bauen, Abschnitt 6',
-    step: 7,
     find: (f) => (f.rel === path.join('components', 'table.rs') ? [] : grep(f, /<Table<|<ComposableTable\b|<table\b/).map((line) => ({ line }))),
   },
   {

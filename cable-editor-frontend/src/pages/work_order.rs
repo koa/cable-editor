@@ -14,6 +14,7 @@ use crate::{
         links::{CableLink, PanelLink, SchachtLink},
         page_layout::{PageLayout, object_title},
         print_page::PrintPageButton,
+        table::ListTable,
     },
     error::FrontendError,
     graphql::authenticated::{
@@ -24,9 +25,15 @@ use crate::{
     util::get_credentials,
 };
 use cable_editor_common::ObjectKind;
-use patternfly_yew::prelude::{Alert, AlertType, FormGroup, Level, Title};
-use std::collections::BTreeMap;
-use yew::{Component, Context, Html, Properties, html, html::IntoPropValue, platform::spawn_local};
+use patternfly_yew::prelude::{
+    Alert, AlertType, Cell, CellContext, ColumnWidth, FormGroup, Level, TableColumn,
+    TableEntryRenderer, TableHeader, Title,
+};
+use std::{collections::BTreeMap, rc::Rc};
+use yew::{
+    Component, Context, Html, Properties, html, html::IntoPropValue, html_nested,
+    platform::spawn_local,
+};
 
 #[derive(Properties, PartialEq)]
 pub struct WorkOrderProps {
@@ -264,7 +271,6 @@ fn view_panel(order: &PanelOrder) -> Html {
             if !order.splices.is_empty() {
                 <Title level={Level::H4}>{"Spleisse"}</Title>
                 {view_table(
-                    &["Ort", "Arbeit", "Bisher", "Neu"],
                     order.splices.iter().map(|splice| {
                         let change = splice.change;
                         let (before, after) = if splice.pigtail {
@@ -290,26 +296,25 @@ fn view_panel(order: &PanelOrder) -> Html {
                                 (true, true) => "Pigtail umspleissen",
                             },
                         };
-                        vec![view_location(change, order.id), work.into_prop_value(), before, after]
+                        WorkRow { location: view_location(change, order.id), work, before, after }
                     }),
                 )}
             }
             if !order.plugs.is_empty() {
                 <Title level={Level::H4}>{"Steckverbindungen"}</Title>
                 {view_table(
-                    &["Ort", "Arbeit", "Bisher", "Neu"],
                     order.plugs.iter().map(|change| {
                         let work = match (change.current_front.is_some(), change.planned_front.is_some()) {
                             (false, _) => "Stecken",
                             (true, false) => "Ziehen",
                             (true, true) => "Umstecken",
                         };
-                        vec![
-                            view_location(change, order.id),
-                            work.into_prop_value(),
-                            view_fiber(change.current_front.as_ref()),
-                            view_fiber(change.planned_front.as_ref()),
-                        ]
+                        WorkRow {
+                            location: view_location(change, order.id),
+                            work,
+                            before: view_fiber(change.current_front.as_ref()),
+                            after: view_fiber(change.planned_front.as_ref()),
+                        }
                     }),
                 )}
             }
@@ -359,30 +364,54 @@ fn view_loops(loops: &[&PortChange]) -> Html {
     }
 }
 
-/// A compact PatternFly table; on phones every row is a block with each cell labelled by its
-/// column (`.work-order__table`, not PatternFly's grid mode, which would apply to the narrow print
-/// page too).
-fn view_table(columns: &[&'static str], rows: impl Iterator<Item = Vec<Html>>) -> Html {
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+enum Columns {
+    Location,
+    Work,
+    Before,
+    After,
+}
+
+/// A splice or plug to change
+#[derive(Clone)]
+struct WorkRow {
+    location: Html,
+    work: &'static str,
+    before: Html,
+    after: Html,
+}
+
+impl TableEntryRenderer<Columns> for WorkRow {
+    fn render_cell(&self, context: CellContext<'_, Columns>) -> Cell {
+        // One element, as on phones the cell lays out each child on its own
+        Cell::new(html! {
+            <div>{match context.column {
+                Columns::Location => self.location.clone(),
+                Columns::Work => self.work.into_prop_value(),
+                Columns::Before => self.before.clone(),
+                Columns::After => self.after.clone(),
+            }}</div>
+        })
+    }
+}
+
+/// The changes of a panel, as a table on the printed page too
+fn view_table(rows: impl Iterator<Item = WorkRow>) -> Html {
+    let header = html_nested! {
+        <TableHeader<Columns>>
+            <TableColumn<Columns> label="Ort" index={Columns::Location} width={ColumnWidth::Percent(20)}/>
+            <TableColumn<Columns> label="Arbeit" index={Columns::Work} width={ColumnWidth::Percent(20)}/>
+            <TableColumn<Columns> label="Bisher" index={Columns::Before} width={ColumnWidth::Percent(30)}/>
+            <TableColumn<Columns> label="Neu" index={Columns::After} width={ColumnWidth::Percent(30)}/>
+        </TableHeader<Columns>>
+    };
     html! {
-        <table class="pf-v6-c-table pf-m-compact work-order__table" role="grid">
-            <thead class="pf-v6-c-table__thead">
-                <tr class="pf-v6-c-table__tr" role="row">
-                    { for columns.iter().map(|column| html! {
-                        <th class="pf-v6-c-table__th" role="columnheader" scope="col">{*column}</th>
-                    }) }
-                </tr>
-            </thead>
-            <tbody class="pf-v6-c-table__tbody" role="rowgroup">
-                { for rows.map(|cells| html! {
-                    <tr class="pf-v6-c-table__tr" role="row">
-                        { for columns.iter().zip(cells).map(|(column, cell)| html! {
-                            // One element, as on phones the cell lays out each child on its own
-                            <td class="pf-v6-c-table__td" role="cell" data-label={*column}><div>{cell}</div></td>
-                        }) }
-                    </tr>
-                }) }
-            </tbody>
-        </table>
+        <ListTable<Columns, WorkRow>
+            {header}
+            rows={Rc::new(rows.collect::<Vec<_>>())}
+            empty="Nichts zu tun."
+            printable=true
+        />
     }
 }
 

@@ -1,6 +1,7 @@
 use crate::components::load::Load;
 use crate::components::page_layout::{PageLayout, object_title};
 use crate::components::print_page::PrintPageButton;
+use crate::components::table::ListTable;
 use crate::graphql::authenticated::current_user::Role;
 use crate::graphql::authenticated::list_plans::BASELINE_PLAN_ID;
 use crate::graphql::authenticated::{local_time, port_label};
@@ -26,9 +27,14 @@ use crate::{
 };
 use cable_editor_common::ObjectKind;
 use patternfly_yew::prelude::{
-    Card, CardBody, CardTitle, Color, Divider, Icon, Label, Level, Title,
+    Card, CardBody, CardTitle, Cell, CellContext, Color, ColumnWidth, Divider, Icon, Label, Level,
+    TableColumn, TableEntryRenderer, TableHeader, Title,
 };
-use yew::{Component, Context, Html, Properties, classes, html, platform::spawn_local};
+use std::rc::Rc;
+use yew::{
+    Callback, Component, Context, Html, Properties, classes, html, html_nested,
+    platform::spawn_local,
+};
 
 #[derive(Properties, PartialEq, Clone)]
 pub struct ShowPanelProps {
@@ -307,7 +313,7 @@ impl ShowPanel {
                             </div>
                         </div>
 
-                        { self.render_ports_table(&root_planned.ports, schacht, root_panel.id) }
+                        { self.render_ports_table(&root_planned.ports, schacht) }
                     </div>
                 }
 
@@ -366,7 +372,7 @@ impl ShowPanel {
                                 </div>
                             </div>
 
-                            { self.render_ports_table(&child.ports, schacht, child_id) }
+                            { self.render_ports_table(&child.ports, schacht) }
                         </div>
                     }
                 })}
@@ -393,59 +399,50 @@ impl ShowPanel {
         }
     }
 
-    fn render_ports_table(&self, ports: &[PlannedPort], schacht: &Schacht, _panel_id: i32) -> Html {
-        if ports.is_empty() {
-            return html! {
-                <div class="pf-v6-u-p-md pf-v6-u-text-color-subtle pf-v6-u-text-align-center empty-state-box">
-                    {"Keine Ports auf diesem Panel vorhanden."}
-                </div>
-            };
-        }
-
+    fn render_ports_table(&self, ports: &[PlannedPort], schacht: &Schacht) -> Html {
         let mut sorted_ports = ports.to_vec();
         sorted_ports.sort_by_key(|p| p.order_number);
+        let rows: Vec<PortRow> = sorted_ports
+            .iter()
+            .filter_map(|port| self.port_row(port, schacht))
+            .collect();
+        let header = html_nested! {
+            <TableHeader<Columns>>
+                <TableColumn<Columns> label="Port / Faser" index={Columns::Port} width={ColumnWidth::Percent(20)}/>
+                <TableColumn<Columns> label="Front-Belegung" index={Columns::Front} width={ColumnWidth::Percent(35)}/>
+                <TableColumn<Columns> label="Status" index={Columns::Flow} width={ColumnWidth::Percent(10)} center=true/>
+                <TableColumn<Columns> label="Back-Belegung" index={Columns::Back} width={ColumnWidth::Percent(35)}/>
+            </TableHeader<Columns>>
+        };
+        let row_class = Callback::from(|row: PortRow| {
+            classes!("port-row", row.modified.then_some("modified-row"))
+        });
 
         html! {
-            <div class="panel-connections-wrapper">
-                // Desktop Table View
-                <table class="panel-connections-table pf-v6-c-table pf-m-grid-md pf-m-compact" role="grid">
-                    <thead>
-                        <tr role="row">
-                            <th class="col-port" scope="col" style="width: 140px;">{"Port / Faser"}</th>
-                            <th class="col-front" scope="col" style="width: 38%;">{"Front-Belegung"}</th>
-                            <th class="col-flow" scope="col" style="width: 60px; text-align: center;">{"Status"}</th>
-                            <th class="col-back" scope="col" style="width: 38%;">{"Back-Belegung"}</th>
-                        </tr>
-                    </thead>
-                    <tbody role="rowgroup">
-                        { for sorted_ports.iter().map(|port| self.render_port_row(port, schacht)) }
-                    </tbody>
-                </table>
-
-                // Mobile Card View (shown via CSS on small viewports)
-                <div class="panel-connections-mobile">
-                    { for sorted_ports.iter().map(|port| self.render_port_mobile_card(port, schacht)) }
-                </div>
-            </div>
+            <ListTable<Columns, PortRow>
+                {header}
+                rows={Rc::new(rows)}
+                empty={if ports.is_empty() { "Keine Ports auf diesem Panel." } else { "Keine Loops belegt." }}
+                printable=true
+                {row_class}
+                class="panel-connections-table"
+            />
         }
     }
 
-    fn render_port_row(&self, port: &PlannedPort, schacht: &Schacht) -> Html {
+    /// The row of a port, none for an unused loop
+    fn port_row(&self, port: &PlannedPort, schacht: &Schacht) -> Option<PortRow> {
         let port_label = port_label(port.label.as_deref(), port.order_number).into_owned();
 
         let (type_text, type_color) = port_type_label(port.port_type);
         let loop_fiber = if port.port_type == PortType::Loop {
-            if let Some(loop_fiber) = port
-                .front_usage
-                .as_ref()
-                .and_then(|u| u.fiber.as_ref())
-                .or_else(|| port.back_usage.as_ref().and_then(|u| u.fiber.as_ref()))
-            {
-                Some(loop_fiber)
-            } else {
-                // hide unused loops
-                return Html::default();
-            }
+            // An unused loop has no row
+            Some(
+                port.front_usage
+                    .as_ref()
+                    .and_then(|u| u.fiber.as_ref())
+                    .or_else(|| port.back_usage.as_ref().and_then(|u| u.fiber.as_ref()))?,
+            )
         } else {
             None
         };
@@ -455,12 +452,6 @@ impl ShowPanel {
             .as_ref()
             .is_some_and(|u| u.modified_in_plan)
             || port.back_usage.as_ref().is_some_and(|u| u.modified_in_plan);
-
-        let row_class = if is_modified {
-            "port-row modified-row"
-        } else {
-            "port-row"
-        };
 
         let flow_icon = match port.port_type {
             PortType::Loop => {
@@ -537,95 +528,13 @@ impl ShowPanel {
             }
         };
 
-        html! {
-            <tr class={row_class} role="row">
-                <td class="col-port" role="cell">
-                    {port_identity}
-                </td>
-                <td class="col-front" role="cell">
-                    { self.render_connection_cell(port.front_usage.as_ref(), schacht, "Front") }
-                </td>
-                <td class="col-flow" role="cell" style="text-align: center; vertical-align: middle;">
-                    {flow_icon}
-                </td>
-                <td class="col-back" role="cell">
-                    { self.render_connection_cell(port.back_usage.as_ref(), schacht, "Back") }
-                </td>
-            </tr>
-        }
-    }
-
-    fn render_port_mobile_card(&self, port: &PlannedPort, schacht: &Schacht) -> Html {
-        let port_label = port_label(port.label.as_deref(), port.order_number).into_owned();
-
-        let (type_text, type_color) = port_type_label(port.port_type);
-
-        let loop_fiber = if port.port_type == PortType::Loop {
-            if let Some(loop_fiber) = port
-                .front_usage
-                .as_ref()
-                .and_then(|u| u.fiber.as_ref())
-                .or_else(|| port.back_usage.as_ref().and_then(|u| u.fiber.as_ref()))
-            {
-                Some(loop_fiber)
-            } else {
-                // hide unused loops
-                return Html::default();
-            }
-        } else {
-            None
-        };
-
-        let is_modified = port
-            .front_usage
-            .as_ref()
-            .is_some_and(|u| u.modified_in_plan)
-            || port.back_usage.as_ref().is_some_and(|u| u.modified_in_plan);
-
-        let mobile_port_title = if let Some(loop_fiber) = loop_fiber {
-            html! {
-                <div class="mobile-port-title">
-                    <FiberNumber bundle={loop_fiber.bundle} fiber={loop_fiber.fiber}/>
-                    <span class="pf-v6-u-font-size-xs pf-v6-u-text-color-subtle pf-v6-u-ml-xs">
-                        {format!("(#{})", port.order_number)}
-                    </span>
-                </div>
-            }
-        } else {
-            html! {
-                <div class="mobile-port-title">
-                    <span class="port-number-badge">{format!("#{}", port.order_number)}</span>
-                    <strong>{port_label}</strong>
-                </div>
-            }
-        };
-
-        html! {
-            <div class={classes!("port-mobile-card", is_modified.then_some("modified-card"))}>
-                <div class="mobile-card-header">
-                    {mobile_port_title}
-                    <div class="mobile-card-badges">
-                        <Label color={type_color} label={type_text}/>
-                        if is_modified {
-                            <Label color={Color::Orange} icon={Icon::InProgress} label="Planung"/>
-                        }
-                    </div>
-                </div>
-                <div class="mobile-card-body">
-                    <div class="mobile-slot front-slot">
-                        <div class="slot-side-label">{"Front"}</div>
-                        { self.render_connection_cell(port.front_usage.as_ref(), schacht, "Front") }
-                    </div>
-                    <div class="mobile-slot-divider">
-                        {if port.port_type == PortType::Loop { Icon::Redo } else { Icon::ArrowRight }}
-                    </div>
-                    <div class="mobile-slot back-slot">
-                        <div class="slot-side-label">{"Back"}</div>
-                        { self.render_connection_cell(port.back_usage.as_ref(), schacht, "Back") }
-                    </div>
-                </div>
-            </div>
-        }
+        Some(PortRow {
+            identity: port_identity,
+            front: self.render_connection_cell(port.front_usage.as_ref(), schacht, "Front"),
+            flow: flow_icon,
+            back: self.render_connection_cell(port.back_usage.as_ref(), schacht, "Back"),
+            modified: is_modified,
+        })
     }
 
     fn render_connection_cell(
@@ -743,6 +652,36 @@ fn cable_end_port(option: Option<&FiberOwnEnd>) -> Option<&UsedEndPort> {
         .and_then(|f| f.other_end.as_ref())
         .and_then(|e| e.used_port.as_ref())
         .and_then(|p| p.panel_side_end_port.as_ref())
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+enum Columns {
+    Port,
+    Front,
+    Flow,
+    Back,
+}
+
+/// A port with its cells
+#[derive(Clone)]
+struct PortRow {
+    identity: Html,
+    front: Html,
+    flow: Html,
+    back: Html,
+    /// Changed in the plan shown
+    modified: bool,
+}
+
+impl TableEntryRenderer<Columns> for PortRow {
+    fn render_cell(&self, context: CellContext<'_, Columns>) -> Cell {
+        match context.column {
+            Columns::Port => Cell::new(self.identity.clone()),
+            Columns::Front => Cell::new(self.front.clone()),
+            Columns::Flow => Cell::new(self.flow.clone()),
+            Columns::Back => Cell::new(self.back.clone()),
+        }
+    }
 }
 
 /// The name of a port type and the colour of its label
